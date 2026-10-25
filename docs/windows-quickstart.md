@@ -4,8 +4,10 @@
 
 ## Готовая проверочная сборка из CI
 
-В успешном прогоне [GitHub Actions](https://github.com/SverchkovVA/Crown/actions)
-артефакт `Crown-Windows-x64` содержит полный каталог программы. Распакуйте его
+[Проверочная сборка 0.1.2](https://github.com/SverchkovVA/Crown/actions/runs/40238453622/artifacts/12616155006)
+прошла 59 Windows-тестов и самопроверку EXE. В последующих успешных прогонах
+[GitHub Actions](https://github.com/SverchkovVA/Crown/actions) артефакт
+`Crown-Windows-x64` также содержит полный каталог программы. Распакуйте его
 целиком в новую папку и запустите `PersonalFinance.exe`; соседние файлы и
 `_internal` должны оставаться рядом. Для запуска этого каталога Python и uv
 не нужны. Это предварительная сборка этапа 3, без установщика.

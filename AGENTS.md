@@ -39,5 +39,8 @@ OCR API или телеметрию. Тесты и CI используют то�
 На Linux для Qt задать QT_QPA_PLATFORM=offscreen и доступный XDG_CACHE_HOME.
 Windows: check-windows.cmd; инструкции docs/windows-quickstart.md.
 Сценарии должны оставаться совместимыми с Windows PowerShell 5.1; сохранять BOM
-и правила .gitattributes. Проверка на Linux/PowerShell 7 не доказывает работу
+и правила .gitattributes. Встроенные run-блоки shell: powershell в GitHub
+Actions должны содержать только ASCII: временные файлы создаются без BOM и
+PowerShell 5.1 может неверно разобрать кириллицу. Русские сообщения выносить
+в отдельный .ps1 с BOM. Проверка на Linux/PowerShell 7 не доказывает работу
 Windows/PowerShell 5.1. Headless CI не заменяет ручную приёмку Windows 11.
