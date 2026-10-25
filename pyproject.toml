@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "personal-finance-local"
+version = "0.1.0"
+description = "Локальное приложение для личных финансов: основа Windows-версии"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "PySide6-Essentials==6.12.0",
+  "SQLAlchemy==2.1.6",
+  "alembic==1.20.1",
+  "sqlcipher3==0.6.4",
+  "PyNaCl==1.6.2",
+  "filelock>=3.16,<4",
+  "platformdirs>=4.3,<5",
+]
+
+[project.gui-scripts]
+personal-finance = "personal_finance.bootstrap.main:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-qt>=4.4,<5",
+  "hypothesis>=6.120,<7",
+  "ruff>=0.12,<1",
+  "mypy>=1.15,<2",
+  "pyinstaller>=6.12,<7",
+  "hatchling==1.27.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/personal_finance"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src/personal_finance"]
+check_untyped_defs = true
+disallow_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = ["sqlcipher3", "sqlcipher3.*", "nacl.*"]
+ignore_missing_imports = true
