@@ -3,7 +3,7 @@
 Автономное приложение для **Windows 11 x64** на Python 3.13, PySide6,
 SQLAlchemy, Alembic и SQLCipher. Документация и интерфейс на русском языке.
 
-**Версия 0.1.0 — основа этапа 3. Используйте только проверочные данные.**
+**Версия 0.1.1 — основа этапа 3. Используйте только проверочные данные.**
 Учёт операций, начальных остатков и расчёт денежных балансов относятся к этапу 4
 и пока не реализованы. Проверки Windows 11 ещё не выполнены.
 
@@ -19,6 +19,11 @@ SQLAlchemy, Alembic и SQLCipher. Документация и интерфейс
 - Работа без сетевого соединения; сетевых функций в этой сборке нет.
 
 ## Запуск на Windows 11
+
+Для полного автоматического прогона после установки uv распакуйте исходники
+и запустите **`check-windows.cmd` двойным щелчком**. Он проверяет код, выполняет
+тесты и самопроверки, собирает EXE, сохраняет `report.json` и локальные журналы.
+Порядок действий: [короткая инструкция Windows](docs/windows-quickstart.md).
 
 1. Установите [uv](https://docs.astral.sh/uv/getting-started/installation/).
    При разработке проверена версия uv 0.12.23.
@@ -78,19 +83,16 @@ uv run --frozen python -m personal_finance.bootstrap.main --self-test
 На Windows:
 
 ```powershell
-uv run --frozen python -m PyInstaller --clean --noconfirm packaging/windows/personal_finance.spec
+.\packaging\windows\build.ps1
 ```
 
-Результат: `dist/PersonalFinance/PersonalFinance.exe` и соседние файлы. Переносить
-нужно весь каталог. Перед проверкой без установленного Python выполните:
+Результат размещается в **новом** каталоге `artifacts/windows-build-…/app/PersonalFinance`.
+Там находится `PersonalFinance.exe` и соседние файлы; переносить нужно весь каталог.
+Сценарий выполняет установку по lock-файлу, сборку и самопроверку. Существующие
+сборки сохраняются. При полном прогоне `check-windows.cmd` результат находится
+в `artifacts/windows-check-…/bundle/app/PersonalFinance`.
 
-```powershell
-$p = Start-Process .\dist\PersonalFinance\PersonalFinance.exe -ArgumentList '--self-test' -PassThru -Wait
-$p.ExitCode
-```
-
-Сценарий `packaging/windows/build.ps1` выполняет установку по lock-файлу, сборку
-и самопроверку. Финальный NSIS-установщик и подпись относятся к этапу 9.
+Финальный NSIS-установщик и подпись относятся к этапу 9.
 Linux-сборка не является Windows-программой.
 
 ## Документация
@@ -102,6 +104,7 @@ Linux-сборка не является Windows-программой.
 - [Копии и восстановление](docs/backup-restore.md)
 - [Тестирование](docs/testing.md)
 - [Сборка Windows](docs/build-windows.md)
+- [Проверка Windows одним запуском](docs/windows-quickstart.md)
 - [План](docs/roadmap.md)
 - [Матрица требований](docs/requirements.md)
 - [Ограничения](docs/known-limitations.md)
