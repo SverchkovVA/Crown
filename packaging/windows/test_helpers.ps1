@@ -1,8 +1,16 @@
 ﻿#requires -Version 5.1
-param([Parameter(Mandatory = $true)][string]$PythonPath)
+param(
+    [Parameter(Mandatory = $true)][string]$PythonPath,
+    [switch]$EncodingProbe
+)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'process_helpers.psm1') -Force
+if ($EncodingProbe) {
+    Write-Output 'Проверка русского stdout'
+    Write-Error 'Проверка русского stderr' -ErrorAction Continue
+    exit 0
+}
 $python = (Resolve-Path -LiteralPath $PythonPath).Path
 
 function Assert-PfCondition {
@@ -39,11 +47,28 @@ try {
         -WorkingDirectory $working -LogPrefix (Join-Path $testRoot 'arguments') `
         -Step 'arguments' -Environment @{PYTHONUTF8 = '1'} -TimeoutSeconds 20
     Assert-PfCondition ($roundtrip.status -eq 'passed') 'Не запустился дочерний процесс.'
-    $decoded = @(Get-Content (Join-Path $testRoot 'arguments.stdout.log') -Raw -Encoding UTF8 | ConvertFrom-Json)
-    Assert-PfCondition ($decoded.Count -eq $arguments.Count) 'Изменилось число аргументов.'
+    # В PowerShell 5.1 JSON-массив выходит из конвейера одним объектом.
+    # Присваивание типизированной переменной не добавляет внешний массив, как @(...).
+    [object[]]$decoded = ConvertFrom-Json -InputObject (
+        [System.IO.File]::ReadAllText((Join-Path $testRoot 'arguments.stdout.log'), [System.Text.Encoding]::UTF8)
+    )
+    Assert-PfCondition ($decoded.Count -eq $arguments.Count) (
+        'Изменилось число аргументов: ожидалось {0}, получено {1}.' -f $arguments.Count, $decoded.Count
+    )
     for ($index = 0; $index -lt $arguments.Count; $index++) {
         Assert-PfCondition ($decoded[$index] -ceq $arguments[$index]) 'Аргумент изменился при передаче.'
     }
+    $shell = (Get-Process -Id $PID).Path
+    $encodingResult = Invoke-PfProcess -FilePath $shell -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-File', $PSCommandPath,
+        '-PythonPath', $python, '-EncodingProbe'
+    ) -WorkingDirectory $working -LogPrefix (Join-Path $testRoot 'encoding') `
+        -Step 'encoding' -TimeoutSeconds 20
+    Assert-PfCondition ($encodingResult.status -eq 'passed') 'Не запустилась проверка кодировки PowerShell.'
+    $outText = [System.IO.File]::ReadAllText((Join-Path $testRoot 'encoding.stdout.log'), [System.Text.Encoding]::UTF8)
+    $errText = [System.IO.File]::ReadAllText((Join-Path $testRoot 'encoding.stderr.log'), [System.Text.Encoding]::UTF8)
+    Assert-PfCondition ($outText.Trim() -ceq 'Проверка русского stdout') 'Искажена кириллица в stdout PowerShell.'
+    Assert-PfCondition ($errText.Contains('Проверка русского stderr')) 'Искажена кириллица в stderr PowerShell.'
     $program = 'import sys; sys.stdout.write("x"*200000); sys.stderr.write("y"*200000)'
     $streams = Invoke-PfProcess -FilePath $python -ArgumentList @('-c', $program) `
         -WorkingDirectory $working -LogPrefix (Join-Path $testRoot 'streams') `
@@ -57,7 +82,7 @@ try {
     $timeout = Invoke-PfProcess -FilePath $python -ArgumentList @('-c', 'import time; time.sleep(30)') `
         -WorkingDirectory $working -LogPrefix (Join-Path $testRoot 'timeout') -Step 'timeout' -TimeoutSeconds 1
     Assert-PfCondition ($timeout.timed_out -and $timeout.status -eq 'failed') 'Тайм-аут не обнаружен.'
-    Write-Host 'PowerShell: аргументы, потоки, код ошибки, тайм-аут и синтаксис проверены.'
+    Write-Host 'PowerShell: аргументы, кодировка, потоки, код ошибки, тайм-аут и синтаксис проверены.'
 } finally {
     # Удаляются только собственные одноразовые данные с новым случайным именем.
     Remove-Item -LiteralPath $testRoot -Recurse -Force

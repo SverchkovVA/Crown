@@ -1,5 +1,8 @@
 ﻿#requires -Version 5.1
 Set-StrictMode -Version Latest
+# Собственные PowerShell-процессы пишут в той же кодировке, в которой читаются
+# их перенаправленные потоки. Системная кодовая страница не изменяется.
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
 function ConvertTo-PfWindowsArgument {
     param([AllowEmptyString()][Parameter(Mandatory = $true)][string]$Value)

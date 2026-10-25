@@ -34,3 +34,15 @@ jobs:
           version: '0.12.23'
       - shell: powershell
         run: ./packaging/windows/verify.ps1 -Headless
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-check
+          path: |
+            artifacts/windows-check-*/report.json
+            artifacts/windows-check-*/*.json
+            artifacts/windows-check-*/*.log
+            artifacts/windows-check-*/tests.xml
+            artifacts/windows-check-*/bundle/self-test.json
+          if-no-files-found: warn
+          retention-days: 14
