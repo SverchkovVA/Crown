@@ -3,7 +3,10 @@ import subprocess
 import sys
 import time
 
+import pytest
+
 from personal_finance.application.vault import open_vault
+from personal_finance.domain.errors import VaultError
 from tests.conftest import PASSWORD
 
 
@@ -41,6 +44,8 @@ sys.stdin.readline()
         while not ready.exists() and time.monotonic() < deadline and process.poll() is None:
             time.sleep(0.02)
         assert ready.exists(), "Дочерний процесс не начал проверочную транзакцию"
+        with pytest.raises(VaultError, match="уже открыта"):
+            open_vault(root, PASSWORD).close()
         process.terminate()
         process.wait(timeout=5)
     finally:

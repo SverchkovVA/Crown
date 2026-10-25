@@ -160,7 +160,9 @@ def open_vault(root: Path, credential: str, *, recovery: bool = False) -> VaultS
     lock_path = root / ".session.lock"
     if lock_path.is_symlink():
         raise VaultError("Файл блокировки книги не должен быть ссылкой.")
-    lock = FileLock(lock_path, timeout=0)
+    # После аварийного завершения Windows может освобождать файловую блокировку
+    # с задержкой. Ограниченное ожидание не снимает блокировку живого процесса.
+    lock = FileLock(lock_path, timeout=2)
     try:
         lock.acquire()
     except Timeout as exc:
