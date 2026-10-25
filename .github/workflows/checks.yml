@@ -16,6 +16,10 @@ jobs:
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         with:
           version: '0.12.23'
+      - name: Системные библиотеки Qt для offscreen
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libegl1 libopengl0
       - run: uv sync --frozen
       - run: uv run --frozen ruff check src tests tools
       - run: uv run --frozen ruff format --check src tests tools
@@ -43,6 +47,7 @@ jobs:
             artifacts/windows-check-*/*.json
             artifacts/windows-check-*/*.log
             artifacts/windows-check-*/tests.xml
-            artifacts/windows-check-*/bundle/self-test.json
+            artifacts/windows-check-*/bundle/*.json
+            artifacts/windows-check-*/bundle/*.log
           if-no-files-found: warn
           retention-days: 14
