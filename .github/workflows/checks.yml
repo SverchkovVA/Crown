@@ -38,6 +38,21 @@ jobs:
           version: '0.12.23'
       - shell: powershell
         run: ./packaging/windows/verify.ps1 -Headless
+      - name: Каталог проверенной сборки
+        id: windows_bundle
+        shell: powershell
+        run: |
+          $pfRuns = @(Get-ChildItem -Path artifacts -Directory -Filter 'windows-check-*')
+          if ($pfRuns.Count -ne 1) { throw 'Не найден единственный прогон проверки.' }
+          $pfBundle = Join-Path $pfRuns[0].FullName 'bundle/app/PersonalFinance'
+          "path=$pfBundle" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - name: Проверочная сборка Windows x64
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Crown-Windows-x64
+          path: ${{ steps.windows_bundle.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
