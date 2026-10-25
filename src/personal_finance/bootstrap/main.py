@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QLibraryInfo, QTranslator
 from PySide6.QtWidgets import QApplication
@@ -16,7 +17,15 @@ def main() -> int:
     parser.add_argument(
         "--self-test", action="store_true", help="Проверить сборку на временных данных"
     )
+    parser.add_argument(
+        "--self-test-report",
+        type=Path,
+        metavar="FILE",
+        help="Сохранить безопасный JSON-отчёт самопроверки в новый файл",
+    )
     options = parser.parse_args()
+    if options.self_test_report is not None and not options.self_test:
+        parser.error("--self-test-report используется только вместе с --self-test")
     app = QApplication(sys.argv[:1])
     app.setApplicationName("PersonalFinance")
     app.setApplicationDisplayName("Личные финансы")
@@ -32,7 +41,7 @@ def main() -> int:
     if options.self_test:
         from personal_finance.bootstrap.self_test import self_test
 
-        return self_test(app)
+        return self_test(app, options.self_test_report)
     window = MainWindow()
     window.show()
     return app.exec()
