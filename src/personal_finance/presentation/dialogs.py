@@ -127,12 +127,19 @@ class OpenDialog(QDialog):
         self.credential.setPlaceholderText("Парольная фраза")
         layout.addWidget(self.credential)
         self.recovery = QCheckBox("Использовать код восстановления")
+        self._auto_recovery = False
         self.recovery.toggled.connect(
             lambda checked: self.credential.setPlaceholderText(
                 "Код PF1-…" if checked else "Парольная фраза"
             )
         )
+        self.credential.textChanged.connect(self._detect_recovery_code)
         layout.addWidget(self.recovery)
+        hint = QLabel(
+            "При вставке полного кода PF1-… режим восстановления выбирается автоматически."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Open | QDialogButtonBox.StandardButton.Cancel
         )
@@ -141,6 +148,20 @@ class OpenDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _detect_recovery_code(self, value: str) -> None:
+        value = value.strip()
+        payload = value[4:].replace("-", "").upper()
+        if (
+            value.startswith("PF1-")
+            and len(payload) == 52
+            and all(character in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" for character in payload)
+        ):
+            self.recovery.setChecked(True)
+            self._auto_recovery = True
+        elif self._auto_recovery:
+            self.recovery.setChecked(False)
+            self._auto_recovery = False
 
 
 class PasswordDialog(QDialog):

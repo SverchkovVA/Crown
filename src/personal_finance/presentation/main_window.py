@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from personal_finance import __version__
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import ACCOUNT_LABELS, AccountKind, CategoryKind, validate_name
@@ -150,7 +151,10 @@ class MainWindow(QMainWindow):
         layout.addWidget(restore)
         layout.addSpacing(32)
         layout.addWidget(
-            label("Предварительная сборка 0.1 · Используйте только проверочные данные", "muted")
+            label(
+                f"Предварительная сборка {__version__} · Используйте только проверочные данные",
+                "muted",
+            )
         )
         layout.addStretch()
         return page
@@ -363,6 +367,8 @@ class MainWindow(QMainWindow):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         credential, recovery = dialog.credential.text(), dialog.recovery.isChecked()
+        if recovery:
+            credential = credential.strip()
         self._job(
             lambda: open_vault(Path(path), credential, recovery=recovery),
             self.activate_session,

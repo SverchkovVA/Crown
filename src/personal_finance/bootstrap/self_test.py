@@ -4,6 +4,7 @@ import json
 import sys
 import tempfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from time import monotonic
@@ -80,7 +81,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         source, root / "Копия книги.pfbackup", "пароль проверочной копии"
                     )
                 with _step(report, "restore_to_new_book"):
-                    restored, _ = restore_backup(
+                    restored, restored_recovery = restore_backup(
                         backup,
                         root / "Восстановленная книга.pfvault",
                         "пароль проверочной копии",
@@ -98,18 +99,45 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             )
                         restored.check_integrity()
                     with _step(report, "open_and_lock_window"):
-                        window = MainWindow()
-                        try:
-                            window.activate_session(restored)
-                            window.show()
-                            app.processEvents()
-                            if window.account_table.rowCount() != 1:
-                                raise RuntimeError("Счёт не отображается в окне.")
-                            window.lock_book()
-                            if window.session is not None or window.account_table.rowCount() != 0:
-                                raise RuntimeError("Книга не закрылась.")
-                        finally:
-                            window.close()
+                        restored.close()
+                        # Повторяем передачу сессии из рабочего потока в GUI,
+                        # затем проверяем фактическое освобождение блокировки.
+                        with ThreadPoolExecutor(max_workers=1) as worker:
+                            background = worker.submit(
+                                open_vault,
+                                root / "Восстановленная книга.pfvault",
+                                restored_recovery,
+                                recovery=True,
+                            ).result(timeout=15)
+                            window = MainWindow()
+                            try:
+                                window.activate_session(background)
+                                window.show()
+                                app.processEvents()
+                                if window.account_table.rowCount() != 1:
+                                    raise RuntimeError("Счёт не отображается в окне.")
+                                window.lock_book()
+                                if (
+                                    window.session is not None
+                                    or window.account_table.rowCount() != 0
+                                ):
+                                    raise RuntimeError("Книга не закрылась.")
+                                reopened = worker.submit(
+                                    open_vault,
+                                    root / "Восстановленная книга.pfvault",
+                                    "новая тестовая фраза",
+                                ).result(timeout=15)
+                                try:
+                                    reopened.check_integrity()
+                                    if reopened.catalog.accounts()[0].id != account.id:
+                                        raise RuntimeError(
+                                            "Счёт не сохранился после закрытия окна."
+                                        )
+                                finally:
+                                    reopened.close()
+                            finally:
+                                window.close()
+                                background.close()
                 finally:
                     restored.close()
             finally:
