@@ -43,7 +43,7 @@ jobs:
         shell: powershell
         run: |
           $pfRuns = @(Get-ChildItem -Path artifacts -Directory -Filter 'windows-check-*')
-          if ($pfRuns.Count -ne 1) { throw 'Не найден единственный прогон проверки.' }
+          if ($pfRuns.Count -ne 1) { throw 'windows_run_count_mismatch' }
           $pfBundle = Join-Path $pfRuns[0].FullName 'bundle/app/PersonalFinance'
           "path=$pfBundle" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Проверочная сборка Windows x64
