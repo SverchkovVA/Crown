@@ -6,13 +6,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Проверки ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, windows-latest]
+  linux:
+    name: Проверки Linux
+    runs-on: ubuntu-24.04
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -25,6 +21,16 @@ jobs:
       - run: uv run --frozen ruff format --check src tests tools
       - run: uv run --frozen mypy src/personal_finance
       - run: uv run --frozen pytest -q
+      - shell: pwsh
+        run: ./packaging/windows/test_helpers.ps1 -PythonPath .venv/bin/python
       - run: uv run --frozen python -m personal_finance.bootstrap.main --self-test
-      - if: runner.os == 'Windows'
-        run: ./packaging/windows/build.ps1
+  windows:
+    name: Проверки и сборка Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.12.23'
+      - shell: powershell
+        run: ./packaging/windows/verify.ps1 -Headless
