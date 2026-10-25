@@ -19,3 +19,6 @@ dist/
 *.db-*
 *.key
 .env
+/private-data/
+/local-data/
+tests/fixtures/private/
