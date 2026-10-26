@@ -58,7 +58,7 @@ from personal_finance.presentation.dialogs import (
     PasswordDialog,
     RecoveryDialog,
 )
-from personal_finance.presentation.jobs import Job
+from personal_finance.presentation.jobs import Job, JobSignals
 from personal_finance.presentation.ledger_dialogs import (
     OperationDialog,
     OperationHistoryDialog,
@@ -133,6 +133,7 @@ class MainWindow(QMainWindow):
         self._account_records: list[Account] = []
         self._journal_operations: list[Operation] = []
         self._jobs: set[Job] = set()
+        self._job_callbacks: dict[JobSignals, Callable[[Any], object]] = {}
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         self._busy = False
@@ -518,22 +519,48 @@ class MainWindow(QMainWindow):
         self._busy = True
         self.root_stack.setEnabled(False)
         self.statusBar().showMessage(message)
-        job = Job(action)
+        job = Job(action, self)
         self._jobs.add(job)
-        job.signals.success.connect(success)
-        job.signals.failure.connect(
-            lambda message: QMessageBox.warning(self, "Действие не выполнено", message)
-        )
-
-        def finished() -> None:
-            self._jobs.discard(job)
-            self._busy = False
-            self.root_stack.setEnabled(True)
-            state = "Книга открыта" if self.session else "Книга закрыта"
-            self.statusBar().showMessage(f"Работает без интернета · {state}")
-
-        job.signals.finished.connect(finished)
+        self._job_callbacks[job.signals] = success
+        # Только QObject-слоты принимают сигналы рабочего потока. Пользовательские
+        # callback вызываются уже в GUI, без циклов Job -> closure -> Job/window.
+        job.signals.success.connect(self._job_succeeded)
+        job.signals.failure.connect(self._job_failed)
+        job.signals.finished.connect(self._job_finished)
         self._pool.start(job)
+
+    @Slot(object)
+    def _job_succeeded(self, result: object) -> None:
+        signals = self.sender()
+        if isinstance(signals, JobSignals):
+            callback = self._job_callbacks.get(signals)
+            if callback is not None:
+                callback(result)
+
+    @Slot(str)
+    def _job_failed(self, message: str) -> None:
+        QMessageBox.warning(self, "Действие не выполнено", message)
+
+    @Slot()
+    def _job_finished(self) -> None:
+        signals = self.sender()
+        if not isinstance(signals, JobSignals):
+            return
+        # finished — последняя команда run(). Дождаться выхода QRunnable до
+        # удаления его сигналов; ожидание Qt освобождает GIL.
+        self._pool.waitForDone()
+        self._job_callbacks.pop(signals, None)
+        for job in tuple(self._jobs):
+            if job.signals is signals:
+                self._jobs.discard(job)
+        signals.success.disconnect(self._job_succeeded)
+        signals.failure.disconnect(self._job_failed)
+        signals.finished.disconnect(self._job_finished)
+        signals.deleteLater()
+        self._busy = False
+        self.root_stack.setEnabled(True)
+        state = "Книга открыта" if self.session else "Книга закрыта"
+        self.statusBar().showMessage(f"Работает без интернета · {state}")
 
     def activate_session(self, session: VaultSession) -> None:
         if self.session and self.session is not session:
