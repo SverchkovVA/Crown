@@ -59,6 +59,17 @@ def require_balanced(postings: tuple[Posting, ...]) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class OperationPart:
+    category_id: str
+    amount: Money
+
+    def __post_init__(self) -> None:
+        require_identifier(self.category_id)
+        if not isinstance(self.amount, Money) or self.amount.minor <= 0:
+            raise ValidationError("Сумма каждой части должна быть положительной.")
+
+
+@dataclass(frozen=True, slots=True)
 class OperationDraft:
     kind: OperationKind
     occurred_on: date
@@ -69,6 +80,7 @@ class OperationDraft:
     fee: Money = field(default_factory=lambda: Money(0))
     fee_category_id: str | None = None
     note: str = ""
+    parts: tuple[OperationPart, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, OperationKind):
@@ -93,8 +105,32 @@ class OperationDraft:
             or any(ord(character) < 32 and character != "\n" for character in self.note)
         ):
             raise ValidationError("Примечание должно содержать не более 500 печатных символов.")
+        if not isinstance(self.parts, tuple):
+            raise ValidationError("Части операции должны быть неизменяемым набором.")
+        if self.parts:
+            if self.kind not in (OperationKind.INCOME, OperationKind.EXPENSE):
+                raise ValidationError("Разделить можно только доход или расход.")
+            if self.category_id is not None or not 2 <= len(self.parts) <= 100:
+                raise ValidationError(
+                    "Для разделения укажите от 2 до 100 частей без общей категории."
+                )
+            categories: set[str] = set()
+            total = 0
+            for part in self.parts:
+                if not isinstance(part, OperationPart):
+                    raise ValidationError("Некорректная часть финансовой операции.")
+                if part.amount.currency != self.amount.currency:
+                    raise ValidationError("Все части должны иметь валюту операции.")
+                if part.category_id in categories:
+                    raise ValidationError(
+                        "Категория повторяется: объедините её суммы в одну часть."
+                    )
+                categories.add(part.category_id)
+                total += part.amount.minor
+            if total != self.amount.minor:
+                raise ValidationError("Сумма частей должна точно совпадать с суммой операции.")
         if self.kind in (OperationKind.INCOME, OperationKind.EXPENSE):
-            if self.category_id is None:
+            if self.category_id is None and not self.parts:
                 raise ValidationError("Выберите категорию дохода или расхода.")
         elif self.category_id is not None:
             raise ValidationError("Для остатка или перевода основная категория не используется.")
@@ -124,14 +160,15 @@ class OperationDraft:
                 Posting(LedgerRole.OPENING, None, Money(-minor, currency)),
             )
         elif self.kind == OperationKind.INCOME:
-            result = (
-                Posting(LedgerRole.ASSET, self.account_id, self.amount),
-                Posting(LedgerRole.INCOME, self.category_id, Money(-minor, currency)),
+            allocations = self.parts or (OperationPart(self.category_id or "", self.amount),)
+            result = (Posting(LedgerRole.ASSET, self.account_id, self.amount),) + tuple(
+                Posting(LedgerRole.INCOME, part.category_id, Money(-part.amount.minor, currency))
+                for part in allocations
             )
         elif self.kind == OperationKind.EXPENSE:
-            result = (
-                Posting(LedgerRole.ASSET, self.account_id, Money(-minor, currency)),
-                Posting(LedgerRole.EXPENSE, self.category_id, self.amount),
+            allocations = self.parts or (OperationPart(self.category_id or "", self.amount),)
+            result = (Posting(LedgerRole.ASSET, self.account_id, Money(-minor, currency)),) + tuple(
+                Posting(LedgerRole.EXPENSE, part.category_id, part.amount) for part in allocations
             )
         else:
             result = (

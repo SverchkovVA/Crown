@@ -17,6 +17,7 @@ from personal_finance.domain.ledger import (
     Operation,
     OperationDraft,
     OperationKind,
+    OperationPart,
     require_identifier,
 )
 from personal_finance.domain.models import Currency, Money
@@ -38,7 +39,7 @@ SELECT_COLUMNS = ",".join("p." + column for column in COLUMNS)
 
 
 def operation_payload(draft: OperationDraft) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "kind": draft.kind.value,
         "occurred_on": draft.occurred_on.isoformat(),
         "account_id": draft.account_id,
@@ -50,6 +51,13 @@ def operation_payload(draft: OperationDraft) -> dict[str, Any]:
         "fee_category_id": draft.fee_category_id,
         "note": draft.note,
     }
+    # Пустые части не меняют хеши и квитанции опубликованной схемы 0003.
+    if draft.parts:
+        payload["parts"] = [
+            {"category_id": part.category_id, "amount_minor": part.amount.minor}
+            for part in draft.parts
+        ]
+    return payload
 
 
 def revision_hash(
@@ -70,14 +78,42 @@ def revision_hash(
 
 
 class SqlLedgerRepository:
-    def __init__(self, engine: Engine, book_id: str, replica_id: str, mutex: RLock) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        book_id: str,
+        replica_id: str,
+        mutex: RLock,
+        *,
+        supports_splits: bool = True,
+    ) -> None:
         self._engine = engine
         self._book_id = book_id
         self._replica_id = replica_id
         self._mutex = mutex
+        self.supports_splits = supports_splits
 
-    def _record(self, row: RowMapping) -> Operation:
+    def _record(self, connection: Connection, row: RowMapping) -> Operation:
         currency = Currency(row["currency"], row["exponent"])
+        rows = (
+            list(
+                connection.execute(
+                    text(
+                        "SELECT position,category_id,amount_minor FROM operation_parts "
+                        "WHERE revision_id=:revision ORDER BY position"
+                    ),
+                    {"revision": row["revision_id"]},
+                ).mappings()
+            )
+            if self.supports_splits
+            else []
+        )
+        if any(part["position"] != index for index, part in enumerate(rows)):
+            raise VaultError("Нарушена последовательность частей операции.")
+        parts = tuple(
+            OperationPart(part["category_id"], Money(part["amount_minor"], currency))
+            for part in rows
+        )
         return Operation(
             row["id"],
             row["revision_id"],
@@ -91,6 +127,7 @@ class SqlLedgerRepository:
                 Money(row["fee_minor"], currency),
                 row["fee_category_id"],
                 row["note"],
+                parts,
             ),
             bool(row["is_deleted"]),
         )
@@ -113,7 +150,7 @@ class SqlLedgerRepository:
         )
         if row is None:
             raise ValidationError("Финансовая операция не найдена в этой книге.")
-        return self._record(row)
+        return self._record(connection, row)
 
     def operation(self, operation_id: str) -> Operation:
         require_identifier(operation_id)
@@ -128,7 +165,7 @@ class SqlLedgerRepository:
             )
             if row is None:
                 raise ValidationError("Финансовая операция не найдена в этой книге.")
-            return self._record(row)
+            return self._record(connection, row)
 
     def operations(self, *, include_deleted: bool = False) -> list[Operation]:
         with self._mutex, self._engine.connect() as connection:
@@ -140,14 +177,14 @@ class SqlLedgerRepository:
                 ),
                 {"book": self._book_id, "deleted": int(include_deleted)},
             ).mappings()
-            return [self._record(row) for row in rows]
+            return [self._record(connection, row) for row in rows]
 
     def _history(self, connection: Connection, operation_id: str) -> list[Operation]:
         rows = connection.execute(
             text(self._select() + " AND e.id=:id"),
             {"book": self._book_id, "id": operation_id},
         ).mappings()
-        records = {row["revision_id"]: self._record(row) for row in rows}
+        records = {row["revision_id"]: self._record(connection, row) for row in rows}
         if not records:
             raise ValidationError("История операции не найдена в этой книге.")
         parents: dict[str, list[str]] = {revision: [] for revision in records}
@@ -367,6 +404,8 @@ class SqlLedgerRepository:
     ) -> Operation:
         if not isinstance(draft, OperationDraft) or type(is_deleted) is not bool:
             raise ValidationError("Некорректное действие с финансовой операцией.")
+        if draft.parts and not self.supports_splits:
+            raise ValidationError("Для разделения создайте копию и восстановите её в новую папку.")
         command_id = command_id or str(uuid4())
         require_identifier(command_id)
         if operation_id is None:
@@ -460,8 +499,32 @@ class SqlLedgerRepository:
             values = ",".join(":" + column for column in ("revision_id", *COLUMNS))
             connection.execute(
                 text(f"INSERT INTO operation_revisions ({columns}) VALUES ({values})"),
-                {"revision_id": revision_id, **operation_payload(draft)},
+                {
+                    "revision_id": revision_id,
+                    **{
+                        key: value
+                        for key, value in operation_payload(draft).items()
+                        if key in COLUMNS
+                    },
+                },
             )
+            if draft.parts:
+                connection.execute(
+                    text(
+                        "INSERT INTO operation_parts "
+                        "(revision_id,position,category_id,amount_minor) "
+                        "VALUES (:revision,:position,:category,:amount)"
+                    ),
+                    [
+                        {
+                            "revision": revision_id,
+                            "position": index,
+                            "category": part.category_id,
+                            "amount": part.amount.minor,
+                        }
+                        for index, part in enumerate(draft.parts)
+                    ],
+                )
             self._insert_postings(connection, revision_id, draft)
             if expected_revision_id:
                 connection.execute(
@@ -515,7 +578,7 @@ class SqlLedgerRepository:
             checked_entities: set[str] = set()
             try:
                 for row in rows:
-                    operation = self._record(row)
+                    operation = self._record(connection, row)
                     if operation.id not in checked_entities:
                         self._history(connection, operation.id)
                         checked_entities.add(operation.id)

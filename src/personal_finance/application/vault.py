@@ -95,8 +95,16 @@ class VaultSession:
                 SqlCatalogRepository(self.engine, book_id, self.replica_id, self.mutex)
             )
             self.ledger = (
-                Ledger(SqlLedgerRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision == "0003"
+                Ledger(
+                    SqlLedgerRepository(
+                        self.engine,
+                        book_id,
+                        self.replica_id,
+                        self.mutex,
+                        supports_splits=self.schema_revision == "0004",
+                    )
+                )
+                if self.schema_revision in ("0003", "0004")
                 else None
             )
         except Exception:

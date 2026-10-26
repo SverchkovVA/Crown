@@ -14,10 +14,12 @@ from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from tests.conftest import PASSWORD
 
 
-def test_process_termination_rolls_back_financial_revision_and_postings(session, tmp_path):
+@pytest.mark.parametrize("split", [False, True])
+def test_process_termination_rolls_back_financial_revision_and_postings(session, tmp_path, split):
     account = session.catalog.add_account("Счёт аварийной проверки", AccountKind.CASH)
     income = next(c for c in session.catalog.categories() if c.kind == CategoryKind.INCOME)
-    expense = next(c for c in session.catalog.categories() if c.kind == CategoryKind.EXPENSE)
+    expenses = [c for c in session.catalog.categories() if c.kind == CategoryKind.EXPENSE]
+    expense = expenses[0]
     assert session.ledger is not None
     original = session.ledger.add(
         OperationDraft(
@@ -41,7 +43,7 @@ import json, sys
 from datetime import date
 from pathlib import Path
 from personal_finance.application.vault import open_vault
-from personal_finance.domain.ledger import OperationDraft, OperationKind
+from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import Money
 from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
 parameters=json.loads(sys.stdin.readline())
@@ -53,7 +55,10 @@ def pause_after_postings(self,*args):
     sys.stdin.readline()
 SqlLedgerRepository._insert_postings=pause_after_postings
 session.ledger.add(OperationDraft(
-    OperationKind.EXPENSE,date(2026,10,26),parameters["account"],Money(500),parameters["category"],
+    OperationKind.EXPENSE,date(2026,10,26),parameters["account"],Money(500),
+    category_id=None if parameters["split"] else parameters["category"],
+    parts=(OperationPart(parameters["category"],Money(300)),
+           OperationPart(parameters["other_category"],Money(200))) if parameters["split"] else (),
 ))
 """
     process = subprocess.Popen(
@@ -73,6 +78,8 @@ session.ledger.add(OperationDraft(
                     "ready": str(ready),
                     "account": account.id,
                     "category": expense.id,
+                    "other_category": expenses[1].id,
+                    "split": split,
                 }
             )
             + "\n"
@@ -101,6 +108,9 @@ session.ledger.add(OperationDraft(
         assert reopened.ledger.balances()[0].amount.minor == 1000
         with reopened.engine.connect() as connection:
             assert connection.execute(text("SELECT count(*) FROM postings")).scalar_one() == 2
+            assert (
+                connection.execute(text("SELECT count(*) FROM operation_parts")).scalar_one() == 0
+            )
             assert (
                 connection.execute(
                     text("SELECT sequence FROM replicas WHERE id=:id"),

@@ -2,7 +2,7 @@ import socket
 from datetime import date
 
 from personal_finance.application.vault import create_vault
-from personal_finance.domain.ledger import OperationDraft, OperationKind
+from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 
@@ -16,11 +16,18 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
     source, _ = create_vault(tmp_path / "offline.pfvault", "Офлайн", "пароль автономной книги")
     try:
         account = source.catalog.add_account("Наличные", AccountKind.CASH)
-        category = next(c for c in source.catalog.categories() if c.kind == CategoryKind.INCOME)
+        categories = [c for c in source.catalog.categories() if c.kind == CategoryKind.INCOME]
         assert source.ledger is not None
         operation = source.ledger.add(
             OperationDraft(
-                OperationKind.INCOME, date(2026, 10, 26), account.id, Money(12345), category.id
+                OperationKind.INCOME,
+                date(2026, 10, 26),
+                account.id,
+                Money(12345),
+                parts=(
+                    OperationPart(categories[0].id, Money(10000)),
+                    OperationPart(categories[1].id, Money(2345)),
+                ),
             )
         )
         backup = create_backup(source, tmp_path / "offline.pfbackup", "пароль автономной копии")

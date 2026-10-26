@@ -7,6 +7,8 @@ from personal_finance.domain.ledger import AccountBalance, Operation, OperationD
 
 
 class LedgerRepository(Protocol):
+    supports_splits: bool
+
     def save(
         self,
         draft: OperationDraft,
@@ -31,6 +33,10 @@ class LedgerRepository(Protocol):
 class Ledger:
     def __init__(self, repository: LedgerRepository) -> None:
         self._repository = repository
+
+    @property
+    def supports_splits(self) -> bool:
+        return self._repository.supports_splits
 
     def add(self, draft: OperationDraft, *, command_id: str | None = None) -> Operation:
         return self._repository.save(draft, command_id=command_id)
