@@ -31,12 +31,21 @@ try {
     }
     $currentStep = 'pyinstaller'
     Write-Host 'Сборка в новую папку…'
-    $arguments = @('run', '--frozen', 'python', '-m', 'PyInstaller',
+    $python = Join-Path $projectRoot '.venv/Scripts/python.exe'
+    # PyInstaller ищет DLL также через PATH. Сторонние программы могут поставлять
+    # старые системные библиотеки; в сборку должны попадать зависимости .venv/Windows.
+    # Окружение ограничивается только для дочернего сборщика, PATH пользователя не меняется.
+    $buildEnvironment = @{
+        PYTHONUTF8 = '1'; QT_QPA_PLATFORM = $QtPlatform; PYTHONPATH = $null; PYTHONHOME = $null
+        PATH = (@((Split-Path -Parent $python), [Environment]::SystemDirectory,
+            [Environment]::GetFolderPath('Windows')) -join [System.IO.Path]::PathSeparator)
+    }
+    $arguments = @('-m', 'PyInstaller',
         '--distpath', (Join-Path $outputRoot 'app'), '--workpath', (Join-Path $outputRoot 'work'),
         'packaging/windows/personal_finance.spec')
-    $build = Invoke-PfProcess -FilePath $uvCommand.Source -ArgumentList $arguments `
+    $build = Invoke-PfProcess -FilePath $python -ArgumentList $arguments `
         -WorkingDirectory $projectRoot -LogPrefix (Join-Path $outputRoot 'build') `
-        -Step 'pyinstaller' -Environment $environment -TimeoutSeconds 1800
+        -Step 'pyinstaller' -Environment $buildEnvironment -TimeoutSeconds 1800
     if ($build.status -ne 'passed') { throw 'Не удалось собрать приложение.' }
     $currentStep = 'frozen_self_test'
     $executable = Join-Path $outputRoot 'app/PersonalFinance/PersonalFinance.exe'
