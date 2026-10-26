@@ -3,8 +3,8 @@
 Целевая ОС: Windows 11 x64. Python: 3.13.16. Зависимости и хеши — uv.lock.
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
-журнала — docs/stage-4-report.md; текущая 0.2.0.dev2 с разделением и фактическими
-проверками — docs/stage-4-split-report.md.
+журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; текущая 0.2.0.dev3 с возвратами
+и фактическими проверками — docs/stage-4-refund-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
 импорты. Используется каталог приложения, без onefile, UPX и Qt WebEngine.
