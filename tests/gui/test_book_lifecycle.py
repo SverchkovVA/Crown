@@ -1,7 +1,8 @@
 import hashlib
 
 import pytest
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox
 
 from personal_finance.application.vault import create_vault, open_vault
 from personal_finance.domain.models import AccountKind
@@ -116,3 +117,46 @@ def test_open_dialog_selects_recovery_and_preserves_password(qtbot, tmp_path, mo
     window.lock_book()
     reopened = open_vault(path, password)
     reopened.close()
+
+
+@pytest.mark.parametrize("input_method", ["keyboard", "paste_shortcut", "padded_paste"])
+def test_recovery_code_input_events_select_mode_and_open_book(qtbot, tmp_path, input_method):
+    app = QApplication.instance()
+    assert app is not None
+    if input_method != "keyboard" and app.platformName() != "offscreen":
+        pytest.skip("Буфер обмена проверяется только изолированной offscreen-платформой Qt")
+    path = tmp_path / "input-events.pfvault"
+    session, recovery = create_vault(path, "Синтетическая проверка ввода", PASSWORD)
+    session.close()
+    dialog = OpenDialog(path)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.credential.setFocus()
+    assert not dialog.recovery.isChecked()
+
+    if input_method == "keyboard":
+        qtbot.keyClicks(dialog.credential, recovery)
+    else:
+        clipboard = app.clipboard()
+        # У offscreen собственный буфер в памяти: системный буфер с кодом
+        # пользователя не читается и не заменяется синтетическими данными.
+        value = f"  {recovery}  " if input_method == "padded_paste" else recovery
+        clipboard.setText(value)
+        try:
+            qtbot.keyClick(dialog.credential, Qt.Key.Key_V, Qt.KeyboardModifier.ControlModifier)
+        finally:
+            clipboard.clear()
+
+    assert dialog.credential.text().strip() == recovery
+    assert dialog.recovery.isChecked()
+    reopened = open_vault(
+        path, dialog.credential.text().strip(), recovery=dialog.recovery.isChecked()
+    )
+    reopened.close()
+
+    # После ручного выбора режима он остаётся видимым при потере фокуса
+    # и подтверждении окна; смена placeholder не должна сбрасывать выбор.
+    qtbot.mouseClick(dialog.recovery, Qt.MouseButton.LeftButton)
+    assert not dialog.recovery.isChecked()
+    dialog.accept()
+    assert not dialog.recovery.isChecked()
