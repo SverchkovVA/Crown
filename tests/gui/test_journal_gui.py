@@ -3,7 +3,7 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QPoint, Qt
 from PySide6.QtWidgets import QDialog, QMessageBox
 
 from personal_finance.domain.ledger import Operation, OperationDraft, OperationKind, OperationPart
@@ -193,7 +193,10 @@ def test_split_dialog_exact_input_and_edit_prefill(qtbot, session, financial_dat
     qtbot.addWidget(dialog)
     dialog.show()
     dialog.amount.setText("1 000,00")
-    qtbot.mouseClick(dialog.split, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(
+        dialog.split, Qt.MouseButton.LeftButton, pos=QPoint(8, dialog.split.height() // 2)
+    )
+    assert dialog.split.isChecked()
     for index, value in enumerate(("700,00", "300,00")):
         dialog.parts._category(index).setCurrentIndex(
             dialog.parts._category(index).findData(categories[index].id)
