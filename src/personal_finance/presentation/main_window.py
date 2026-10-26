@@ -46,6 +46,7 @@ from personal_finance.domain.models import (
     CategoryKind,
     validate_name,
 )
+from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.infrastructure.backup.container import (
     create_backup,
     restore_backup,
@@ -132,6 +133,7 @@ class MainWindow(QMainWindow):
         self.session: VaultSession | None = None
         self._account_records: list[Account] = []
         self._journal_operations: list[Operation] = []
+        self._refund_candidates: list[RefundCandidate] = []
         self._jobs: set[Job] = set()
         self._job_callbacks: dict[JobSignals, Callable[[Any], object]] = {}
         self._pool = QThreadPool(self)
@@ -301,7 +303,8 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
         self.journal_notice = label(
-            "Собственные переводы исключены из доходов и расходов. Комиссия — расход.",
+            "Переводы исключены из доходов и расходов; комиссия — расход. "
+            "Возврат уменьшает расходы.",
             "muted",
         )
         layout.addWidget(self.journal_notice)
@@ -323,6 +326,13 @@ class MainWindow(QMainWindow):
         self.show_deleted.toggled.connect(self.refresh)
         actions.addWidget(self.show_deleted)
         layout.addLayout(actions)
+        refund_row = QHBoxLayout()
+        self.refund_button = button("Оформить возврат", self.add_refund)
+        refund_row.addWidget(self.refund_button)
+        refund_row.addWidget(
+            label("Возврат связан с расходом и уменьшает расходы на дату получения.", "muted"), 1
+        )
+        layout.addLayout(refund_row)
         self.operation_table = QTableView()
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
         self.operation_table.verticalHeader().hide()
@@ -359,10 +369,40 @@ class MainWindow(QMainWindow):
         editable = selected is not None and not selected.is_deleted
         self.edit_operation_button.setEnabled(editable)
         self.delete_operation_button.setEnabled(editable)
+        eligible = {
+            candidate.expense.id
+            for candidate in self._refund_candidates
+            if candidate.amount_remaining.minor > 0
+        }
+        can_refund = (
+            available
+            and self.session is not None
+            and self.session.ledger is not None
+            and self.session.ledger.supports_refunds
+            and bool(eligible)
+        )
+        if selected is not None and selected.draft.kind == OperationKind.EXPENSE:
+            can_refund = can_refund and not selected.is_deleted and selected.id in eligible
+        self.refund_button.setEnabled(can_refund)
+        self.refund_button.setToolTip(
+            "Оформить полный или частичный возврат по расходу."
+            if can_refund
+            else "Нужен действующий расход с остатком к возврату. "
+            "Для новых функций старой книги восстановите копию в новую папку."
+        )
 
     @Slot()
     def add_default_operation(self) -> None:
         self.add_operation()
+
+    @Slot()
+    def add_refund(self) -> None:
+        if (
+            self.session is not None
+            and self.session.ledger is not None
+            and self.session.ledger.supports_refunds
+        ):
+            self.add_operation(OperationKind.REFUND)
 
     @Slot()
     def add_opening_balance(self) -> None:
@@ -385,6 +425,14 @@ class MainWindow(QMainWindow):
             and 0 <= selected < len(self._account_records)
             else None
         )
+        selected_operation = self._selected_operation()
+        refund_of_id = (
+            selected_operation.id
+            if kind == OperationKind.REFUND
+            and selected_operation is not None
+            and selected_operation.draft.kind == OperationKind.EXPENSE
+            else None
+        )
         dialog = OperationDialog(
             self._account_records,
             session.catalog.categories(),
@@ -393,6 +441,9 @@ class MainWindow(QMainWindow):
             kind=kind,
             account_id=account_id,
             allow_splits=session.ledger.supports_splits,
+            allow_refunds=session.ledger.supports_refunds,
+            refund_candidates=self._refund_candidates,
+            refund_of_id=refund_of_id,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
             return
@@ -415,6 +466,14 @@ class MainWindow(QMainWindow):
             self,
             existing=selected,
             allow_splits=session.ledger.supports_splits,
+            allow_refunds=session.ledger.supports_refunds,
+            refund_candidates=session.ledger.refund_candidates(
+                excluding_refund_id=selected.id
+                if selected.draft.kind == OperationKind.REFUND
+                else None,
+            )
+            if session.ledger.supports_refunds
+            else [],
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
             return
@@ -458,6 +517,13 @@ class MainWindow(QMainWindow):
             return
         try:
             versions = session.ledger.history(selected.id)
+            related_versions = []
+            for identifier in {
+                version.draft.refund_of
+                for version in versions
+                if version.draft.refund_of is not None
+            }:
+                related_versions.extend(session.ledger.history(identifier))
         except FinanceError as exc:
             QMessageBox.warning(self, "Действие не выполнено", str(exc))
             return
@@ -466,6 +532,7 @@ class MainWindow(QMainWindow):
             self,
             accounts=self._account_records,
             categories=session.catalog.categories(),
+            related_versions=related_versions,
         ).exec()
 
     def _categories(self) -> QWidget:
@@ -628,6 +695,7 @@ class MainWindow(QMainWindow):
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
         self._journal_operations = []
         self._account_records = []
+        self._refund_candidates = []
         self._update_journal_actions()
         self.category_tree.clear()
         self.book_title.clear()
@@ -698,6 +766,9 @@ class MainWindow(QMainWindow):
             if ledger is not None
             else []
         )
+        self._refund_candidates = (
+            ledger.refund_candidates() if ledger is not None and ledger.supports_refunds else []
+        )
         account_names = {account.id: account.name for account in accounts}
         category_names = {
             category.id: category_title(category, categories) for category in categories
@@ -735,10 +806,11 @@ class MainWindow(QMainWindow):
         )
         self.journal_notice.setText(
             (
-                "Собственные переводы исключены из доходов и расходов. Комиссия — расход."
+                "Переводы исключены из доходов и расходов; комиссия — расход. "
+                "Возврат уменьшает расходы."
                 + (
-                    " Для разделения восстановите копию этой книги в новую папку."
-                    if not ledger.supports_splits
+                    " Для новых функций восстановите копию этой книги в новую папку."
+                    if not ledger.supports_refunds
                     else ""
                 )
             )

@@ -123,7 +123,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             fee_category_id=expense,
                         )
                     )
-                    ledger.replace(
+                    corrected_spending = ledger.replace(
                         spending.id,
                         spending.revision_id,
                         OperationDraft(
@@ -141,6 +141,24 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     expected_balances = {account.id: 76900, reserve.id: 20000}
                     if _balances(source) != expected_balances:
                         raise RuntimeError("Не совпали проверочные остатки.")
+                    source.check_integrity()
+                with _step(report, "persist_linked_refund"):
+                    returned = ledger.add(
+                        OperationDraft(
+                            OperationKind.REFUND,
+                            today,
+                            account.id,
+                            Money(1000),
+                            expenses[0],
+                            refund_of=spending.id,
+                            refund_of_revision_id=corrected_spending.revision_id,
+                        )
+                    )
+                    expected_balances[account.id] += 1000
+                    if _balances(source) != expected_balances:
+                        raise RuntimeError("Не совпал остаток после возврата.")
+                    if ledger.refund_candidates()[0].amount_remaining != Money(2000):
+                        raise RuntimeError("Не совпал остаток к возврату.")
                     source.check_integrity()
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
@@ -182,7 +200,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     with _step(report, "check_financial_history"):
                         if (
                             restored.ledger is None
-                            or len(restored.ledger.operations()) != 3
+                            or len(restored.ledger.operations()) != 4
                             or len(restored.ledger.history(spending.id)) != 2
                             or restored.ledger.history(spending.id)[-1].draft.parts
                             != (
@@ -190,6 +208,9 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 OperationPart(expenses[1], Money(2000)),
                             )
                             or not restored.ledger.history(incoming.id)[-1].is_deleted
+                            or restored.ledger.history(returned.id)[-1].draft != returned.draft
+                            or restored.ledger.refund_candidates()[0].amount_remaining
+                            != Money(2000)
                         ):
                             raise RuntimeError("Не сохранилась финансовая история.")
                     with _step(report, "open_and_lock_window"):
@@ -209,7 +230,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 app.processEvents()
                                 if (
                                     window.account_model.rowCount() != 2
-                                    or window.operation_model.rowCount() != 3
+                                    or window.operation_model.rowCount() != 4
                                 ):
                                     raise RuntimeError("Счета или операции не отображаются.")
                                 window.lock_book()
