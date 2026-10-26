@@ -46,6 +46,7 @@ from personal_finance.domain.models import (
     CategoryKind,
     validate_name,
 )
+from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.infrastructure.backup.container import (
     create_backup,
@@ -65,6 +66,11 @@ from personal_finance.presentation.ledger_dialogs import (
     OperationHistoryDialog,
     category_title,
     format_money,
+)
+from personal_finance.presentation.periods import (
+    PeriodChangeDialog,
+    PeriodHistoryDialog,
+    PeriodPage,
 )
 from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
 
@@ -134,6 +140,7 @@ class MainWindow(QMainWindow):
         self._account_records: list[Account] = []
         self._journal_operations: list[Operation] = []
         self._refund_candidates: list[RefundCandidate] = []
+        self._closed_months: set[AccountingMonth] = set()
         self._jobs: set[Job] = set()
         self._job_callbacks: dict[JobSignals, Callable[[Any], object]] = {}
         self._pool = QThreadPool(self)
@@ -193,7 +200,9 @@ class MainWindow(QMainWindow):
         side.addWidget(label("Личные\nфинансы", "brand"))
         side.addSpacing(25)
         self.navigation = QListWidget()
-        self.navigation.addItems(["Обзор", "Счета", "Операции", "Категории", "Защита и копии"])
+        self.navigation.addItems(
+            ["Обзор", "Счета", "Операции", "Категории", "Защита и копии", "Периоды"]
+        )
         side.addWidget(self.navigation, 1)
         side.addWidget(label("Локальная книга\nЗашифрованное хранение", "muted"))
         layout.addWidget(sidebar)
@@ -210,6 +219,11 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self._journal())
         self.pages.addWidget(self._categories())
         self.pages.addWidget(self._security())
+        self.period_page = PeriodPage()
+        self.period_page.closeRequested.connect(self.close_period)
+        self.period_page.reopenRequested.connect(self.reopen_period)
+        self.period_page.historyRequested.connect(self.period_history)
+        self.pages.addWidget(self.period_page)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
@@ -366,7 +380,11 @@ class MainWindow(QMainWindow):
         self.show_deleted.setEnabled(available)
         selected = self._selected_operation() if available else None
         self.history_operation_button.setEnabled(selected is not None)
-        editable = selected is not None and not selected.is_deleted
+        editable = (
+            selected is not None
+            and not selected.is_deleted
+            and AccountingMonth.from_date(selected.draft.occurred_on) not in self._closed_months
+        )
         self.edit_operation_button.setEnabled(editable)
         self.delete_operation_button.setEnabled(editable)
         eligible = {
@@ -535,6 +553,50 @@ class MainWindow(QMainWindow):
             related_versions=related_versions,
         ).exec()
 
+    @Slot()
+    def close_period(self) -> None:
+        self._change_period(True)
+
+    @Slot()
+    def reopen_period(self) -> None:
+        self._change_period(False)
+
+    def _change_period(self, is_closed: bool) -> None:
+        session = self.session
+        if session is None or session.periods is None:
+            return
+        month = self.period_page.month()
+        current = self.period_page.selected_state()
+        dialog = PeriodChangeDialog(month, is_closed, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_reason is None:
+            return
+        periods, reason, command = session.periods, dialog.result_reason, str(uuid4())
+        expected = current.revision_id if current is not None else None
+        if not is_closed and expected is None:
+            return
+
+        def save() -> object:
+            if is_closed:
+                return periods.close(
+                    month, expected_revision_id=expected, reason=reason, command_id=command
+                )
+            assert expected is not None
+            return periods.reopen(month, expected, reason=reason, command_id=command)
+
+        self._job(save, lambda _: self.refresh(), "Сохранение состояния периода…")
+
+    @Slot()
+    def period_history(self) -> None:
+        session = self.session
+        if session is None or session.periods is None:
+            return
+        try:
+            versions = session.periods.history(self.period_page.month())
+        except FinanceError as exc:
+            QMessageBox.warning(self, "Действие не выполнено", str(exc))
+            return
+        PeriodHistoryDialog(versions, self).exec()
+
     def _categories(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -696,6 +758,8 @@ class MainWindow(QMainWindow):
         self._journal_operations = []
         self._account_records = []
         self._refund_candidates = []
+        self._closed_months = set()
+        self.period_page.set_states([], False)
         self._update_journal_actions()
         self.category_tree.clear()
         self.book_title.clear()
@@ -761,6 +825,9 @@ class MainWindow(QMainWindow):
             else:
                 self.category_tree.addTopLevelItem(node)
         self.category_tree.expandAll()
+        period_states = session.periods.states() if session.periods is not None else []
+        self._closed_months = {value.month for value in period_states if value.is_closed}
+        self.period_page.set_states(period_states, session.periods is not None)
         self._journal_operations = (
             ledger.operations(include_deleted=self.show_deleted.isChecked())
             if ledger is not None

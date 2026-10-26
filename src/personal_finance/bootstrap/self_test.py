@@ -16,9 +16,10 @@ from PySide6.QtWidgets import QApplication
 
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
-from personal_finance.domain.errors import InvalidCredentials
+from personal_finance.domain.errors import InvalidCredentials, ValidationError
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
+from personal_finance.domain.periods import AccountingMonth
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.presentation.main_window import MainWindow
 
@@ -160,6 +161,22 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     if ledger.refund_candidates()[0].amount_remaining != Money(2000):
                         raise RuntimeError("Не совпал остаток к возврату.")
                     source.check_integrity()
+                with _step(report, "protect_closed_period"):
+                    periods = source.periods
+                    if periods is None:
+                        raise RuntimeError("Закрытие периодов недоступно.")
+                    month = AccountingMonth.from_date(today)
+                    closed = periods.close(month)
+                    try:
+                        ledger.delete(returned.id, returned.revision_id)
+                    except ValidationError:
+                        pass
+                    else:
+                        raise RuntimeError("Закрытый период допустил удаление операции.")
+                    opened = periods.reopen(month, closed.revision_id, reason="Проверка открытия")
+                    periods.close(month, expected_revision_id=opened.revision_id)
+                    expected_period_history = periods.history(month)
+                    source.check_integrity()
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
                     source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
@@ -196,6 +213,19 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             or _balances(restored) != expected_balances
                         ):
                             raise RuntimeError("Данные или реплика не прошли проверку.")
+                        if (
+                            restored.periods is None
+                            or restored.periods.history(month) != expected_period_history
+                        ):
+                            raise RuntimeError("Не сохранилась история закрытия периода.")
+                        try:
+                            if restored.ledger is None:
+                                raise RuntimeError("Финансовый журнал отсутствует.")
+                            restored.ledger.delete(returned.id, returned.revision_id)
+                        except ValidationError:
+                            pass
+                        else:
+                            raise RuntimeError("Восстановленный период не защищён.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (
