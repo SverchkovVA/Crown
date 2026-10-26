@@ -21,6 +21,11 @@ from personal_finance.domain.ledger import (
     require_identifier,
 )
 from personal_finance.domain.models import Currency, Money
+from personal_finance.domain.refunds import (
+    RefundCandidate,
+    calculate_refund_candidates,
+    validate_refund_reference,
+)
 from personal_finance.infrastructure.security.keys import canonical_json
 
 COLUMNS = (
@@ -57,6 +62,9 @@ def operation_payload(draft: OperationDraft) -> dict[str, Any]:
             {"category_id": part.category_id, "amount_minor": part.amount.minor}
             for part in draft.parts
         ]
+    if draft.refund_of is not None:
+        payload["refund_of"] = draft.refund_of
+        payload["refund_of_revision_id"] = draft.refund_of_revision_id
     return payload
 
 
@@ -86,12 +94,14 @@ class SqlLedgerRepository:
         mutex: RLock,
         *,
         supports_splits: bool = True,
+        supports_refunds: bool = False,
     ) -> None:
         self._engine = engine
         self._book_id = book_id
         self._replica_id = replica_id
         self._mutex = mutex
         self.supports_splits = supports_splits
+        self.supports_refunds = supports_refunds
 
     def _record(self, connection: Connection, row: RowMapping) -> Operation:
         currency = Currency(row["currency"], row["exponent"])
@@ -128,12 +138,19 @@ class SqlLedgerRepository:
                 row["fee_category_id"],
                 row["note"],
                 parts,
+                row["refund_of"],
+                row["refund_of_revision_id"],
             ),
             bool(row["is_deleted"]),
         )
 
     def _select(self) -> str:
-        return f"""SELECT e.id,r.id AS revision_id,r.is_deleted,{SELECT_COLUMNS},c.exponent
+        links = (
+            "p.refund_of,p.refund_of_revision_id"
+            if self.supports_refunds
+            else "NULL AS refund_of,NULL AS refund_of_revision_id"
+        )
+        return f"""SELECT e.id,r.id AS revision_id,r.is_deleted,{SELECT_COLUMNS},c.exponent,{links}
             FROM entities e JOIN entity_revisions r ON r.entity_id=e.id
             LEFT JOIN operation_revisions p ON p.revision_id=r.id
             LEFT JOIN currencies c ON c.code=p.currency
@@ -216,6 +233,54 @@ class SqlLedgerRepository:
         require_identifier(operation_id)
         with self._mutex, self._engine.connect() as connection:
             return self._history(connection, operation_id)
+
+    def _current_operations(self, connection: Connection) -> list[Operation]:
+        rows = connection.execute(
+            text(
+                self._select() + " AND r.id=e.accepted_revision_id "
+                "ORDER BY p.occurred_on DESC,r.created_at DESC,e.id"
+            ),
+            {"book": self._book_id},
+        ).mappings()
+        return [self._record(connection, row) for row in rows]
+
+    def refund_candidates(
+        self,
+        *,
+        excluding_refund_id: str | None = None,
+    ) -> list[RefundCandidate]:
+        if not self.supports_refunds:
+            raise ValidationError("Для возвратов создайте копию и восстановите её в новую папку.")
+        if excluding_refund_id is not None:
+            require_identifier(excluding_refund_id)
+        with self._mutex, self._engine.connect() as connection:
+            return calculate_refund_candidates(
+                self._current_operations(connection),
+                excluding_refund_id=excluding_refund_id,
+            )
+
+    def _require_refund_source(
+        self,
+        connection: Connection,
+        draft: OperationDraft,
+        *,
+        current: bool,
+    ) -> None:
+        if draft.kind != OperationKind.REFUND:
+            return
+        if not self.supports_refunds:
+            raise ValidationError("Для возвратов создайте копию и восстановите её в новую папку.")
+        source = self._revision(connection, draft.refund_of_revision_id or "")
+        validate_refund_reference(draft, source)
+        if current:
+            accepted = connection.execute(
+                text("SELECT accepted_revision_id FROM entities WHERE id=:id AND book_id=:book"),
+                {"id": source.id, "book": self._book_id},
+            ).scalar_one_or_none()
+            if accepted != source.revision_id:
+                raise ValidationError(
+                    "Исходный расход изменён. Обновите список и повторите возврат."
+                )
 
     def _require_references(
         self,
@@ -393,6 +458,9 @@ class SqlLedgerRepository:
             if kind != OperationKind.OPENING and occurred_on < opening_dates.get(account_id, ""):
                 raise ValidationError("Дата операции раньше начального остатка этого счёта.")
 
+        if self.supports_refunds:
+            calculate_refund_candidates(self._current_operations(connection))
+
     def save(
         self,
         draft: OperationDraft,
@@ -404,6 +472,8 @@ class SqlLedgerRepository:
     ) -> Operation:
         if not isinstance(draft, OperationDraft) or type(is_deleted) is not bool:
             raise ValidationError("Некорректное действие с финансовой операцией.")
+        if draft.kind == OperationKind.REFUND and not self.supports_refunds:
+            raise ValidationError("Для возвратов создайте копию и восстановите её в новую папку.")
         if draft.parts and not self.supports_splits:
             raise ValidationError("Для разделения создайте копию и восстановите её в новую папку.")
         command_id = command_id or str(uuid4())
@@ -444,6 +514,7 @@ class SqlLedgerRepository:
                     )
                 return self._revision(connection, receipt["revision_id"])
             self._require_references(connection, draft, require_active=not is_deleted)
+            self._require_refund_source(connection, draft, current=not is_deleted)
             if operation_id is not None:
                 current = (
                     connection.execute(
@@ -495,18 +566,15 @@ class SqlLedgerRepository:
                     "deleted": int(is_deleted),
                 },
             )
-            columns = ",".join(("revision_id", *COLUMNS))
-            values = ",".join(":" + column for column in ("revision_id", *COLUMNS))
+            typed_columns = COLUMNS + (
+                ("refund_of", "refund_of_revision_id") if self.supports_refunds else ()
+            )
+            columns = ",".join(("revision_id", *typed_columns))
+            values = ",".join(":" + column for column in ("revision_id", *typed_columns))
+            payload = operation_payload(draft)
             connection.execute(
                 text(f"INSERT INTO operation_revisions ({columns}) VALUES ({values})"),
-                {
-                    "revision_id": revision_id,
-                    **{
-                        key: value
-                        for key, value in operation_payload(draft).items()
-                        if key in COLUMNS
-                    },
-                },
+                {"revision_id": revision_id, **{key: payload.get(key) for key in typed_columns}},
             )
             if draft.parts:
                 connection.execute(
@@ -598,6 +666,7 @@ class SqlLedgerRepository:
                     if stored_hash != revision_hash(operation.draft, operation.is_deleted, parent):
                         raise VaultError("Содержимое финансовой версии не соответствует хешу.")
                     self._require_references(connection, operation.draft, require_active=False)
+                    self._require_refund_source(connection, operation.draft, current=False)
                     stored = list(
                         connection.execute(
                             text("""SELECT p.position,l.id,l.role,l.reference_id,

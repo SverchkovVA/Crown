@@ -23,8 +23,12 @@ def test_operation_posts_balanced_exact_amounts(kind):
         DAY,
         ACCOUNT,
         Money(12345),
-        category_id=CATEGORY if kind in (OperationKind.INCOME, OperationKind.EXPENSE) else None,
+        category_id=CATEGORY
+        if kind in (OperationKind.INCOME, OperationKind.EXPENSE, OperationKind.REFUND)
+        else None,
         destination_account_id=DESTINATION if kind == OperationKind.TRANSFER else None,
+        refund_of=DESTINATION if kind == OperationKind.REFUND else None,
+        refund_of_revision_id=CATEGORY if kind == OperationKind.REFUND else None,
     )
     postings = draft.postings()
     assert sum(posting.amount.minor for posting in postings) == 0

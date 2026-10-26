@@ -14,6 +14,7 @@ class OperationKind(StrEnum):
     INCOME = "income"
     EXPENSE = "expense"
     TRANSFER = "transfer"
+    REFUND = "refund"
 
 
 OPERATION_LABELS = {
@@ -21,6 +22,7 @@ OPERATION_LABELS = {
     OperationKind.INCOME: "Доход",
     OperationKind.EXPENSE: "Расход",
     OperationKind.TRANSFER: "Перевод",
+    OperationKind.REFUND: "Возврат",
 }
 
 
@@ -81,6 +83,8 @@ class OperationDraft:
     fee_category_id: str | None = None
     note: str = ""
     parts: tuple[OperationPart, ...] = ()
+    refund_of: str | None = None
+    refund_of_revision_id: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, OperationKind):
@@ -88,7 +92,13 @@ class OperationDraft:
         if type(self.occurred_on) is not date:
             raise ValidationError("Укажите календарную дату операции.")
         require_identifier(self.account_id)
-        for value in (self.category_id, self.destination_account_id, self.fee_category_id):
+        for value in (
+            self.category_id,
+            self.destination_account_id,
+            self.fee_category_id,
+            self.refund_of,
+            self.refund_of_revision_id,
+        ):
             if value is not None:
                 require_identifier(value)
         if not isinstance(self.amount, Money) or not isinstance(self.fee, Money):
@@ -98,7 +108,9 @@ class OperationDraft:
         if self.fee.minor < 0:
             raise ValidationError("Комиссия не может быть отрицательной.")
         if self.kind != OperationKind.OPENING and self.amount.minor <= 0:
-            raise ValidationError("Сумма дохода, расхода или перевода должна быть положительной.")
+            raise ValidationError(
+                "Сумма дохода, расхода, перевода или возврата должна быть положительной."
+            )
         if (
             not isinstance(self.note, str)
             or len(self.note) > 500
@@ -108,8 +120,8 @@ class OperationDraft:
         if not isinstance(self.parts, tuple):
             raise ValidationError("Части операции должны быть неизменяемым набором.")
         if self.parts:
-            if self.kind not in (OperationKind.INCOME, OperationKind.EXPENSE):
-                raise ValidationError("Разделить можно только доход или расход.")
+            if self.kind not in (OperationKind.INCOME, OperationKind.EXPENSE, OperationKind.REFUND):
+                raise ValidationError("Разделить можно доход, расход или связанный возврат.")
             if self.category_id is not None or not 2 <= len(self.parts) <= 100:
                 raise ValidationError(
                     "Для разделения укажите от 2 до 100 частей без общей категории."
@@ -129,11 +141,16 @@ class OperationDraft:
                 total += part.amount.minor
             if total != self.amount.minor:
                 raise ValidationError("Сумма частей должна точно совпадать с суммой операции.")
-        if self.kind in (OperationKind.INCOME, OperationKind.EXPENSE):
+        if self.kind in (OperationKind.INCOME, OperationKind.EXPENSE, OperationKind.REFUND):
             if self.category_id is None and not self.parts:
                 raise ValidationError("Выберите категорию дохода или расхода.")
         elif self.category_id is not None:
             raise ValidationError("Для остатка или перевода основная категория не используется.")
+        if self.kind == OperationKind.REFUND:
+            if self.refund_of is None or self.refund_of_revision_id is None:
+                raise ValidationError("Для возврата выберите исходный расход и его версию.")
+        elif self.refund_of is not None or self.refund_of_revision_id is not None:
+            raise ValidationError("Связь с исходным расходом используется только для возврата.")
         if self.kind == OperationKind.TRANSFER:
             if self.destination_account_id is None:
                 raise ValidationError("Выберите счёт получения перевода.")
@@ -150,6 +167,13 @@ class OperationDraft:
         ):
             raise ValidationError("Счёт получения и комиссия используются только для перевода.")
 
+    def category_allocations(self) -> tuple[OperationPart, ...]:
+        if self.parts:
+            return self.parts
+        if self.category_id is not None:
+            return (OperationPart(self.category_id, self.amount),)
+        return ()
+
     def postings(self) -> tuple[Posting, ...]:
         currency = self.amount.currency
         minor = self.amount.minor
@@ -159,16 +183,16 @@ class OperationDraft:
                 Posting(LedgerRole.ASSET, self.account_id, self.amount),
                 Posting(LedgerRole.OPENING, None, Money(-minor, currency)),
             )
-        elif self.kind == OperationKind.INCOME:
-            allocations = self.parts or (OperationPart(self.category_id or "", self.amount),)
+        elif self.kind in (OperationKind.INCOME, OperationKind.REFUND):
+            role = LedgerRole.INCOME if self.kind == OperationKind.INCOME else LedgerRole.EXPENSE
             result = (Posting(LedgerRole.ASSET, self.account_id, self.amount),) + tuple(
-                Posting(LedgerRole.INCOME, part.category_id, Money(-part.amount.minor, currency))
-                for part in allocations
+                Posting(role, part.category_id, Money(-part.amount.minor, currency))
+                for part in self.category_allocations()
             )
         elif self.kind == OperationKind.EXPENSE:
-            allocations = self.parts or (OperationPart(self.category_id or "", self.amount),)
             result = (Posting(LedgerRole.ASSET, self.account_id, Money(-minor, currency)),) + tuple(
-                Posting(LedgerRole.EXPENSE, part.category_id, part.amount) for part in allocations
+                Posting(LedgerRole.EXPENSE, part.category_id, part.amount)
+                for part in self.category_allocations()
             )
         else:
             result = (

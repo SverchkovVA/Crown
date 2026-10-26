@@ -101,10 +101,11 @@ class VaultSession:
                         book_id,
                         self.replica_id,
                         self.mutex,
-                        supports_splits=self.schema_revision == "0004",
+                        supports_splits=self.schema_revision in ("0004", "0005"),
+                        supports_refunds=self.schema_revision == "0005",
                     )
                 )
-                if self.schema_revision in ("0003", "0004")
+                if self.schema_revision in ("0003", "0004", "0005")
                 else None
             )
         except Exception:

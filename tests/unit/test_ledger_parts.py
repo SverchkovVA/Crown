@@ -67,7 +67,7 @@ def test_invalid_split_is_rejected(parts, extra):
 
 @pytest.mark.parametrize("kind", [OperationKind.OPENING, OperationKind.TRANSFER])
 def test_opening_and_transfer_cannot_be_split(kind):
-    with pytest.raises(ValidationError, match="только доход или расход"):
+    with pytest.raises(ValidationError, match="Разделить можно"):
         OperationDraft(
             kind,
             DAY,

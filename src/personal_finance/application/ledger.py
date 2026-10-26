@@ -4,10 +4,12 @@ from datetime import date
 from typing import Protocol
 
 from personal_finance.domain.ledger import AccountBalance, Operation, OperationDraft
+from personal_finance.domain.refunds import RefundCandidate
 
 
 class LedgerRepository(Protocol):
     supports_splits: bool
+    supports_refunds: bool
 
     def save(
         self,
@@ -27,6 +29,12 @@ class LedgerRepository(Protocol):
 
     def balances(self, as_of: date | None = None) -> list[AccountBalance]: ...
 
+    def refund_candidates(
+        self,
+        *,
+        excluding_refund_id: str | None = None,
+    ) -> list[RefundCandidate]: ...
+
     def check_integrity(self) -> None: ...
 
 
@@ -37,6 +45,17 @@ class Ledger:
     @property
     def supports_splits(self) -> bool:
         return self._repository.supports_splits
+
+    @property
+    def supports_refunds(self) -> bool:
+        return self._repository.supports_refunds
+
+    def refund_candidates(
+        self,
+        *,
+        excluding_refund_id: str | None = None,
+    ) -> list[RefundCandidate]:
+        return self._repository.refund_candidates(excluding_refund_id=excluding_refund_id)
 
     def add(self, draft: OperationDraft, *, command_id: str | None = None) -> Operation:
         return self._repository.save(draft, command_id=command_id)

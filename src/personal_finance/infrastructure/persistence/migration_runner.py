@@ -9,8 +9,8 @@ from sqlalchemy import Engine
 
 from personal_finance.domain.errors import UnsupportedFormat, VaultError
 
-SCHEMA_HEAD = "0004"
-SUPPORTED_SCHEMAS = ("0002", "0003", SCHEMA_HEAD)
+SCHEMA_HEAD = "0005"
+SUPPORTED_SCHEMAS = ("0002", "0003", "0004", SCHEMA_HEAD)
 
 
 def _configuration() -> Config:
@@ -48,7 +48,7 @@ def supported_schema(engine: Engine) -> str:
 
 def require_current_schema(engine: Engine) -> None:
     if supported_schema(engine) != SCHEMA_HEAD:
-        raise UnsupportedFormat("Для финансового журнала восстановите копию в новую папку.")
+        raise UnsupportedFormat("Для новых функций восстановите копию в новую папку.")
 
 
 def upgrade_restored_schema(engine: Engine, expected: str) -> None:
