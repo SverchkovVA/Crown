@@ -15,6 +15,7 @@ from sqlcipher3 import dbapi2 as sqlcipher
 
 from personal_finance.application.catalog import Catalog, utc_now
 from personal_finance.application.ledger import Ledger
+from personal_finance.application.periods import Periods
 from personal_finance.domain.errors import VaultError
 from personal_finance.domain.models import validate_name
 from personal_finance.infrastructure.persistence.catalog_repository import SqlCatalogRepository
@@ -29,6 +30,7 @@ from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
     supported_schema,
 )
+from personal_finance.infrastructure.persistence.period_repository import SqlPeriodRepository
 from personal_finance.infrastructure.security.keys import (
     MAX_MANIFEST_BYTES,
     make_manifest,
@@ -101,11 +103,17 @@ class VaultSession:
                         book_id,
                         self.replica_id,
                         self.mutex,
-                        supports_splits=self.schema_revision in ("0004", "0005"),
-                        supports_refunds=self.schema_revision == "0005",
+                        supports_splits=self.schema_revision in ("0004", "0005", "0006"),
+                        supports_refunds=self.schema_revision in ("0005", "0006"),
+                        supports_periods=self.schema_revision == "0006",
                     )
                 )
-                if self.schema_revision in ("0003", "0004", "0005")
+                if self.schema_revision in ("0003", "0004", "0005", "0006")
+                else None
+            )
+            self.periods = (
+                Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
+                if self.schema_revision == "0006"
                 else None
             )
         except Exception:
@@ -138,6 +146,8 @@ class VaultSession:
             if bad or unfinished or missing_changes:
                 raise VaultError("Проверка истории изменений не пройдена.")
             self.catalog.check_integrity()
+            if self.periods is not None:
+                self.periods.check_integrity()
             if self.ledger is not None:
                 self.ledger.check_integrity()
 

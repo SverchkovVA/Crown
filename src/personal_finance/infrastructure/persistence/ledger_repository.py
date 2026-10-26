@@ -26,6 +26,7 @@ from personal_finance.domain.refunds import (
     calculate_refund_candidates,
     validate_refund_reference,
 )
+from personal_finance.infrastructure.persistence.period_repository import require_open_dates
 from personal_finance.infrastructure.security.keys import canonical_json
 
 COLUMNS = (
@@ -95,6 +96,7 @@ class SqlLedgerRepository:
         *,
         supports_splits: bool = True,
         supports_refunds: bool = False,
+        supports_periods: bool = False,
     ) -> None:
         self._engine = engine
         self._book_id = book_id
@@ -102,6 +104,7 @@ class SqlLedgerRepository:
         self._mutex = mutex
         self.supports_splits = supports_splits
         self.supports_refunds = supports_refunds
+        self._supports_periods = supports_periods
 
     def _record(self, connection: Connection, row: RowMapping) -> Operation:
         currency = Currency(row["currency"], row["exponent"])
@@ -513,6 +516,20 @@ class SqlLedgerRepository:
                         "Идентификатор действия уже использован для других данных."
                     )
                 return self._revision(connection, receipt["revision_id"])
+            if self._supports_periods:
+                dates = [draft.occurred_on]
+                if operation_id is not None:
+                    row = (
+                        connection.execute(
+                            text(self._select() + " AND e.id=:id AND r.id=e.accepted_revision_id"),
+                            {"book": self._book_id, "id": operation_id},
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    if row is not None:
+                        dates.append(date.fromisoformat(row["occurred_on"]))
+                require_open_dates(connection, self._book_id, *dates)
             self._require_references(connection, draft, require_active=not is_deleted)
             self._require_refund_source(connection, draft, current=not is_deleted)
             if operation_id is not None:
