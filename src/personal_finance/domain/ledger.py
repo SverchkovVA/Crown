@@ -117,6 +117,7 @@ class OperationDraft:
     def postings(self) -> tuple[Posting, ...]:
         currency = self.amount.currency
         minor = self.amount.minor
+        result: tuple[Posting, ...]
         if self.kind == OperationKind.OPENING:
             result = (
                 Posting(LedgerRole.ASSET, self.account_id, self.amount),

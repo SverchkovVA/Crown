@@ -14,6 +14,7 @@ from sqlalchemy.exc import DatabaseError
 from sqlcipher3 import dbapi2 as sqlcipher
 
 from personal_finance.application.catalog import Catalog, utc_now
+from personal_finance.application.ledger import Ledger
 from personal_finance.domain.errors import VaultError
 from personal_finance.domain.models import validate_name
 from personal_finance.infrastructure.persistence.catalog_repository import SqlCatalogRepository
@@ -23,9 +24,10 @@ from personal_finance.infrastructure.persistence.database import (
     encrypted_snapshot,
     make_engine,
 )
+from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
 from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
-    require_current_schema,
+    supported_schema,
 )
 from personal_finance.infrastructure.security.keys import (
     MAX_MANIFEST_BYTES,
@@ -80,7 +82,7 @@ class VaultSession:
         self.mutex = RLock()
         self.engine = make_engine(self.database_path, self.backup_key)
         try:
-            require_current_schema(self.engine)
+            self.schema_revision = supported_schema(self.engine)
             with self.engine.connect() as connection:
                 book = connection.execute(text("SELECT id,name FROM books")).one()
                 if book.id != book_id:
@@ -91,6 +93,11 @@ class VaultSession:
                 ).scalar_one()
             self.catalog = Catalog(
                 SqlCatalogRepository(self.engine, book_id, self.replica_id, self.mutex)
+            )
+            self.ledger = (
+                Ledger(SqlLedgerRepository(self.engine, book_id, self.replica_id, self.mutex))
+                if self.schema_revision == "0003"
+                else None
             )
         except Exception:
             self.engine.dispose()
@@ -122,6 +129,8 @@ class VaultSession:
             if bad or unfinished or missing_changes:
                 raise VaultError("Проверка истории изменений не пройдена.")
             self.catalog.check_integrity()
+            if self.ledger is not None:
+                self.ledger.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:
