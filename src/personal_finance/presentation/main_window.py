@@ -1,17 +1,19 @@
 """Рабочая основа: защищённые книги, справочники и резервирование."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from platformdirs import user_data_dir
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QDate, QThreadPool, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -26,8 +28,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
+    QTableView,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -36,8 +37,15 @@ from PySide6.QtWidgets import (
 
 from personal_finance import __version__
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
-from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.models import ACCOUNT_LABELS, AccountKind, CategoryKind, validate_name
+from personal_finance.domain.errors import FinanceError, ValidationError
+from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
+from personal_finance.domain.models import (
+    ACCOUNT_LABELS,
+    Account,
+    AccountKind,
+    CategoryKind,
+    validate_name,
+)
 from personal_finance.infrastructure.backup.container import (
     create_backup,
     restore_backup,
@@ -51,6 +59,13 @@ from personal_finance.presentation.dialogs import (
     RecoveryDialog,
 )
 from personal_finance.presentation.jobs import Job
+from personal_finance.presentation.ledger_dialogs import (
+    OperationDialog,
+    OperationHistoryDialog,
+    category_title,
+    format_money,
+)
+from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
 
 STYLE = """
 QMainWindow, QDialog { background: #f5f7f9; color: #172b35; }
@@ -71,7 +86,7 @@ QPushButton#primary:disabled { background: #8aa99d; border-color: #8aa99d; }
 QListWidget { border: 0; background: transparent; outline: 0; }
 QListWidget::item { padding: 13px; margin: 3px 0; border-radius: 7px; }
 QListWidget::item:selected { background: #d2e6db; color: #104b38; }
-QLineEdit, QComboBox, QPlainTextEdit { background: white; border: 1px solid #c8d6d8;
+QLineEdit, QComboBox, QPlainTextEdit, QDateEdit { background: white; border: 1px solid #c8d6d8;
                                     border-radius: 5px; padding: 8px; }
 QTableWidget, QTreeWidget { background: white; border: 1px solid #dce5e8;
                           border-radius: 8px; gridline-color: #edf1f2; }
@@ -113,6 +128,8 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
         self.session: VaultSession | None = None
+        self._account_records: list[Account] = []
+        self._journal_operations: list[Operation] = []
         self._jobs: set[Job] = set()
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
@@ -171,7 +188,7 @@ class MainWindow(QMainWindow):
         side.addWidget(label("Личные\nфинансы", "brand"))
         side.addSpacing(25)
         self.navigation = QListWidget()
-        self.navigation.addItems(["Обзор", "Счета", "Категории", "Защита и копии"])
+        self.navigation.addItems(["Обзор", "Счета", "Операции", "Категории", "Защита и копии"])
         side.addWidget(self.navigation, 1)
         side.addWidget(label("Локальная книга\nЗашифрованное хранение", "muted"))
         layout.addWidget(sidebar)
@@ -185,6 +202,7 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.addWidget(self._overview())
         self.pages.addWidget(self._accounts())
+        self.pages.addWidget(self._journal())
         self.pages.addWidget(self._categories())
         self.pages.addWidget(self._security())
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -236,13 +254,8 @@ class MainWindow(QMainWindow):
         card_layout.addLayout(actions)
         layout.addWidget(card)
         layout.addSpacing(16)
-        layout.addWidget(
-            label(
-                "В этой сборке доступны справочники и резервирование. "
-                "Учёт операций и денежных остатков пока недоступен.",
-                "muted",
-            )
-        )
+        self.feature_note = label("", "muted")
+        layout.addWidget(self.feature_note)
         layout.addStretch()
         return page
 
@@ -255,15 +268,198 @@ class MainWindow(QMainWindow):
         row.addWidget(button("Добавить банк", self.add_bank))
         row.addWidget(button("Добавить счёт", self.add_account, primary=True))
         layout.addLayout(row)
-        self.account_table = QTableWidget(0, 4)
-        self.account_table.setHorizontalHeaderLabels(["Название", "Тип", "Банк", "Валюта"])
+        balance_row = QHBoxLayout()
+        balance_row.addWidget(label("Остаток на дату"))
+        self.balance_date = QDateEdit(QDate.currentDate())
+        self.balance_date.setCalendarPopup(True)
+        self.balance_date.setDisplayFormat("dd.MM.yyyy")
+        self.balance_date.setMinimumDate(QDate(1, 1, 1))
+        self.balance_date.dateChanged.connect(self.refresh)
+        balance_row.addWidget(self.balance_date)
+        balance_row.addStretch()
+        self.opening_button = button(
+            "Начальный остаток",
+            lambda: self.add_operation(OperationKind.OPENING),
+        )
+        balance_row.addWidget(self.opening_button)
+        layout.addLayout(balance_row)
+        self.balance_notice = label("", "muted")
+        layout.addWidget(self.balance_notice)
+        self.account_table = QTableView()
+        self.account_model = replace_table(self.account_table, ACCOUNT_HEADERS, [])
         self.account_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.account_table.verticalHeader().hide()
         self.account_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.account_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.account_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.account_table.setAlternatingRowColors(True)
         layout.addWidget(self.account_table, 1)
         return page
+
+    def _journal(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 20, 0, 0)
+        self.journal_notice = label(
+            "Собственные переводы исключены из доходов и расходов. Комиссия — расход.",
+            "muted",
+        )
+        layout.addWidget(self.journal_notice)
+        actions = QHBoxLayout()
+        self.add_operation_button = button(
+            "Добавить операцию", self.add_default_operation, primary=True
+        )
+        self.edit_operation_button = button("Исправить", self.edit_operation)
+        self.delete_operation_button = button("Удалить", self.delete_operation)
+        self.history_operation_button = button("История", self.operation_history)
+        for action in (
+            self.add_operation_button,
+            self.edit_operation_button,
+            self.delete_operation_button,
+            self.history_operation_button,
+        ):
+            actions.addWidget(action)
+        self.show_deleted = QCheckBox("Показывать удалённые")
+        self.show_deleted.toggled.connect(self.refresh)
+        actions.addWidget(self.show_deleted)
+        layout.addLayout(actions)
+        self.operation_table = QTableView()
+        self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
+        self.operation_table.verticalHeader().hide()
+        self.operation_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.operation_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.operation_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.operation_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        for column in (2, 3, 6):
+            self.operation_table.horizontalHeader().setSectionResizeMode(
+                column, QHeaderView.ResizeMode.Stretch
+            )
+        self.operation_table.selectionModel().selectionChanged.connect(self._update_journal_actions)
+        self.operation_table.doubleClicked.connect(self.edit_operation)
+        layout.addWidget(self.operation_table, 1)
+        return page
+
+    def _selected_operation(self) -> Operation | None:
+        if not self.operation_table.selectionModel().hasSelection():
+            return None
+        row = self.operation_table.currentIndex().row()
+        if not 0 <= row < len(self._journal_operations):
+            return None
+        return self._journal_operations[row]
+
+    @Slot()
+    def _update_journal_actions(self) -> None:
+        available = self.session is not None and self.session.ledger is not None
+        self.add_operation_button.setEnabled(available and bool(self._account_records))
+        self.show_deleted.setEnabled(available)
+        selected = self._selected_operation() if available else None
+        self.history_operation_button.setEnabled(selected is not None)
+        editable = selected is not None and not selected.is_deleted
+        self.edit_operation_button.setEnabled(editable)
+        self.delete_operation_button.setEnabled(editable)
+
+    @Slot()
+    def add_default_operation(self) -> None:
+        self.add_operation()
+
+    @Slot()
+    def add_opening_balance(self) -> None:
+        self.add_operation(OperationKind.OPENING)
+
+    def add_operation(self, kind: OperationKind = OperationKind.EXPENSE) -> None:
+        session = self.session
+        if session is None or session.ledger is None:
+            return
+        if not self._account_records:
+            QMessageBox.information(
+                self, "Сначала добавьте счёт", "Создайте счёт в разделе «Счета»."
+            )
+            return
+        selected = self.account_table.currentIndex().row()
+        account_id = (
+            self._account_records[selected].id
+            if kind == OperationKind.OPENING
+            and self.account_table.selectionModel().hasSelection()
+            and 0 <= selected < len(self._account_records)
+            else None
+        )
+        dialog = OperationDialog(
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self,
+            kind=kind,
+            account_id=account_id,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
+            return
+        draft, ledger, command_id = dialog.result_draft, session.ledger, str(uuid4())
+        self._job(
+            lambda: ledger.add(draft, command_id=command_id),
+            lambda _: self.refresh(),
+            "Сохранение операции и проводок…",
+        )
+
+    @Slot()
+    def edit_operation(self) -> None:
+        session, selected = self.session, self._selected_operation()
+        if session is None or session.ledger is None or selected is None or selected.is_deleted:
+            return
+        dialog = OperationDialog(
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self,
+            existing=selected,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
+            return
+        draft, ledger, command_id = dialog.result_draft, session.ledger, str(uuid4())
+        self._job(
+            lambda: ledger.replace(
+                selected.id,
+                selected.revision_id,
+                draft,
+                command_id=command_id,
+            ),
+            lambda _: self.refresh(),
+            "Сохранение новой версии операции…",
+        )
+
+    @Slot()
+    def delete_operation(self) -> None:
+        session, selected = self.session, self._selected_operation()
+        if session is None or session.ledger is None or selected is None or selected.is_deleted:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Удалить финансовую операцию",
+            "Убрать операцию из расчёта остатков? Её прежние версии останутся в истории.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        ledger, command_id = session.ledger, str(uuid4())
+        self._job(
+            lambda: ledger.delete(selected.id, selected.revision_id, command_id=command_id),
+            lambda _: self.refresh(),
+            "Удаление операции с сохранением истории…",
+        )
+
+    @Slot()
+    def operation_history(self) -> None:
+        session, selected = self.session, self._selected_operation()
+        if session is None or session.ledger is None or selected is None:
+            return
+        try:
+            versions = session.ledger.history(selected.id)
+        except FinanceError as exc:
+            QMessageBox.warning(self, "Действие не выполнено", str(exc))
+            return
+        OperationHistoryDialog(versions, self).exec()
 
     def _categories(self) -> QWidget:
         page = QWidget()
@@ -395,7 +591,11 @@ class MainWindow(QMainWindow):
         if self.session:
             self.session.close()
             self.session = None
-        self.account_table.setRowCount(0)
+        self.account_model = replace_table(self.account_table, ACCOUNT_HEADERS, [])
+        self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
+        self._journal_operations = []
+        self._account_records = []
+        self._update_journal_actions()
         self.category_tree.clear()
         self.book_title.clear()
         self.account_count.setText("0")
@@ -406,22 +606,46 @@ class MainWindow(QMainWindow):
         self.root_stack.setCurrentIndex(0)
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
 
+    @Slot()
     def refresh(self) -> None:
         if not self.session:
             return
-        institutions = {bank.id: bank.name for bank in self.session.catalog.institutions()}
-        accounts = self.session.catalog.accounts()
-        self.account_table.setRowCount(len(accounts))
-        for row, account in enumerate(accounts):
-            values = [
+        session = self.session
+        institutions = {bank.id: bank.name for bank in session.catalog.institutions()}
+        accounts = session.catalog.accounts()
+        self._account_records = accounts
+        categories = session.catalog.categories()
+        ledger = session.ledger
+        self.balance_date.setEnabled(ledger is not None)
+        self.opening_button.setEnabled(ledger is not None)
+        amounts = {}
+        if ledger is not None:
+            qdate = self.balance_date.date()
+            amounts = {
+                balance.account_id: format_money(balance.amount, include_currency=False)
+                for balance in ledger.balances(date(qdate.year(), qdate.month(), qdate.day()))
+            }
+        self.balance_notice.setText(
+            "Остаток включает начальную позицию и принятые операции по выбранную дату включительно."
+            if ledger is not None
+            else "Для остатков создайте копию в «Защита и копии» и восстановите её в новую папку."
+        )
+        account_rows = [
+            [
                 account.name,
                 ACCOUNT_LABELS[account.kind],
                 institutions.get(account.institution_id or "", "—"),
                 account.currency,
+                amounts.get(account.id, "—"),
             ]
-            for column, value in enumerate(values):
-                self.account_table.setItem(row, column, QTableWidgetItem(value))
-        categories = self.session.catalog.categories()
+            for account in accounts
+        ]
+        self.account_model = replace_table(
+            self.account_table,
+            ACCOUNT_HEADERS,
+            account_rows,
+            right_columns=(4,),
+        )
         self.category_tree.clear()
         nodes = {
             category.id: QTreeWidgetItem(
@@ -436,6 +660,55 @@ class MainWindow(QMainWindow):
             else:
                 self.category_tree.addTopLevelItem(node)
         self.category_tree.expandAll()
+        self._journal_operations = (
+            ledger.operations(include_deleted=self.show_deleted.isChecked())
+            if ledger is not None
+            else []
+        )
+        account_names = {account.id: account.name for account in accounts}
+        category_names = {
+            category.id: category_title(category, categories) for category in categories
+        }
+        journal_rows = []
+        for operation in self._journal_operations:
+            draft = operation.draft
+            target = (
+                account_names.get(draft.destination_account_id or "", "—")
+                if draft.kind == OperationKind.TRANSFER
+                else category_names.get(draft.category_id or "", "Начальный остаток")
+            )
+            journal_rows.append(
+                [
+                    draft.occurred_on.strftime("%d.%m.%Y"),
+                    OPERATION_LABELS[draft.kind],
+                    account_names.get(draft.account_id, "—"),
+                    target,
+                    format_money(draft.amount),
+                    format_money(draft.fee) if draft.fee.minor else "—",
+                    draft.note,
+                    "Удалена" if operation.is_deleted else "Учтена",
+                ]
+            )
+        self.operation_model = replace_table(
+            self.operation_table,
+            JOURNAL_HEADERS,
+            journal_rows,
+            selection_changed=self._update_journal_actions,
+        )
+        self.journal_notice.setText(
+            "Собственные переводы исключены из доходов и расходов. Комиссия — расход."
+            if ledger is not None
+            else "Для журнала создайте резервную копию и восстановите её в новую папку. "
+            "Исходная книга сохранится."
+        )
+        self.feature_note.setText(
+            "Доступны ручные операции и остатки. "
+            "OCR, импорт, аналитика и планирование ещё не включены."
+            if ledger is not None
+            else "Эта книга открыта со справочниками. "
+            "Для финансовых операций восстановите её копию в новую папку."
+        )
+        self._update_journal_actions()
         self.account_count.setText(str(len(accounts)))
         self.category_count.setText(str(len(categories)))
         self.backup_overview.setText(self.last_backup)

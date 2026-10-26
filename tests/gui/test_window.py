@@ -14,11 +14,11 @@ def test_real_session_displayed_and_cleared_on_lock(qtbot, session) -> None:
     window.activate_session(session)
     window.show()
     assert window.book_title.text() == "Тестовая книга"
-    assert window.account_table.item(0, 0).text() == "Проверочная карта"
+    assert window.account_model.item(0, 0).text() == "Проверочная карта"
     assert window.category_tree.topLevelItemCount() == 8
     window.lock_book()
     assert window.session is None
-    assert window.account_table.rowCount() == 0
+    assert window.account_model.rowCount() == 0
     assert window.category_tree.topLevelItemCount() == 0
     assert window.book_title.text() == ""
 
@@ -40,7 +40,7 @@ def test_background_job_returns_to_gui_thread(qtbot, session) -> None:
     )
     qtbot.waitUntil(lambda: not window._busy, timeout=10000)
     assert results[0][1] is True
-    assert window.account_table.item(0, 0).text() == "Фоновый счёт"
+    assert window.account_model.item(0, 0).text() == "Фоновый счёт"
 
 
 def test_invalid_password_job_does_not_activate_book(qtbot, session, monkeypatch) -> None:

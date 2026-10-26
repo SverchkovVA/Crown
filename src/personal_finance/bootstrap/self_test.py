@@ -6,16 +6,19 @@ import tempfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from time import monotonic
 from typing import Any
 
+from PySide6.QtCore import QCoreApplication, QEvent
 from PySide6.QtWidgets import QApplication
 
-from personal_finance.application.vault import create_vault, open_vault, write_private
+from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
 from personal_finance.domain.errors import InvalidCredentials
-from personal_finance.domain.models import AccountKind
+from personal_finance.domain.ledger import OperationDraft, OperationKind
+from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.presentation.main_window import MainWindow
 
@@ -36,6 +39,12 @@ def _step(report: dict[str, Any], identifier: str) -> Iterator[None]:
         result["duration_ms"] = round((monotonic() - started) * 1000)
 
 
+def _balances(session: VaultSession) -> dict[str, int]:
+    if session.ledger is None:
+        raise RuntimeError("Финансовый журнал не создан.")
+    return {item.account_id: item.amount.minor for item in session.ledger.balances()}
+
+
 def self_test(app: QApplication, report_path: Path | None = None) -> int:
     report: dict[str, Any] = {
         "format": 1,
@@ -43,6 +52,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
         "steps": [],
         "uses_real_financial_data": False,
         "windows11_manual_acceptance": "pending",
+        "stage4_complete": False,
     }
     exit_code = 0
     try:
@@ -57,13 +67,79 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
             try:
                 with _step(report, "persist_reference_data"):
                     account = source.catalog.add_account("Наличные", AccountKind.CASH)
+                    reserve = source.catalog.add_account(
+                        "Резерв",
+                        AccountKind.SAVINGS,
+                        source.catalog.institutions()[0].id,
+                    )
                     original_replica = source.replica_id
+                    source.check_integrity()
+                with _step(report, "persist_financial_journal"):
+                    ledger = source.ledger
+                    if ledger is None:
+                        raise RuntimeError("Финансовый журнал не создан.")
+                    categories = source.catalog.categories()
+                    income = next(c.id for c in categories if c.kind == CategoryKind.INCOME)
+                    expense = next(c.id for c in categories if c.kind == CategoryKind.EXPENSE)
+                    today = date.today()
+                    ledger.add(
+                        OperationDraft(
+                            OperationKind.OPENING,
+                            today,
+                            account.id,
+                            Money(100000),
+                        )
+                    )
+                    incoming = ledger.add(
+                        OperationDraft(
+                            OperationKind.INCOME,
+                            today,
+                            account.id,
+                            Money(10000),
+                            income,
+                        )
+                    )
+                    spending = ledger.add(
+                        OperationDraft(
+                            OperationKind.EXPENSE,
+                            today,
+                            account.id,
+                            Money(2500),
+                            expense,
+                        )
+                    )
+                    ledger.add(
+                        OperationDraft(
+                            OperationKind.TRANSFER,
+                            today,
+                            account.id,
+                            Money(20000),
+                            destination_account_id=reserve.id,
+                            fee=Money(100),
+                            fee_category_id=expense,
+                        )
+                    )
+                    ledger.replace(
+                        spending.id,
+                        spending.revision_id,
+                        OperationDraft(
+                            OperationKind.EXPENSE,
+                            today,
+                            account.id,
+                            Money(3000),
+                            expense,
+                        ),
+                    )
+                    ledger.delete(incoming.id, incoming.revision_id)
+                    expected_balances = {account.id: 76900, reserve.id: 20000}
+                    if _balances(source) != expected_balances:
+                        raise RuntimeError("Не совпали проверочные остатки.")
                     source.check_integrity()
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
                     source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
-                    if source.catalog.accounts()[0].id != account.id:
-                        raise RuntimeError("Не сохранилась идентичность счёта.")
+                    if {a.id for a in source.catalog.accounts()} != {account.id, reserve.id}:
+                        raise RuntimeError("Не сохранилась идентичность счетов.")
                 with _step(report, "reject_wrong_password"):
                     source.close()
                     try:
@@ -90,18 +166,22 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                 try:
                     with _step(report, "check_restored_data"):
                         if (
-                            len(restored.catalog.accounts()) != 1
-                            or restored.catalog.accounts()[0].id != account.id
+                            {a.id for a in restored.catalog.accounts()} != {account.id, reserve.id}
                             or restored.replica_id == original_replica
+                            or _balances(restored) != expected_balances
                         ):
-                            raise RuntimeError(
-                                "Данные или идентичность реплики не прошли проверку."
-                            )
+                            raise RuntimeError("Данные или реплика не прошли проверку.")
                         restored.check_integrity()
+                    with _step(report, "check_financial_history"):
+                        if (
+                            restored.ledger is None
+                            or len(restored.ledger.operations()) != 3
+                            or len(restored.ledger.history(spending.id)) != 2
+                            or not restored.ledger.history(incoming.id)[-1].is_deleted
+                        ):
+                            raise RuntimeError("Не сохранилась финансовая история.")
                     with _step(report, "open_and_lock_window"):
                         restored.close()
-                        # Повторяем передачу сессии из рабочего потока в GUI,
-                        # затем проверяем фактическое освобождение блокировки.
                         with ThreadPoolExecutor(max_workers=1) as worker:
                             background = worker.submit(
                                 open_vault,
@@ -114,12 +194,16 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 window.activate_session(background)
                                 window.show()
                                 app.processEvents()
-                                if window.account_table.rowCount() != 1:
-                                    raise RuntimeError("Счёт не отображается в окне.")
+                                if (
+                                    window.account_model.rowCount() != 2
+                                    or window.operation_model.rowCount() != 3
+                                ):
+                                    raise RuntimeError("Счета или операции не отображаются.")
                                 window.lock_book()
                                 if (
                                     window.session is not None
-                                    or window.account_table.rowCount() != 0
+                                    or window.account_model.rowCount() != 0
+                                    or window.operation_model.rowCount() != 0
                                 ):
                                     raise RuntimeError("Книга не закрылась.")
                                 reopened = worker.submit(
@@ -129,14 +213,16 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 ).result(timeout=15)
                                 try:
                                     reopened.check_integrity()
-                                    if reopened.catalog.accounts()[0].id != account.id:
-                                        raise RuntimeError(
-                                            "Счёт не сохранился после закрытия окна."
-                                        )
+                                    if _balances(reopened) != expected_balances:
+                                        raise RuntimeError("Остатки после закрытия изменились.")
                                 finally:
                                     reopened.close()
                             finally:
                                 window.close()
+                                window.deleteLater()
+                                QCoreApplication.sendPostedEvents(
+                                    window, QEvent.Type.DeferredDelete
+                                )
                                 background.close()
                 finally:
                     restored.close()
