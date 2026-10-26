@@ -88,7 +88,9 @@ QListWidget::item { padding: 13px; margin: 3px 0; border-radius: 7px; }
 QListWidget::item:selected { background: #d2e6db; color: #104b38; }
 QLineEdit, QComboBox, QPlainTextEdit, QDateEdit { background: white; border: 1px solid #c8d6d8;
                                     border-radius: 5px; padding: 8px; }
-QTableWidget, QTreeWidget { background: white; border: 1px solid #dce5e8;
+QTableView, QTableWidget, QTreeWidget { background: white; alternate-background-color: #f5f8f6;
+                          selection-background-color: #d2e6db; selection-color: #104b38;
+                          border: 1px solid #dce5e8;
                           border-radius: 8px; gridline-color: #edf1f2; }
 QHeaderView::section { background: #edf3f1; border: 0; padding: 12px; font-weight: 600; }
 QStatusBar { background: #eaf0ed; }
@@ -277,10 +279,7 @@ class MainWindow(QMainWindow):
         self.balance_date.dateChanged.connect(self.refresh)
         balance_row.addWidget(self.balance_date)
         balance_row.addStretch()
-        self.opening_button = button(
-            "Начальный остаток",
-            lambda: self.add_operation(OperationKind.OPENING),
-        )
+        self.opening_button = button("Начальный остаток", self.add_opening_balance)
         balance_row.addWidget(self.opening_button)
         layout.addLayout(balance_row)
         self.balance_notice = label("", "muted")

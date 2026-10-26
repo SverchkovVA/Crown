@@ -1,11 +1,13 @@
 import socket
+from datetime import date
 
 from personal_finance.application.vault import create_vault
-from personal_finance.domain.models import AccountKind
+from personal_finance.domain.ledger import OperationDraft, OperationKind
+from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 
 
-def test_book_catalog_and_backup_do_not_use_network(tmp_path, monkeypatch) -> None:
+def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatch) -> None:
     def blocked(*args, **kwargs):
         raise AssertionError("Сетевая операция запрещена в автономном сценарии")
 
@@ -13,7 +15,14 @@ def test_book_catalog_and_backup_do_not_use_network(tmp_path, monkeypatch) -> No
     monkeypatch.setattr(socket, "create_connection", blocked)
     source, _ = create_vault(tmp_path / "offline.pfvault", "Офлайн", "пароль автономной книги")
     try:
-        source.catalog.add_account("Наличные", AccountKind.CASH)
+        account = source.catalog.add_account("Наличные", AccountKind.CASH)
+        category = next(c for c in source.catalog.categories() if c.kind == CategoryKind.INCOME)
+        assert source.ledger is not None
+        operation = source.ledger.add(
+            OperationDraft(
+                OperationKind.INCOME, date(2026, 10, 26), account.id, Money(12345), category.id
+            )
+        )
         backup = create_backup(source, tmp_path / "offline.pfbackup", "пароль автономной копии")
         restored, _ = restore_backup(
             backup,
@@ -21,6 +30,12 @@ def test_book_catalog_and_backup_do_not_use_network(tmp_path, monkeypatch) -> No
             "пароль автономной копии",
             "новый автономный пароль",
         )
-        restored.close()
+        try:
+            assert restored.ledger is not None
+            assert restored.ledger.operations() == [operation]
+            assert restored.ledger.balances(date(2026, 10, 26))[0].amount == Money(12345)
+            restored.check_integrity()
+        finally:
+            restored.close()
     finally:
         source.close()
