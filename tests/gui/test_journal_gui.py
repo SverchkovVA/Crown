@@ -1,13 +1,19 @@
+from dataclasses import replace
 from datetime import date
+from uuid import uuid4
 
 import pytest
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QDialog, QMessageBox
 
-from personal_finance.domain.ledger import OperationKind
+from personal_finance.domain.ledger import Operation, OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.presentation import main_window as window_module
-from personal_finance.presentation.ledger_dialogs import OperationDialog, format_money
+from personal_finance.presentation.ledger_dialogs import (
+    OperationDialog,
+    OperationHistoryDialog,
+    format_money,
+)
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -134,7 +140,7 @@ def test_gui_add_edit_delete_history_and_clear_book(
     seen = []
 
     class HistoryProbe:
-        def __init__(self, versions, parent):
+        def __init__(self, versions, parent, **kwargs):
             seen.append(versions)
 
         def exec(self):
@@ -170,3 +176,145 @@ def test_gui_add_edit_delete_history_and_clear_book(
 def test_russian_money_format_round_trips_without_float(minor):
     money = Money(minor)
     assert Money.parse(format_money(money, include_currency=False)) == money
+
+
+@pytest.mark.parametrize("kind", [OperationKind.EXPENSE, OperationKind.INCOME])
+def test_split_dialog_exact_input_and_edit_prefill(qtbot, session, financial_data, kind):
+    account, _, _, _ = financial_data
+    category_kind = CategoryKind.INCOME if kind == OperationKind.INCOME else CategoryKind.EXPENSE
+    categories = [c for c in session.catalog.categories() if c.kind == category_kind]
+    dialog = OperationDialog(
+        session.catalog.accounts(),
+        session.catalog.categories(),
+        session.catalog.institutions(),
+        kind=kind,
+        account_id=account.id,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.amount.setText("1 000,00")
+    qtbot.mouseClick(dialog.split, Qt.MouseButton.LeftButton)
+    for index, value in enumerate(("700,00", "300,00")):
+        dialog.parts._category(index).setCurrentIndex(
+            dialog.parts._category(index).findData(categories[index].id)
+        )
+        dialog.parts._amount(index).setText(value)
+    assert "сумма совпадает" in dialog.parts.summary.text()
+    dialog._validate()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    draft = dialog.result_draft
+    assert draft.category_id is None
+    assert draft.parts == (
+        OperationPart(categories[0].id, Money(70000)),
+        OperationPart(categories[1].id, Money(30000)),
+    )
+    operation = session.ledger.add(draft)
+    editing = OperationDialog(
+        session.catalog.accounts(),
+        session.catalog.categories(),
+        session.catalog.institutions(),
+        existing=operation,
+    )
+    qtbot.addWidget(editing)
+    assert editing.split.isChecked()
+    editing._validate()
+    assert editing.result_draft == draft
+
+
+def test_split_dialog_rejects_unallocated_remainder(qtbot, session, financial_data, monkeypatch):
+    account, _, _, _ = financial_data
+    categories = [c for c in session.catalog.categories() if c.kind == CategoryKind.EXPENSE]
+    errors = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: errors.append(args[-1]))
+    dialog = OperationDialog(
+        session.catalog.accounts(),
+        session.catalog.categories(),
+        session.catalog.institutions(),
+        account_id=account.id,
+    )
+    qtbot.addWidget(dialog)
+    dialog.amount.setText("100,00")
+    dialog.split.setChecked(True)
+    for index, value in enumerate(("70,00", "20,00")):
+        dialog.parts._category(index).setCurrentIndex(
+            dialog.parts._category(index).findData(categories[index].id)
+        )
+        dialog.parts._amount(index).setText(value)
+    assert "осталось 10,00" in dialog.parts.summary.text()
+    dialog._validate()
+    assert dialog.result_draft is None and dialog.result() != QDialog.DialogCode.Accepted
+    assert "точно совпадать" in errors[-1]
+
+
+def test_legacy_dialog_keeps_single_category_and_hides_split(qtbot, session, financial_data):
+    account, _, _, expense = financial_data
+    dialog = OperationDialog(
+        session.catalog.accounts(),
+        session.catalog.categories(),
+        session.catalog.institutions(),
+        allow_splits=False,
+        account_id=account.id,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert not dialog.split.isVisible() and not dialog.parts.isVisible()
+    dialog.amount.setText("10,00")
+    dialog.category.setCurrentIndex(dialog.category.findData(expense.id))
+    dialog._validate()
+    assert dialog.result_draft.parts == ()
+
+
+def test_history_details_show_accounts_fees_parts_and_selected_version(
+    qtbot, session, financial_data
+):
+    account, target, _, expense = financial_data
+    categories = [c for c in session.catalog.categories() if c.kind == CategoryKind.EXPENSE]
+    first = Operation(
+        str(uuid4()),
+        str(uuid4()),
+        OperationDraft(
+            OperationKind.TRANSFER,
+            date(2026, 10, 27),
+            account.id,
+            Money(10000),
+            destination_account_id=target.id,
+            fee=Money(100),
+            fee_category_id=expense.id,
+            note="Первая запись",
+        ),
+    )
+    second = Operation(
+        first.id, str(uuid4()), replace(first.draft, fee=Money(250), note="Исправление")
+    )
+    third = Operation(
+        first.id,
+        str(uuid4()),
+        OperationDraft(
+            OperationKind.EXPENSE,
+            date(2026, 10, 27),
+            account.id,
+            Money(10000),
+            parts=(
+                OperationPart(categories[0].id, Money(7000)),
+                OperationPart(categories[1].id, Money(3000)),
+            ),
+            note="Разделение",
+        ),
+    )
+    dialog = OperationHistoryDialog(
+        [first, second, third],
+        accounts=session.catalog.accounts(),
+        categories=session.catalog.categories(),
+    )
+    qtbot.addWidget(dialog)
+    assert "Разделение по категориям:" in dialog.details.toPlainText()
+    assert categories[1].name in dialog.details.toPlainText()
+    assert "70,00 RUB" in dialog.details.toPlainText()
+    dialog.table.setCurrentCell(0, 0)
+    text = dialog.details.toPlainText()
+    assert account.name in text and target.name in text
+    assert "Комиссия: 1,00 RUB" in text and expense.name in text
+    assert "Первая запись" in text and "Исправление" not in text
+    dialog.table.setCurrentCell(1, 0)
+    assert "Комиссия: 2,50 RUB" in dialog.details.toPlainText()
+    assert "Исправление" in dialog.details.toPlainText()

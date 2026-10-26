@@ -391,6 +391,7 @@ class MainWindow(QMainWindow):
             self,
             kind=kind,
             account_id=account_id,
+            allow_splits=session.ledger.supports_splits,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
             return
@@ -412,6 +413,7 @@ class MainWindow(QMainWindow):
             session.catalog.institutions(),
             self,
             existing=selected,
+            allow_splits=session.ledger.supports_splits,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
             return
@@ -458,7 +460,12 @@ class MainWindow(QMainWindow):
         except FinanceError as exc:
             QMessageBox.warning(self, "Действие не выполнено", str(exc))
             return
-        OperationHistoryDialog(versions, self).exec()
+        OperationHistoryDialog(
+            versions,
+            self,
+            accounts=self._account_records,
+            categories=session.catalog.categories(),
+        ).exec()
 
     def _categories(self) -> QWidget:
         page = QWidget()
@@ -676,6 +683,11 @@ class MainWindow(QMainWindow):
                 if draft.kind == OperationKind.TRANSFER
                 else category_names.get(draft.category_id or "", "Начальный остаток")
             )
+            if draft.parts:
+                target = "; ".join(
+                    f"{category_names.get(part.category_id, '—')}: {format_money(part.amount)}"
+                    for part in draft.parts
+                )
             journal_rows.append(
                 [
                     draft.occurred_on.strftime("%d.%m.%Y"),
@@ -695,7 +707,14 @@ class MainWindow(QMainWindow):
             selection_changed=self._update_journal_actions,
         )
         self.journal_notice.setText(
-            "Собственные переводы исключены из доходов и расходов. Комиссия — расход."
+            (
+                "Собственные переводы исключены из доходов и расходов. Комиссия — расход."
+                + (
+                    " Для разделения восстановите копию этой книги в новую папку."
+                    if not ledger.supports_splits
+                    else ""
+                )
+            )
             if ledger is not None
             else "Для журнала создайте резервную копию и восстановите её в новую папку. "
             "Исходная книга сохранится."

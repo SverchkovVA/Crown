@@ -11,13 +11,13 @@ from pathlib import Path
 from time import monotonic
 from typing import Any
 
-from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
 from personal_finance.domain.errors import InvalidCredentials
-from personal_finance.domain.ledger import OperationDraft, OperationKind
+from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.presentation.main_window import MainWindow
@@ -80,7 +80,8 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         raise RuntimeError("Финансовый журнал не создан.")
                     categories = source.catalog.categories()
                     income = next(c.id for c in categories if c.kind == CategoryKind.INCOME)
-                    expense = next(c.id for c in categories if c.kind == CategoryKind.EXPENSE)
+                    expenses = [c.id for c in categories if c.kind == CategoryKind.EXPENSE]
+                    expense = expenses[0]
                     today = date.today()
                     ledger.add(
                         OperationDraft(
@@ -105,7 +106,10 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             today,
                             account.id,
                             Money(2500),
-                            expense,
+                            parts=(
+                                OperationPart(expenses[0], Money(1000)),
+                                OperationPart(expenses[1], Money(1500)),
+                            ),
                         )
                     )
                     ledger.add(
@@ -127,7 +131,10 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             today,
                             account.id,
                             Money(3000),
-                            expense,
+                            parts=(
+                                OperationPart(expenses[0], Money(1000)),
+                                OperationPart(expenses[1], Money(2000)),
+                            ),
                         ),
                     )
                     ledger.delete(incoming.id, incoming.revision_id)
@@ -177,6 +184,11 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             restored.ledger is None
                             or len(restored.ledger.operations()) != 3
                             or len(restored.ledger.history(spending.id)) != 2
+                            or restored.ledger.history(spending.id)[-1].draft.parts
+                            != (
+                                OperationPart(expenses[0], Money(1000)),
+                                OperationPart(expenses[1], Money(2000)),
+                            )
                             or not restored.ledger.history(incoming.id)[-1].is_deleted
                         ):
                             raise RuntimeError("Не сохранилась финансовая история.")
@@ -190,6 +202,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 recovery=True,
                             ).result(timeout=15)
                             window = MainWindow()
+                            window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
                             try:
                                 window.activate_session(background)
                                 window.show()

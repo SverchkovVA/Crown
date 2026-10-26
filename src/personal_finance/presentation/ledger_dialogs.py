@@ -4,6 +4,7 @@ from datetime import date
 
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDateEdit,
     QDialog,
@@ -35,14 +36,8 @@ from personal_finance.domain.models import (
     Institution,
     Money,
 )
-
-
-def format_money(value: Money, *, include_currency: bool = True) -> str:
-    whole, fractional = divmod(abs(value.minor), 10**value.currency.exponent)
-    result = ("-" if value.minor < 0 else "") + f"{whole:,}".replace(",", " ")
-    if value.currency.exponent:
-        result += "," + str(fractional).zfill(value.currency.exponent)
-    return result + (" " + value.currency.code if include_currency else "")
+from personal_finance.presentation.money import format_money
+from personal_finance.presentation.parts_editor import PartsEditor
 
 
 def category_title(category: Category, categories: list[Category]) -> str:
@@ -69,12 +64,14 @@ class OperationDialog(QDialog):
         existing: Operation | None = None,
         kind: OperationKind = OperationKind.EXPENSE,
         account_id: str | None = None,
+        allow_splits: bool = True,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Исправить операцию" if existing else "Добавить операцию")
         self.setMinimumWidth(650)
         self.result_draft: OperationDraft | None = None
         self._categories = categories
+        self._allow_splits = allow_splits
         layout = QVBoxLayout(self)
         introduction = QLabel(
             "Исправление создаст новую версию. Предыдущая версия останется в истории."
@@ -102,6 +99,10 @@ class OperationDialog(QDialog):
                 combo.addItem(f"{account.name} · {detail} · {account.currency}", account.id)
         self.amount = QLineEdit()
         self.category = QComboBox()
+        self.split = QCheckBox("Разделить по категориям")
+        self.parts = PartsEditor()
+        self.split.toggled.connect(self._update_part_fields)
+        self.amount.textChanged.connect(self.parts.set_total_text)
         self.fee = QLineEdit("0,00")
         self.fee_category = QComboBox()
         self.fee_category.addItem("Без комиссии", None)
@@ -115,6 +116,8 @@ class OperationDialog(QDialog):
         self.form.addRow("Счёт", self.account)
         self.form.addRow("Сумма, RUB", self.amount)
         self.form.addRow("Категория", self.category)
+        self.form.addRow("", self.split)
+        self.form.addRow("Части операции", self.parts)
         self.form.addRow("Счёт получения", self.destination)
         self.form.addRow("Комиссия, RUB", self.fee)
         self.form.addRow("Категория комиссии", self.fee_category)
@@ -147,6 +150,9 @@ class OperationDialog(QDialog):
             self.fee.setText(format_money(draft.fee, include_currency=False))
             self.fee_category.setCurrentIndex(self.fee_category.findData(draft.fee_category_id))
             self.note.setPlainText(draft.note)
+            if draft.parts:
+                self.parts.set_parts(draft.parts)
+                self.split.setChecked(True)
         elif account_id is not None:
             self.account.setCurrentIndex(self.account.findData(account_id))
 
@@ -164,11 +170,29 @@ class OperationDialog(QDialog):
         for category in self._categories:
             if category.kind == required:
                 self.category.addItem(category_title(category, self._categories), category.id)
+        self.parts.set_categories(
+            [
+                (category.id, category_title(category, self._categories))
+                for category in self._categories
+                if category.kind == required
+            ]
+        )
+        self._update_part_fields()
         self.amount.setPlaceholderText(
             "Можно указать ноль или отрицательный остаток"
             if kind == OperationKind.OPENING
             else "Например, 1 234,56"
         )
+
+    def _update_part_fields(self) -> None:
+        financial = self.kind.currentData() in (
+            OperationKind.INCOME.value,
+            OperationKind.EXPENSE.value,
+        )
+        splitting = financial and self._allow_splits and self.split.isChecked()
+        self.form.setRowVisible(self.split, financial and self._allow_splits)
+        self.form.setRowVisible(self.parts, splitting)
+        self.form.setRowVisible(self.category, financial and not splitting)
 
     def _validate(self) -> None:
         try:
@@ -177,13 +201,18 @@ class OperationDialog(QDialog):
             if selected is None:
                 raise FinanceError("Выберите счёт операции.")
             qdate = self.occurred_on.date()
+            splitting = (
+                self._allow_splits
+                and self.split.isChecked()
+                and kind in (OperationKind.INCOME, OperationKind.EXPENSE)
+            )
             self.result_draft = OperationDraft(
                 kind,
                 date(qdate.year(), qdate.month(), qdate.day()),
                 selected,
                 Money.parse(self.amount.text()),
                 category_id=self.category.currentData()
-                if kind in (OperationKind.INCOME, OperationKind.EXPENSE)
+                if kind in (OperationKind.INCOME, OperationKind.EXPENSE) and not splitting
                 else None,
                 destination_account_id=self.destination.currentData()
                 if kind == OperationKind.TRANSFER
@@ -193,6 +222,7 @@ class OperationDialog(QDialog):
                 if kind == OperationKind.TRANSFER
                 else None,
                 note=self.note.toPlainText(),
+                parts=self.parts.values() if splitting else (),
             )
         except FinanceError as exc:
             QMessageBox.warning(self, "Проверьте операцию", str(exc))
@@ -201,17 +231,27 @@ class OperationDialog(QDialog):
 
 
 class OperationHistoryDialog(QDialog):
-    def __init__(self, versions: list[Operation], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        versions: list[Operation],
+        parent: QWidget | None = None,
+        *,
+        accounts: list[Account] | None = None,
+        categories: list[Category] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("История финансовой операции")
-        self.resize(980, 450)
+        self.resize(980, 660)
+        self._versions = versions
+        self._account_names = {a.id: a.name for a in accounts or []}
+        self._category_names = {c.id: category_title(c, categories or []) for c in categories or []}
         layout = QVBoxLayout(self)
         explanation = QLabel(
             "Только последняя принятая версия влияет на остатки. Удаление сохраняет историю."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
-        table = QTableWidget(len(versions), 6)
+        table = self.table = QTableWidget(len(versions), 6)
         table.setHorizontalHeaderLabels(
             ["Версия", "Дата", "Вид", "Сумма", "Состояние", "Примечание"]
         )
@@ -230,8 +270,55 @@ class OperationHistoryDialog(QDialog):
             ]
             for column, value in enumerate(values):
                 table.setItem(row, column, QTableWidgetItem(value))
-        layout.addWidget(table)
+        layout.addWidget(table, 1)
+        self.details = QPlainTextEdit()
+        self.details.setReadOnly(True)
+        self.details.setMinimumHeight(210)
+        self.details.setMaximumHeight(280)
+        layout.addWidget(self.details)
+        table.currentCellChanged.connect(self._show_details)
+        if versions:
+            table.setCurrentCell(len(versions) - 1, 0)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _show_details(self, row: int) -> None:
+        if not 0 <= row < len(self._versions):
+            self.details.clear()
+            return
+        operation = self._versions[row]
+        draft = operation.draft
+
+        def account(identifier: str | None) -> str:
+            return self._account_names.get(identifier or "", identifier or "—")
+
+        def category(identifier: str | None) -> str:
+            return self._category_names.get(identifier or "", identifier or "—")
+
+        lines = [
+            f"Версия: {row + 1}",
+            "Состояние: " + ("Удалена" if operation.is_deleted else "Сохранена"),
+            "Дата: " + draft.occurred_on.strftime("%d.%m.%Y"),
+            "Вид: " + OPERATION_LABELS[draft.kind],
+            "Счёт: " + account(draft.account_id),
+            "Сумма: " + format_money(draft.amount),
+        ]
+        if draft.parts:
+            lines.append("Разделение по категориям:")
+            lines.extend(
+                f"  {category(part.category_id)}: {format_money(part.amount)}"
+                for part in draft.parts
+            )
+        elif draft.category_id:
+            lines.append("Категория: " + category(draft.category_id))
+        if draft.destination_account_id:
+            lines += [
+                "Счёт получения: " + account(draft.destination_account_id),
+                "Комиссия: " + format_money(draft.fee),
+            ]
+            if draft.fee_category_id:
+                lines.append("Категория комиссии: " + category(draft.fee_category_id))
+        lines.append("Примечание: " + (draft.note or "—"))
+        self.details.setPlainText("\n".join(lines))
