@@ -38,8 +38,10 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance import __version__
+from personal_finance.application.importing import read_statement
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.errors import FinanceError, ValidationError
+from personal_finance.domain.imports import ImportPreview, ImportResult
 from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
 from personal_finance.domain.models import (
     ACCOUNT_LABELS,
@@ -64,6 +66,11 @@ from personal_finance.presentation.dialogs import (
     OpenDialog,
     PasswordDialog,
     RecoveryDialog,
+)
+from personal_finance.presentation.import_dialogs import (
+    ImportOptions,
+    ImportOptionsDialog,
+    ImportPreviewDialog,
 )
 from personal_finance.presentation.jobs import Job, JobSignals
 from personal_finance.presentation.ledger_dialogs import (
@@ -169,6 +176,8 @@ class MainWindow(QMainWindow):
         self._active_query = OperationQuery()
         self._jobs: set[Job] = set()
         self._job_callbacks: dict[JobSignals, Callable[[Any], object]] = {}
+        self._job_deferred: set[JobSignals] = set()
+        self._job_results: dict[JobSignals, object] = {}
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         self._busy = False
@@ -406,6 +415,8 @@ class MainWindow(QMainWindow):
         refund_row = QHBoxLayout()
         self.refund_button = button("Оформить возврат", self.add_refund)
         refund_row.addWidget(self.refund_button)
+        self.import_button = button("Импорт CSV/OFX…", self.import_statement)
+        refund_row.addWidget(self.import_button)
         refund_row.addWidget(
             label("Возврат связан с расходом и уменьшает расходы на дату получения.", "muted"), 1
         )
@@ -467,6 +478,15 @@ class MainWindow(QMainWindow):
         available = self.session is not None and self.session.ledger is not None
         self.add_operation_button.setEnabled(available and bool(self._account_records))
         self.show_deleted.setEnabled(available)
+        can_import = self.session is not None and self.session.importing is not None
+        self.import_button.setEnabled(
+            can_import and any(a.currency == "RUB" for a in self._account_records)
+        )
+        self.import_button.setToolTip(
+            "Локальный файл, предпросмотр и подтверждение выбранных строк."
+            if can_import
+            else "Для импорта восстановите копию старой книги в новую папку."
+        )
         selected = self._selected_operation() if available else None
         self.history_operation_button.setEnabled(selected is not None)
         editable = (
@@ -544,6 +564,93 @@ class MainWindow(QMainWindow):
     @Slot()
     def add_opening_balance(self) -> None:
         self.add_operation(OperationKind.OPENING)
+
+    @Slot()
+    def import_statement(self) -> None:
+        session = self.session
+        if session is None or session.importing is None:
+            return
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать локальную выписку", "", "Выписки (*.csv *.ofx)"
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        self._job(
+            lambda: read_statement(path),
+            lambda contents: self._configure_import(
+                session, path.suffix.lower() == ".csv", contents
+            ),
+            "Чтение локального файла…",
+            defer_success=True,
+        )
+
+    def _configure_import(self, session: VaultSession, is_csv: bool, contents: bytes) -> None:
+        if self.session is not session or session.importing is None:
+            return
+        dialog = ImportOptionsDialog(
+            contents,
+            is_csv=is_csv,
+            accounts=self._account_records,
+            categories=session.catalog.categories(),
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
+            return
+        options, service = dialog.options, session.importing
+
+        def prepare() -> ImportPreview:
+            document = (
+                service.parse_csv(contents, options.mapping)
+                if options.mapping is not None
+                else service.parse_ofx(contents)
+            )
+            return service.preview(document, options.account_id)
+
+        self._job(
+            prepare,
+            lambda preview: self._preview_import(session, options, preview),
+            "Подготовка предпросмотра без записи…",
+            defer_success=True,
+        )
+
+    def _preview_import(
+        self, session: VaultSession, options: ImportOptions, preview: ImportPreview
+    ) -> None:
+        if self.session is not session or session.importing is None or session.ledger is None:
+            return
+        dialog = ImportPreviewDialog(
+            preview,
+            options,
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self._tag_records,
+            session.ledger.refund_candidates(),
+            self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selections:
+            return
+        service, selected, command = session.importing, dialog.selections, str(uuid4())
+        self._job(
+            lambda: service.confirm(
+                preview.document, options.account_id, selected, command_id=command
+            ),
+            self._import_complete,
+            "Сохранение всей группы импорта…",
+            defer_success=True,
+        )
+
+    def _import_complete(self, result: ImportResult) -> None:
+        self.refresh()
+        self.navigation.setCurrentRow(2)
+        QMessageBox.information(
+            self,
+            "Импорт подтверждён",
+            f"Создано операций: {len(result.operations) - result.linked_count}. "
+            f"Связано с существующими: {result.linked_count}. "
+            "Связи не создают повторного движения. Текущий фильтр может скрывать строки.",
+        )
 
     def add_operation(self, kind: OperationKind = OperationKind.EXPENSE) -> None:
         session = self.session
@@ -928,7 +1035,12 @@ class MainWindow(QMainWindow):
         return page
 
     def _job(
-        self, action: Callable[[], object], success: Callable[[Any], object], message: str
+        self,
+        action: Callable[[], object],
+        success: Callable[[Any], object],
+        message: str,
+        *,
+        defer_success: bool = False,
     ) -> None:
         if self._busy:
             return
@@ -938,6 +1050,8 @@ class MainWindow(QMainWindow):
         job = Job(action, self)
         self._jobs.add(job)
         self._job_callbacks[job.signals] = success
+        if defer_success:
+            self._job_deferred.add(job.signals)
         # Только QObject-слоты принимают сигналы рабочего потока. Пользовательские
         # callback вызываются уже в GUI, без циклов Job -> closure -> Job/window.
         job.signals.success.connect(self._job_succeeded)
@@ -951,7 +1065,10 @@ class MainWindow(QMainWindow):
         if isinstance(signals, JobSignals):
             callback = self._job_callbacks.get(signals)
             if callback is not None:
-                callback(result)
+                if signals in self._job_deferred:
+                    self._job_results[signals] = result
+                else:
+                    callback(result)
 
     @Slot(str)
     def _job_failed(self, message: str) -> None:
@@ -965,7 +1082,10 @@ class MainWindow(QMainWindow):
         # finished — последняя команда run(). Дождаться выхода QRunnable до
         # удаления его сигналов; ожидание Qt освобождает GIL.
         self._pool.waitForDone()
-        self._job_callbacks.pop(signals, None)
+        callback = self._job_callbacks.pop(signals, None)
+        has_result = signals in self._job_results
+        result = self._job_results.pop(signals, None)
+        self._job_deferred.discard(signals)
         for job in tuple(self._jobs):
             if job.signals is signals:
                 self._jobs.discard(job)
@@ -977,6 +1097,8 @@ class MainWindow(QMainWindow):
         self.root_stack.setEnabled(True)
         state = "Книга открыта" if self.session else "Книга закрыта"
         self.statusBar().showMessage(f"Работает без интернета · {state}")
+        if has_result and callback is not None:
+            callback(result)
 
     def activate_session(self, session: VaultSession) -> None:
         if self.session and self.session is not session:

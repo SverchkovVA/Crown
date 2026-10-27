@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 from time import monotonic
 from typing import Any
+from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication
@@ -17,11 +18,13 @@ from PySide6.QtWidgets import QApplication
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
 from personal_finance.domain.errors import InvalidCredentials, ValidationError
+from personal_finance.domain.imports import ImportSelection, ImportStatus
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
+from personal_finance.infrastructure.importing.statements import CsvMapping
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -183,6 +186,52 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     if ledger.search(saved_filter.query) != [corrected_spending]:
                         raise RuntimeError("Фильтр не нашёл проверочный расход.")
                     source.check_integrity()
+                with _step(report, "confirm_statement_import"):
+                    importing = source.importing
+                    if importing is None:
+                        raise RuntimeError("Импорт недоступен.")
+                    document = importing.parse_csv(
+                        f"date;amount;id\n{today.isoformat()};-1.23;self-test-id\n".encode(),
+                        CsvMapping(
+                            "date",
+                            "amount",
+                            id_column="id",
+                            date_format="%Y-%m-%d",
+                            decimal_separator=".",
+                        ),
+                    )
+                    selected_import = (
+                        ImportSelection(
+                            1,
+                            OperationDraft(
+                                OperationKind.EXPENSE,
+                                today,
+                                account.id,
+                                Money(123),
+                                expense,
+                            ),
+                        ),
+                    )
+                    import_command = str(uuid4())
+                    imported = importing.confirm(
+                        document,
+                        account.id,
+                        selected_import,
+                        command_id=import_command,
+                    )
+                    if (
+                        importing.preview(document, account.id).lines[0].status
+                        != ImportStatus.DUPLICATE
+                        or importing.confirm(
+                            document, account.id, selected_import, command_id=import_command
+                        )
+                        != imported
+                    ):
+                        raise RuntimeError("Повтор импорта создал лишнее движение.")
+                    expected_balances[account.id] -= 123
+                    if _balances(source) != expected_balances:
+                        raise RuntimeError("Не совпал остаток после импорта.")
+                    source.check_integrity()
                 with _step(report, "protect_closed_period"):
                     periods = source.periods
                     if periods is None:
@@ -279,11 +328,24 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             or restored.ledger.search(saved_filter.query) != [corrected_spending]
                         ):
                             raise RuntimeError("Теги или сохранённый фильтр не восстановлены.")
+                        if (
+                            restored.importing is None
+                            or restored.importing.preview(document, account.id).lines[0].status
+                            != ImportStatus.DUPLICATE
+                            or restored.importing.confirm(
+                                document,
+                                account.id,
+                                selected_import,
+                                command_id=import_command,
+                            )
+                            != imported
+                        ):
+                            raise RuntimeError("История импорта не восстановлена.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (
                             restored.ledger is None
-                            or len(restored.ledger.operations()) != 4
+                            or len(restored.ledger.operations()) != 5
                             or len(restored.ledger.history(spending.id)) != 2
                             or restored.ledger.history(spending.id)[-1].draft.parts
                             != (
@@ -292,7 +354,11 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             )
                             or not restored.ledger.history(incoming.id)[-1].is_deleted
                             or restored.ledger.history(returned.id)[-1].draft != returned.draft
-                            or restored.ledger.refund_candidates()[0].amount_remaining
+                            or next(
+                                candidate.amount_remaining
+                                for candidate in restored.ledger.refund_candidates()
+                                if candidate.expense.id == spending.id
+                            )
                             != Money(2000)
                         ):
                             raise RuntimeError("Не сохранилась финансовая история.")
@@ -313,7 +379,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 app.processEvents()
                                 if (
                                     window.account_model.rowCount() != 2
-                                    or window.operation_model.rowCount() != 4
+                                    or window.operation_model.rowCount() != 5
                                 ):
                                     raise RuntimeError("Счета или операции не отображаются.")
                                 window.lock_book()

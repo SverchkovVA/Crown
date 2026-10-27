@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from personal_finance.domain.errors import FinanceError
+from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.ledger import (
     OPERATION_LABELS,
     Operation,
@@ -67,6 +67,8 @@ class OperationDialog(QDialog):
         parent: QWidget | None = None,
         *,
         existing: Operation | None = None,
+        initial_draft: OperationDraft | None = None,
+        preview_mode: bool = False,
         kind: OperationKind = OperationKind.EXPENSE,
         account_id: str | None = None,
         allow_splits: bool = True,
@@ -77,14 +79,23 @@ class OperationDialog(QDialog):
         allow_tags: bool = False,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Исправить операцию" if existing else "Добавить операцию")
+        if existing is not None and initial_draft is not None:
+            raise ValidationError("Укажите один начальный снимок операции.")
+        initial = existing.draft if existing is not None else initial_draft
+        self.setWindowTitle(
+            "Настроить строку импорта"
+            if preview_mode
+            else "Исправить операцию"
+            if existing
+            else "Добавить операцию"
+        )
         self.setMinimumWidth(650)
         self.result_draft: OperationDraft | None = None
         self._categories = categories
         self._allow_splits = allow_splits
         self._allow_refunds = allow_refunds
         self._allow_tags = allow_tags
-        self._existing_tag_ids = existing.draft.tag_ids if existing else ()
+        self._existing_tag_ids = initial.tag_ids if initial else ()
         self._refund_candidates = {
             candidate.expense.id: candidate
             for candidate in refund_candidates or []
@@ -93,7 +104,9 @@ class OperationDialog(QDialog):
         }
         layout = QVBoxLayout(self)
         introduction = QLabel(
-            "Исправление создаст новую версию. Предыдущая версия останется в истории."
+            "Это предпросмотр. Изменения попадут в книгу только после подтверждения всего импорта."
+            if preview_mode
+            else "Исправление создаст новую версию. Предыдущая версия останется в истории."
             if existing
             else "Операция изменяет остатки на указанную дату. "
             "Перевод между своими счетами не является доходом."
@@ -103,6 +116,8 @@ class OperationDialog(QDialog):
         self.form = QFormLayout()
         self.kind = QComboBox()
         for value, title in OPERATION_LABELS.items():
+            if preview_mode and value == OperationKind.OPENING:
+                continue
             if value != OperationKind.REFUND or allow_refunds:
                 self.kind.addItem(title, value.value)
         self.occurred_on = QDateEdit(QDate.currentDate())
@@ -188,19 +203,19 @@ class OperationDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Сохранить")
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText(
+            "Применить к предпросмотру" if preview_mode else "Сохранить"
+        )
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
         buttons.accepted.connect(self._validate)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.purchase.currentIndexChanged.connect(self._refund_purchase_changed)
         self.kind.currentIndexChanged.connect(self._update_fields)
-        self.kind.setCurrentIndex(
-            self.kind.findData((existing.draft.kind if existing else kind).value)
-        )
+        self.kind.setCurrentIndex(self.kind.findData((initial.kind if initial else kind).value))
         self._update_fields()
-        if existing is not None:
-            draft = existing.draft
+        if initial is not None:
+            draft = initial
             if draft.kind == OperationKind.REFUND:
                 self.purchase.setCurrentIndex(self.purchase.findData(draft.refund_of))
             self.occurred_on.setDate(
