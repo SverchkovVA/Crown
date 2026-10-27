@@ -1,6 +1,7 @@
 """Цельное обновление таблицы без публикации частично заполненных строк."""
 
 from collections.abc import Callable
+from html import escape
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QStandardItem, QStandardItemModel
@@ -16,6 +17,7 @@ JOURNAL_HEADERS = [
     "Комиссия",
     "Примечание",
     "Состояние",
+    "Теги",
 ]
 
 
@@ -33,7 +35,7 @@ def replace_table(
         for column, value in enumerate(values):
             item = QStandardItem(value)
             item.setEditable(False)
-            item.setToolTip(value)
+            item.setToolTip("<p>" + escape(value).replace("\n", "<br>") + "</p>")
             if column in right_columns:
                 item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             model.setItem(row, column, item)

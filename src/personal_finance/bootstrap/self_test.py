@@ -20,6 +20,7 @@ from personal_finance.domain.errors import InvalidCredentials, ValidationError
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.presentation.main_window import MainWindow
 
@@ -73,6 +74,10 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         AccountKind.SAVINGS,
                         source.catalog.institutions()[0].id,
                     )
+                    organization = source.organization
+                    if organization is None:
+                        raise RuntimeError("Теги и фильтры недоступны.")
+                    tag = organization.add_tag("Проверочный тег")
                     original_replica = source.replica_id
                     source.check_integrity()
                 with _step(report, "persist_financial_journal"):
@@ -107,6 +112,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             today,
                             account.id,
                             Money(2500),
+                            tag_ids=(tag.id,),
                             parts=(
                                 OperationPart(expenses[0], Money(1000)),
                                 OperationPart(expenses[1], Money(1500)),
@@ -132,6 +138,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             today,
                             account.id,
                             Money(3000),
+                            tag_ids=(tag.id,),
                             parts=(
                                 OperationPart(expenses[0], Money(1000)),
                                 OperationPart(expenses[1], Money(2000)),
@@ -160,6 +167,21 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         raise RuntimeError("Не совпал остаток после возврата.")
                     if ledger.refund_candidates()[0].amount_remaining != Money(2000):
                         raise RuntimeError("Не совпал остаток к возврату.")
+                    source.check_integrity()
+                with _step(report, "persist_tags_and_saved_filter"):
+                    saved_filter = organization.save_filter(
+                        "Проверочный фильтр",
+                        OperationQuery(
+                            account_ids=(account.id,),
+                            tag_ids=(tag.id,),
+                            kinds=(OperationKind.EXPENSE,),
+                        ),
+                    )
+                    organization.rename_tag(tag.id, tag.revision_id, "Переименованный тег")
+                    expected_tags = organization.tags(include_archived=True)
+                    expected_filters = organization.filters(include_archived=True)
+                    if ledger.search(saved_filter.query) != [corrected_spending]:
+                        raise RuntimeError("Фильтр не нашёл проверочный расход.")
                     source.check_integrity()
                 with _step(report, "protect_closed_period"):
                     periods = source.periods
@@ -249,6 +271,14 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             != expected_reconciliation
                         ):
                             raise RuntimeError("Сверка после восстановления изменилась.")
+                        if (
+                            restored.organization is None
+                            or restored.organization.tags(include_archived=True) != expected_tags
+                            or restored.organization.filters(include_archived=True)
+                            != expected_filters
+                            or restored.ledger.search(saved_filter.query) != [corrected_spending]
+                        ):
+                            raise RuntimeError("Теги или сохранённый фильтр не восстановлены.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPlainTextEdit,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -37,9 +38,11 @@ from personal_finance.domain.models import (
     Institution,
     Money,
 )
+from personal_finance.domain.organization import Tag
 from personal_finance.domain.refunds import RefundCandidate, validate_refund_reference
 from personal_finance.presentation.money import format_money
 from personal_finance.presentation.parts_editor import PartsEditor
+from personal_finance.presentation.tag_selector import TagSelector
 
 
 def category_title(category: Category, categories: list[Category]) -> str:
@@ -70,6 +73,8 @@ class OperationDialog(QDialog):
         allow_refunds: bool = False,
         refund_candidates: list[RefundCandidate] | None = None,
         refund_of_id: str | None = None,
+        tags: list[Tag] | None = None,
+        allow_tags: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Исправить операцию" if existing else "Добавить операцию")
@@ -78,6 +83,8 @@ class OperationDialog(QDialog):
         self._categories = categories
         self._allow_splits = allow_splits
         self._allow_refunds = allow_refunds
+        self._allow_tags = allow_tags
+        self._existing_tag_ids = existing.draft.tag_ids if existing else ()
         self._refund_candidates = {
             candidate.expense.id: candidate
             for candidate in refund_candidates or []
@@ -166,7 +173,18 @@ class OperationDialog(QDialog):
         self.form.addRow("Комиссия, RUB", self.fee)
         self.form.addRow("Категория комиссии", self.fee_category)
         self.form.addRow("Примечание", self.note)
-        layout.addLayout(self.form)
+        self.tag_selector = TagSelector(tags or [])
+        self.tag_selector.set_values(self._existing_tag_ids)
+        self.form.addRow("Теги", self.tag_selector)
+        self.form.setRowVisible(self.tag_selector, allow_tags)
+        self.form_host = QWidget()
+        self.form_host.setObjectName("operationBody")
+        self.form_host.setLayout(self.form)
+        self.form_scroll = QScrollArea()
+        self.form_scroll.setObjectName("operationScroll")
+        self.form_scroll.setWidgetResizable(True)
+        self.form_scroll.setWidget(self.form_host)
+        layout.addWidget(self.form_scroll, 1)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -208,6 +226,10 @@ class OperationDialog(QDialog):
                 self.purchase.setCurrentIndex(1)
         elif account_id is not None:
             self.account.setCurrentIndex(self.account.findData(account_id))
+        screen = self.screen()
+        available_height = screen.availableGeometry().height() if screen is not None else 900
+        preferred = max(420, min(820, self.form_host.sizeHint().height() + 140))
+        self.resize(650, min(preferred, max(360, available_height - 80)))
 
     def _update_fields(self) -> None:
         kind = OperationKind(self.kind.currentData())
@@ -336,6 +358,7 @@ class OperationDialog(QDialog):
                 else None,
                 note=self.note.toPlainText(),
                 parts=self.parts.values() if splitting else (),
+                tag_ids=self.tag_selector.values() if self._allow_tags else self._existing_tag_ids,
                 refund_of=candidate.expense.id
                 if kind == OperationKind.REFUND and candidate is not None
                 else None,
@@ -369,10 +392,14 @@ class OperationHistoryDialog(QDialog):
         accounts: list[Account] | None = None,
         categories: list[Category] | None = None,
         related_versions: list[Operation] | None = None,
+        tags: list[Tag] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("История финансовой операции")
         self.resize(980, 660)
+        self._tag_names = {
+            tag.id: tag.name + (" (архив)" if tag.is_deleted else "") for tag in tags or []
+        }
         self._versions = versions
         self._related_versions = {value.revision_id: value for value in related_versions or []}
         self._account_names = {a.id: a.name for a in accounts or []}
@@ -445,6 +472,14 @@ class OperationHistoryDialog(QDialog):
             )
         elif draft.category_id:
             lines.append("Категория: " + category(draft.category_id))
+        if draft.tag_ids:
+            lines.append(
+                "Теги: "
+                + "; ".join(
+                    self._tag_names.get(identifier, "Тег недоступен")
+                    for identifier in draft.tag_ids
+                )
+            )
         if draft.destination_account_id:
             lines += [
                 "Счёт получения: " + account(draft.destination_account_id),
