@@ -1,7 +1,7 @@
 """Ограниченный дочерний процесс: каналы в памяти, без shell и сырых журналов."""
 
-import os
 import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from pathlib import Path
@@ -36,7 +36,9 @@ def run_ocr_process(
         raise OcrProcessError(_ERROR)
     failed = Event()
     output = bytearray()
-    flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW
     try:
         process = subprocess.Popen(
             command,
