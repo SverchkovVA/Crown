@@ -9,8 +9,10 @@ jobs:
   linux:
     name: Проверки Linux
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     env:
       QT_QPA_PLATFORM: offscreen
+      PYTHONUNBUFFERED: '1'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
@@ -24,13 +26,18 @@ jobs:
       - run: uv run --frozen ruff check src tests tools
       - run: uv run --frozen ruff format --check src tests tools
       - run: uv run --frozen mypy src/personal_finance
-      - run: uv run --frozen pytest -q
+      - name: Автоматические тесты
+        timeout-minutes: 20
+        run: uv run --frozen pytest -vv -o faulthandler_timeout=90 -o faulthandler_exit_on_timeout=true
       - shell: pwsh
         run: ./packaging/windows/test_helpers.ps1 -PythonPath .venv/bin/python
-      - run: uv run --frozen python -m personal_finance.bootstrap.main --self-test
+      - name: Самопроверка исходников
+        timeout-minutes: 3
+        run: uv run --frozen python -m personal_finance.bootstrap.main --self-test
   windows:
     name: Проверки и сборка Windows
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7

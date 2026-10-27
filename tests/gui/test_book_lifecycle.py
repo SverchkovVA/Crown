@@ -56,7 +56,7 @@ def test_worker_session_reopens_after_gui_close(qtbot, tmp_path, monkeypatch, or
     recovery = results[0][1]
     manifest = path / "data" / "key.json"
     original_hash = hashlib.sha256(manifest.read_bytes()).digest()
-    assert window.account_table.item(0, 0).text() == "Синтетический счёт"
+    assert window.account_model.item(0, 0).text() == "Синтетический счёт"
     if close_window:
         window.close()
     else:

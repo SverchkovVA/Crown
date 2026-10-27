@@ -1,4 +1,4 @@
-"""Базовые сущности. Проводки и операции реализуются на этапе 4."""
+"""Базовые сущности и точные денежные значения."""
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, localcontext

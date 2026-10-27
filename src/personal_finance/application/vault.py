@@ -14,19 +14,35 @@ from sqlalchemy.exc import DatabaseError
 from sqlcipher3 import dbapi2 as sqlcipher
 
 from personal_finance.application.catalog import Catalog, utc_now
+from personal_finance.application.classification import Classification
+from personal_finance.application.exporting import Exporting
+from personal_finance.application.importing import Importing
+from personal_finance.application.ledger import Ledger
+from personal_finance.application.organization import Organization
+from personal_finance.application.periods import Periods
 from personal_finance.domain.errors import VaultError
 from personal_finance.domain.models import validate_name
 from personal_finance.infrastructure.persistence.catalog_repository import SqlCatalogRepository
+from personal_finance.infrastructure.persistence.classification_repository import (
+    SqlClassificationRepository,
+)
 from personal_finance.infrastructure.persistence.database import (
     check_database,
     connect_database,
     encrypted_snapshot,
     make_engine,
 )
+from personal_finance.infrastructure.persistence.export_repository import SqlExportRepository
+from personal_finance.infrastructure.persistence.import_repository import SqlImportRepository
+from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
 from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
-    require_current_schema,
+    supported_schema,
 )
+from personal_finance.infrastructure.persistence.organization_repository import (
+    SqlOrganizationRepository,
+)
+from personal_finance.infrastructure.persistence.period_repository import SqlPeriodRepository
 from personal_finance.infrastructure.security.keys import (
     MAX_MANIFEST_BYTES,
     make_manifest,
@@ -80,7 +96,7 @@ class VaultSession:
         self.mutex = RLock()
         self.engine = make_engine(self.database_path, self.backup_key)
         try:
-            require_current_schema(self.engine)
+            self.schema_revision = supported_schema(self.engine)
             with self.engine.connect() as connection:
                 book = connection.execute(text("SELECT id,name FROM books")).one()
                 if book.id != book_id:
@@ -91,6 +107,60 @@ class VaultSession:
                 ).scalar_one()
             self.catalog = Catalog(
                 SqlCatalogRepository(self.engine, book_id, self.replica_id, self.mutex)
+            )
+            ledger_repository = (
+                SqlLedgerRepository(
+                    self.engine,
+                    book_id,
+                    self.replica_id,
+                    self.mutex,
+                    supports_splits=self.schema_revision
+                    in ("0004", "0005", "0006", "0007", "0008", "0009"),
+                    supports_refunds=self.schema_revision
+                    in ("0005", "0006", "0007", "0008", "0009"),
+                    supports_periods=self.schema_revision in ("0006", "0007", "0008", "0009"),
+                    supports_tags=self.schema_revision in ("0007", "0008", "0009"),
+                )
+                if self.schema_revision in ("0003", "0004", "0005", "0006", "0007", "0008", "0009")
+                else None
+            )
+            self.ledger = Ledger(ledger_repository) if ledger_repository is not None else None
+            self.exporting = (
+                Exporting(
+                    SqlExportRepository(self.engine, book_id, self.mutex, ledger_repository),
+                    book_id,
+                    root,
+                    self.mutex,
+                    self.ensure_open,
+                )
+                if ledger_repository is not None
+                else None
+            )
+            self.importing = (
+                Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
+                if self.schema_revision in ("0008", "0009") and ledger_repository is not None
+                else None
+            )
+            self.periods = (
+                Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
+                if self.schema_revision in ("0006", "0007", "0008", "0009")
+                else None
+            )
+            self.organization = (
+                Organization(
+                    SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
+                )
+                if self.schema_revision in ("0007", "0008", "0009")
+                else None
+            )
+            self.classification = (
+                Classification(
+                    SqlClassificationRepository(self.engine, book_id, self.replica_id, self.mutex),
+                    self.mutex,
+                    self.ensure_open,
+                )
+                if self.schema_revision == "0009"
+                else None
             )
         except Exception:
             self.engine.dispose()
@@ -122,6 +192,16 @@ class VaultSession:
             if bad or unfinished or missing_changes:
                 raise VaultError("Проверка истории изменений не пройдена.")
             self.catalog.check_integrity()
+            if self.classification is not None:
+                self.classification.check_integrity()
+            if self.organization is not None:
+                self.organization.check_integrity()
+            if self.periods is not None:
+                self.periods.check_integrity()
+            if self.ledger is not None:
+                self.ledger.check_integrity()
+            if self.importing is not None:
+                self.importing.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:

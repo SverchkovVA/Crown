@@ -27,7 +27,10 @@ from personal_finance.domain.errors import (
     UnsupportedFormat,
     VaultError,
 )
-from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
+from personal_finance.infrastructure.persistence.migration_runner import (
+    SUPPORTED_SCHEMAS,
+    upgrade_restored_schema,
+)
 from personal_finance.infrastructure.security.keys import (
     canonical_json,
     decode,
@@ -112,7 +115,7 @@ def _read(
             if (
                 type(metadata["database_size"]) is not int
                 or not 0 < metadata["database_size"] <= MAX_DATABASE
-                or metadata["schema"] != SCHEMA_HEAD
+                or metadata["schema"] not in SUPPORTED_SCHEMAS
                 or not isinstance(metadata["book_id"], str)
                 or str(UUID(metadata["book_id"])) != metadata["book_id"]
             ):
@@ -198,7 +201,7 @@ def create_backup(session: VaultSession, destination: Path, password: str) -> Pa
                 "database_key": encode(session.backup_key()),
                 "database_size": size,
                 "database_sha256": digest,
-                "schema": SCHEMA_HEAD,
+                "schema": session.schema_revision,
                 "created_at": utc_now(),
             }
         )
@@ -254,6 +257,12 @@ def restore_backup(
             os.fsync(output.fileno())
         key = decode(metadata["database_key"], 32)
         manifest, recovery = make_manifest(metadata["book_id"], key, new_password)
+        session = VaultSession(staged_root, metadata["book_id"], key)
+        try:
+            session.check_integrity()
+            upgrade_restored_schema(session.engine, metadata["schema"])
+        finally:
+            session.close()
         session = VaultSession(staged_root, metadata["book_id"], key)
         try:
             session.check_integrity()

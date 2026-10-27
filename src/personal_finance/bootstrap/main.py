@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QTranslator
+from PySide6.QtCore import QCoreApplication, QEvent, QLibraryInfo, QTranslator
 from PySide6.QtWidgets import QApplication
 
 from personal_finance import __version__
@@ -44,7 +44,11 @@ def main() -> int:
         return self_test(app, options.self_test_report)
     window = MainWindow()
     window.show()
-    return app.exec()
+    exit_code = app.exec()
+    window.close()
+    window.deleteLater()
+    QCoreApplication.sendPostedEvents(window, QEvent.Type.DeferredDelete)
+    return exit_code
 
 
 if __name__ == "__main__":

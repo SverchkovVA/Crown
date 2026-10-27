@@ -1,20 +1,26 @@
 import json
 
 from personal_finance.bootstrap import self_test as module
+from personal_finance.presentation.main_window import MainWindow
 
 
 def test_report_records_actual_platform_and_keeps_manual_acceptance_pending(qapp, tmp_path) -> None:
     import sys
 
     path = tmp_path / "self-test.json"
+    existing = {id(widget) for widget in qapp.topLevelWidgets()}
     assert module.self_test(qapp, path) == 0
+    assert not any(
+        isinstance(widget, MainWindow) and id(widget) not in existing
+        for widget in qapp.topLevelWidgets()
+    )
     report = json.loads(path.read_text())
     assert report["status"] == "passed"
     assert report["runtime"]["platform"] == sys.platform
     assert report["runtime"]["frozen"] is False
     assert report["windows11_manual_acceptance"] == "pending"
     assert report["uses_real_financial_data"] is False
-    assert len(report["steps"]) == 8
+    assert len(report["steps"]) == 17
     assert all(step["status"] == "passed" for step in report["steps"])
     raw = path.read_text()
     for sensitive in [

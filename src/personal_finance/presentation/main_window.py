@@ -1,17 +1,21 @@
 """Рабочая основа: защищённые книги, справочники и резервирование."""
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, date, datetime
+from html import escape
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from platformdirs import user_data_dir
-from PySide6.QtCore import QThreadPool
+from PySide6.QtCore import QDate, Qt, QThreadPool, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -26,8 +30,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
-    QTableWidget,
-    QTableWidgetItem,
+    QTableView,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -35,13 +38,37 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance import __version__
+from personal_finance.application.classification import (
+    PreparedImportCategories,
+    prepare_import_categories,
+)
+from personal_finance.application.importing import read_statement
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
-from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.models import ACCOUNT_LABELS, AccountKind, CategoryKind, validate_name
+from personal_finance.domain.errors import FinanceError, ValidationError
+from personal_finance.domain.exporting import ExportPreview
+from personal_finance.domain.imports import ImportPreview, ImportResult
+from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
+from personal_finance.domain.models import (
+    ACCOUNT_LABELS,
+    Account,
+    AccountKind,
+    CategoryKind,
+    validate_name,
+)
+from personal_finance.domain.organization import SavedFilter, Tag
+from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.query import OperationQuery
+from personal_finance.domain.reconciliation import Reconciliation
+from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.infrastructure.backup.container import (
     create_backup,
     restore_backup,
     verify_backup,
+)
+from personal_finance.presentation.classification import (
+    CategoryRuleDialog,
+    CategoryRuleHistoryDialog,
+    CategoryRulePage,
 )
 from personal_finance.presentation.dialogs import (
     CreateDialog,
@@ -50,7 +77,39 @@ from personal_finance.presentation.dialogs import (
     PasswordDialog,
     RecoveryDialog,
 )
-from personal_finance.presentation.jobs import Job
+from personal_finance.presentation.export_dialogs import (
+    ExportOptions,
+    ExportOptionsDialog,
+    ExportPreviewDialog,
+)
+from personal_finance.presentation.import_dialogs import (
+    ImportOptions,
+    ImportOptionsDialog,
+    ImportPreviewDialog,
+)
+from personal_finance.presentation.jobs import Job, JobSignals
+from personal_finance.presentation.ledger_dialogs import (
+    OperationDialog,
+    OperationHistoryDialog,
+    category_title,
+    format_money,
+)
+from personal_finance.presentation.organization import (
+    DefinitionHistoryDialog,
+    OrganizationPage,
+    describe_query,
+)
+from personal_finance.presentation.periods import (
+    PeriodChangeDialog,
+    PeriodHistoryDialog,
+    PeriodPage,
+)
+from personal_finance.presentation.query_dialog import QueryDialog
+from personal_finance.presentation.reconciliation import (
+    ReconciliationInputDialog,
+    ReconciliationResultDialog,
+)
+from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
 
 STYLE = """
 QMainWindow, QDialog { background: #f5f7f9; color: #172b35; }
@@ -71,17 +130,27 @@ QPushButton#primary:disabled { background: #8aa99d; border-color: #8aa99d; }
 QListWidget { border: 0; background: transparent; outline: 0; }
 QListWidget::item { padding: 13px; margin: 3px 0; border-radius: 7px; }
 QListWidget::item:selected { background: #d2e6db; color: #104b38; }
-QLineEdit, QComboBox, QPlainTextEdit { background: white; border: 1px solid #c8d6d8;
+QLineEdit, QComboBox, QPlainTextEdit, QDateEdit { background: white; border: 1px solid #c8d6d8;
                                     border-radius: 5px; padding: 8px; }
-QTableWidget, QTreeWidget { background: white; border: 1px solid #dce5e8;
+QTableView, QTableWidget, QTreeWidget { background: white; alternate-background-color: #f5f8f6;
+                          selection-background-color: #d2e6db; selection-color: #104b38;
+                          border: 1px solid #dce5e8;
                           border-radius: 8px; gridline-color: #edf1f2; }
+QTableCornerButton::section { background: #edf3f1; border: 0; }
 QHeaderView::section { background: #edf3f1; border: 0; padding: 12px; font-weight: 600; }
+QScrollArea#operationScroll { background: #f5f7f9; border: 0; }
+QWidget#operationBody { background: #f5f7f9; }
+QTabWidget::pane { border: 1px solid #dce5e8; background: #f5f7f9; }
+QTabBar::tab { background: #edf3f1; color: #172b35; border: 1px solid #dce5e8;
+               padding: 8px 12px; }
+QTabBar::tab:selected { background: white; }
 QStatusBar { background: #eaf0ed; }
 """
 
 
 def label(text: str, name: str = "") -> QLabel:
     result = QLabel(text)
+    result.setTextFormat(Qt.TextFormat.PlainText)
     result.setWordWrap(True)
     if name:
         result.setObjectName(name)
@@ -113,7 +182,17 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
         self.session: VaultSession | None = None
+        self._account_records: list[Account] = []
+        self._journal_operations: list[Operation] = []
+        self._refund_candidates: list[RefundCandidate] = []
+        self._closed_months: set[AccountingMonth] = set()
+        self._tag_records: list[Tag] = []
+        self._saved_filters: list[SavedFilter] = []
+        self._active_query = OperationQuery()
         self._jobs: set[Job] = set()
+        self._job_callbacks: dict[JobSignals, Callable[[Any], object]] = {}
+        self._job_deferred: set[JobSignals] = set()
+        self._job_results: dict[JobSignals, object] = {}
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         self._busy = False
@@ -171,7 +250,18 @@ class MainWindow(QMainWindow):
         side.addWidget(label("Личные\nфинансы", "brand"))
         side.addSpacing(25)
         self.navigation = QListWidget()
-        self.navigation.addItems(["Обзор", "Счета", "Категории", "Защита и копии"])
+        self.navigation.addItems(
+            [
+                "Обзор",
+                "Счета",
+                "Операции",
+                "Категории",
+                "Защита и копии",
+                "Периоды",
+                "Теги и фильтры",
+                "Правила категорий",
+            ]
+        )
         side.addWidget(self.navigation, 1)
         side.addWidget(label("Локальная книга\nЗашифрованное хранение", "muted"))
         layout.addWidget(sidebar)
@@ -185,8 +275,49 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.addWidget(self._overview())
         self.pages.addWidget(self._accounts())
+        self.pages.addWidget(self._journal())
         self.pages.addWidget(self._categories())
         self.pages.addWidget(self._security())
+        self.period_page = PeriodPage()
+        self.period_page.closeRequested.connect(self.close_period)
+        self.period_page.reopenRequested.connect(self.reopen_period)
+        self.period_page.historyRequested.connect(self.period_history)
+        self.pages.addWidget(self.period_page)
+        self.organization_page = OrganizationPage()
+        self.organization_page.changedArchive.connect(self.refresh)
+        self.organization_page.addTagRequested.connect(lambda: self.definition_action("tag", "add"))
+        self.organization_page.renameTagRequested.connect(
+            lambda: self.definition_action("tag", "rename")
+        )
+        self.organization_page.archiveTagRequested.connect(
+            lambda: self.definition_action("tag", "archive")
+        )
+        self.organization_page.restoreTagRequested.connect(
+            lambda: self.definition_action("tag", "restore")
+        )
+        self.organization_page.tagHistoryRequested.connect(
+            lambda: self.definition_action("tag", "history")
+        )
+        self.organization_page.renameFilterRequested.connect(
+            lambda: self.definition_action("saved_filter", "rename")
+        )
+        self.organization_page.archiveFilterRequested.connect(
+            lambda: self.definition_action("saved_filter", "archive")
+        )
+        self.organization_page.restoreFilterRequested.connect(
+            lambda: self.definition_action("saved_filter", "restore")
+        )
+        self.organization_page.filterHistoryRequested.connect(
+            lambda: self.definition_action("saved_filter", "history")
+        )
+        self.pages.addWidget(self.organization_page)
+        self.rule_page = CategoryRulePage()
+        self.rule_page.changedFilter.connect(self.refresh)
+        self.rule_page.addRequested.connect(lambda: self.rule_action("add"))
+        self.rule_page.editRequested.connect(lambda: self.rule_action("edit"))
+        self.rule_page.toggleRequested.connect(lambda: self.rule_action("toggle"))
+        self.rule_page.historyRequested.connect(lambda: self.rule_action("history"))
+        self.pages.addWidget(self.rule_page)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
@@ -236,13 +367,8 @@ class MainWindow(QMainWindow):
         card_layout.addLayout(actions)
         layout.addWidget(card)
         layout.addSpacing(16)
-        layout.addWidget(
-            label(
-                "В этой сборке доступны справочники и резервирование. "
-                "Учёт операций и денежных остатков пока недоступен.",
-                "muted",
-            )
-        )
+        self.feature_note = label("", "muted")
+        layout.addWidget(self.feature_note)
         layout.addStretch()
         return page
 
@@ -255,15 +381,759 @@ class MainWindow(QMainWindow):
         row.addWidget(button("Добавить банк", self.add_bank))
         row.addWidget(button("Добавить счёт", self.add_account, primary=True))
         layout.addLayout(row)
-        self.account_table = QTableWidget(0, 4)
-        self.account_table.setHorizontalHeaderLabels(["Название", "Тип", "Банк", "Валюта"])
+        balance_row = QHBoxLayout()
+        balance_row.addWidget(label("Остаток на дату"))
+        self.balance_date = QDateEdit(QDate.currentDate())
+        self.balance_date.setCalendarPopup(True)
+        self.balance_date.setDisplayFormat("dd.MM.yyyy")
+        self.balance_date.setMinimumDate(QDate(1, 1, 1))
+        self.balance_date.dateChanged.connect(self.refresh)
+        balance_row.addWidget(self.balance_date)
+        balance_row.addStretch()
+        self.opening_button = button("Начальный остаток", self.add_opening_balance)
+        balance_row.addWidget(self.opening_button)
+        self.reconcile_button = button("Сверить остаток", self.reconcile_account)
+        balance_row.addWidget(self.reconcile_button)
+        layout.addLayout(balance_row)
+        self.balance_notice = label("", "muted")
+        layout.addWidget(self.balance_notice)
+        self.account_table = QTableView()
+        self.account_model = replace_table(self.account_table, ACCOUNT_HEADERS, [])
         self.account_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.account_table.verticalHeader().hide()
         self.account_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.account_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.account_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.account_table.setAlternatingRowColors(True)
         layout.addWidget(self.account_table, 1)
         return page
+
+    def _journal(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 20, 0, 0)
+        self.journal_notice = label(
+            "Переводы исключены из доходов и расходов; комиссия — расход. "
+            "Возврат уменьшает расходы.",
+            "muted",
+        )
+        layout.addWidget(self.journal_notice)
+        actions = QHBoxLayout()
+        self.add_operation_button = button(
+            "Добавить операцию", self.add_default_operation, primary=True
+        )
+        self.edit_operation_button = button("Исправить", self.edit_operation)
+        self.delete_operation_button = button("Удалить", self.delete_operation)
+        self.history_operation_button = button("История", self.operation_history)
+        for action in (
+            self.add_operation_button,
+            self.edit_operation_button,
+            self.delete_operation_button,
+            self.history_operation_button,
+        ):
+            actions.addWidget(action)
+        self.show_deleted = QCheckBox("Показывать удалённые")
+        self.show_deleted.toggled.connect(self.refresh)
+        layout.addLayout(actions)
+        refund_row = QHBoxLayout()
+        self.refund_button = button("Оформить возврат", self.add_refund)
+        refund_row.addWidget(self.refund_button)
+        self.import_button = button("Импорт CSV/OFX…", self.import_statement)
+        refund_row.addWidget(self.import_button)
+        self.export_button = button("Экспорт…", self.export_journal)
+        refund_row.addWidget(self.export_button)
+        refund_row.addStretch()
+        layout.addLayout(refund_row)
+        filter_row = QHBoxLayout()
+        self.filter_button = button("Фильтр…", self.edit_query)
+        self.reset_filter_button = button("Сбросить фильтр", self.reset_query)
+        filter_row.addWidget(self.filter_button)
+        filter_row.addWidget(self.reset_filter_button)
+        filter_row.addWidget(self.show_deleted)
+        filter_row.addStretch()
+        layout.addLayout(filter_row)
+        saved_row = QHBoxLayout()
+        self.saved_filter_combo = QComboBox()
+        self.apply_filter_button = button("Применить", self.apply_saved_filter)
+        self.save_filter_button = button("Сохранить как…", self.save_query)
+        self.update_filter_button = button("Обновить", self.update_saved_filter)
+        saved_row.addWidget(self.saved_filter_combo, 1)
+        for widget in (
+            self.apply_filter_button,
+            self.save_filter_button,
+            self.update_filter_button,
+        ):
+            saved_row.addWidget(widget)
+        layout.addLayout(saved_row)
+        self.saved_filter_combo.currentIndexChanged.connect(self._update_saved_filter_actions)
+        self.query_status = label("Все действующие операции", "muted")
+        layout.addWidget(self.query_status)
+        self.operation_table = QTableView()
+        self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
+        self.operation_table.verticalHeader().hide()
+        self.operation_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.operation_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.operation_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.operation_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.operation_table.horizontalHeader().setMaximumSectionSize(400)
+        for column, width in ((2, 160), (3, 180), (6, 200)):
+            self.operation_table.horizontalHeader().setSectionResizeMode(
+                column, QHeaderView.ResizeMode.Interactive
+            )
+            self.operation_table.setColumnWidth(column, width)
+        self.operation_table.selectionModel().selectionChanged.connect(self._update_journal_actions)
+        self.operation_table.doubleClicked.connect(self.edit_operation)
+        layout.addWidget(self.operation_table, 1)
+        return page
+
+    def _selected_operation(self) -> Operation | None:
+        if not self.operation_table.selectionModel().hasSelection():
+            return None
+        row = self.operation_table.currentIndex().row()
+        if not 0 <= row < len(self._journal_operations):
+            return None
+        return self._journal_operations[row]
+
+    @Slot()
+    def _update_journal_actions(self) -> None:
+        available = self.session is not None and self.session.ledger is not None
+        self.add_operation_button.setEnabled(available and bool(self._account_records))
+        self.show_deleted.setEnabled(available)
+        self.export_button.setEnabled(
+            self.session is not None and self.session.exporting is not None
+        )
+        can_import = self.session is not None and self.session.importing is not None
+        self.import_button.setEnabled(
+            can_import and any(a.currency == "RUB" for a in self._account_records)
+        )
+        self.import_button.setToolTip(
+            "Локальный файл, предпросмотр и подтверждение выбранных строк."
+            if can_import
+            else "Для импорта восстановите копию старой книги в новую папку."
+        )
+        selected = self._selected_operation() if available else None
+        self.history_operation_button.setEnabled(selected is not None)
+        editable = (
+            selected is not None
+            and not selected.is_deleted
+            and AccountingMonth.from_date(selected.draft.occurred_on) not in self._closed_months
+        )
+        self.edit_operation_button.setEnabled(editable)
+        self.delete_operation_button.setEnabled(editable)
+        eligible = {
+            candidate.expense.id
+            for candidate in self._refund_candidates
+            if candidate.amount_remaining.minor > 0
+        }
+        can_refund = (
+            available
+            and self.session is not None
+            and self.session.ledger is not None
+            and self.session.ledger.supports_refunds
+            and bool(eligible)
+        )
+        if selected is not None and selected.draft.kind == OperationKind.EXPENSE:
+            can_refund = can_refund and not selected.is_deleted and selected.id in eligible
+        self.refund_button.setEnabled(can_refund)
+        self.refund_button.setToolTip(
+            "Оформить полный или частичный возврат по расходу."
+            if can_refund
+            else "Нужен действующий расход с остатком к возврату. "
+            "Для новых функций старой книги восстановите копию в новую папку."
+        )
+
+    @Slot()
+    def add_default_operation(self) -> None:
+        self.add_operation()
+
+    @Slot()
+    def add_refund(self) -> None:
+        if (
+            self.session is not None
+            and self.session.ledger is not None
+            and self.session.ledger.supports_refunds
+        ):
+            self.add_operation(OperationKind.REFUND)
+
+    @Slot()
+    def reconcile_account(self) -> None:
+        session = self.session
+        if session is None or session.ledger is None:
+            return
+        selected = self.account_table.currentIndex().row()
+        account_id = (
+            self._account_records[selected].id
+            if self.account_table.selectionModel().hasSelection()
+            and 0 <= selected < len(self._account_records)
+            else None
+        )
+        qdate = self.balance_date.date()
+        dialog = ReconciliationInputDialog(
+            self._account_records,
+            date(qdate.year(), qdate.month(), qdate.day()),
+            self,
+            account_id=account_id,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_request is None:
+            return
+        identifier, as_of, statement = dialog.result_request
+        ledger = session.ledger
+        names = {account.id: account.name for account in self._account_records}
+
+        def show(result: Reconciliation) -> None:
+            ReconciliationResultDialog(result, names.get(identifier, "Счёт"), self).exec()
+
+        self._job(lambda: ledger.reconcile(identifier, as_of, statement), show, "Сверка остатка…")
+
+    @Slot()
+    def add_opening_balance(self) -> None:
+        self.add_operation(OperationKind.OPENING)
+
+    @Slot()
+    def export_journal(self) -> None:
+        session = self.session
+        if session is None or session.exporting is None or session.ledger is None:
+            return
+        dialog = ExportOptionsDialog(
+            self._active_query,
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self._tag_records,
+            allow_tags=session.ledger.supports_tags,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
+            return
+        options, service = dialog.options, session.exporting
+        self._job(
+            lambda: service.preview(options.settings),
+            lambda preview: self._show_export_preview(session, options, preview),
+            "Подготовка снимка экспорта…",
+            defer_success=True,
+        )
+
+    def _show_export_preview(
+        self, session: VaultSession, options: ExportOptions, preview: ExportPreview
+    ) -> None:
+        if self.session is not session or session.exporting is None:
+            return
+        dialog = ExportPreviewDialog(preview, options.format, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        base = Path(user_data_dir("PersonalFinance", appauthor=False))
+        folder = base / "exports"
+        if folder.resolve().is_relative_to(session.root.resolve()):
+            folder = session.root.parent
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            folder = base.parent
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Новый файл экспорта",
+            str(folder / f"crown-journal-{stamp}-{uuid4().hex[:4]}.{options.format.value}"),
+            f"{options.format.value.upper()} (*.{options.format.value})",
+            options=QFileDialog.Option.DontConfirmOverwrite,
+        )
+        if not filename or self.session is not session:
+            return
+        destination = Path(filename)
+        if not destination.suffix:
+            destination = destination.with_suffix("." + options.format.value)
+        service = session.exporting
+        self._job(
+            lambda: service.save(destination, preview, options.format),
+            lambda path: QMessageBox.information(
+                self, "Экспорт сохранён", f"Файл сохранён:\n{path}"
+            ),
+            "Сохранение нового файла экспорта…",
+            defer_success=True,
+        )
+
+    def rule_action(self, action: str) -> None:
+        session = self.session
+        if session is None or session.classification is None:
+            return
+        service, selected = session.classification, self.rule_page.selected()
+        if action != "add" and selected is None:
+            return
+        categories = session.catalog.categories()
+        if action == "history" and selected is not None:
+            CategoryRuleHistoryDialog(
+                service.history(selected.rule.id), self._account_records, categories, self
+            ).exec()
+            return
+        if action == "toggle" and selected is not None:
+            rule = replace(selected.rule, enabled=not selected.rule.enabled)
+        else:
+            dialog = CategoryRuleDialog(
+                self._account_records,
+                categories,
+                self,
+                existing=selected.rule if action == "edit" and selected is not None else None,
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.rule is None:
+                return
+            rule = dialog.rule
+        expected = selected.revision_id if action != "add" and selected is not None else None
+        command = str(uuid4())
+        self._job(
+            lambda: service.save(rule, expected_revision_id=expected, command_id=command),
+            lambda _: self.refresh(),
+            "Сохранение версии правила…",
+        )
+
+    @Slot()
+    def import_statement(self) -> None:
+        session = self.session
+        if session is None or session.importing is None:
+            return
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Выбрать локальную выписку", "", "Выписки (*.csv *.ofx)"
+        )
+        if not filename:
+            return
+        path = Path(filename)
+        self._job(
+            lambda: read_statement(path),
+            lambda contents: self._configure_import(
+                session, path.suffix.lower() == ".csv", contents
+            ),
+            "Чтение локального файла…",
+            defer_success=True,
+        )
+
+    def _configure_import(self, session: VaultSession, is_csv: bool, contents: bytes) -> None:
+        if self.session is not session or session.importing is None:
+            return
+        dialog = ImportOptionsDialog(
+            contents,
+            is_csv=is_csv,
+            accounts=self._account_records,
+            categories=session.catalog.categories(),
+            allow_rules=session.classification is not None,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
+            return
+        options, service = dialog.options, session.importing
+
+        def prepare() -> tuple[ImportPreview, PreparedImportCategories | None]:
+            document = (
+                service.parse_csv(contents, options.mapping)
+                if options.mapping is not None
+                else service.parse_ofx(contents)
+            )
+            preview = service.preview(document, options.account_id)
+            classification = (
+                session.classification.snapshot()
+                if options.use_rules and session.classification is not None
+                else None
+            )
+            prepared = (
+                prepare_import_categories(
+                    classification, preview, options.expense_category_id, options.income_category_id
+                )
+                if classification is not None
+                else None
+            )
+            return preview, prepared
+
+        self._job(
+            prepare,
+            lambda prepared: self._preview_import(
+                session, options, prepared[0], classification=prepared[1]
+            ),
+            "Подготовка предпросмотра без записи…",
+            defer_success=True,
+        )
+
+    def _preview_import(
+        self,
+        session: VaultSession,
+        options: ImportOptions,
+        preview: ImportPreview,
+        *,
+        classification: PreparedImportCategories | None = None,
+    ) -> None:
+        if self.session is not session or session.importing is None or session.ledger is None:
+            return
+        dialog = ImportPreviewDialog(
+            preview,
+            options,
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self._tag_records,
+            session.ledger.refund_candidates(),
+            self,
+            classification=classification,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selections:
+            return
+        service, selected, command = session.importing, dialog.selections, str(uuid4())
+        self._job(
+            lambda: service.confirm(
+                preview.document, options.account_id, selected, command_id=command
+            ),
+            self._import_complete,
+            "Сохранение всей группы импорта…",
+            defer_success=True,
+        )
+
+    def _import_complete(self, result: ImportResult) -> None:
+        self.refresh()
+        self.navigation.setCurrentRow(2)
+        QMessageBox.information(
+            self,
+            "Импорт подтверждён",
+            f"Создано операций: {len(result.operations) - result.linked_count}. "
+            f"Связано с существующими: {result.linked_count}. "
+            "Связи не создают повторного движения. Текущий фильтр может скрывать строки.",
+        )
+
+    def add_operation(self, kind: OperationKind = OperationKind.EXPENSE) -> None:
+        session = self.session
+        if session is None or session.ledger is None:
+            return
+        if not self._account_records:
+            QMessageBox.information(
+                self, "Сначала добавьте счёт", "Создайте счёт в разделе «Счета»."
+            )
+            return
+        selected = self.account_table.currentIndex().row()
+        account_id = (
+            self._account_records[selected].id
+            if kind == OperationKind.OPENING
+            and self.account_table.selectionModel().hasSelection()
+            and 0 <= selected < len(self._account_records)
+            else None
+        )
+        selected_operation = self._selected_operation()
+        refund_of_id = (
+            selected_operation.id
+            if kind == OperationKind.REFUND
+            and selected_operation is not None
+            and selected_operation.draft.kind == OperationKind.EXPENSE
+            else None
+        )
+        dialog = OperationDialog(
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self,
+            kind=kind,
+            account_id=account_id,
+            allow_splits=session.ledger.supports_splits,
+            allow_refunds=session.ledger.supports_refunds,
+            refund_candidates=self._refund_candidates,
+            refund_of_id=refund_of_id,
+            tags=self._tag_records,
+            allow_tags=session.ledger.supports_tags,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
+            return
+        draft, ledger, command_id = dialog.result_draft, session.ledger, str(uuid4())
+        self._job(
+            lambda: ledger.add(draft, command_id=command_id),
+            lambda _: self.refresh(),
+            "Сохранение операции и проводок…",
+        )
+
+    @Slot()
+    def edit_operation(self) -> None:
+        session, selected = self.session, self._selected_operation()
+        if session is None or session.ledger is None or selected is None or selected.is_deleted:
+            return
+        dialog = OperationDialog(
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self,
+            existing=selected,
+            tags=self._tag_records,
+            allow_tags=session.ledger.supports_tags,
+            allow_splits=session.ledger.supports_splits,
+            allow_refunds=session.ledger.supports_refunds,
+            refund_candidates=session.ledger.refund_candidates(
+                excluding_refund_id=selected.id
+                if selected.draft.kind == OperationKind.REFUND
+                else None,
+            )
+            if session.ledger.supports_refunds
+            else [],
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
+            return
+        draft, ledger, command_id = dialog.result_draft, session.ledger, str(uuid4())
+        self._job(
+            lambda: ledger.replace(
+                selected.id,
+                selected.revision_id,
+                draft,
+                command_id=command_id,
+            ),
+            lambda _: self.refresh(),
+            "Сохранение новой версии операции…",
+        )
+
+    @Slot()
+    def delete_operation(self) -> None:
+        session, selected = self.session, self._selected_operation()
+        if session is None or session.ledger is None or selected is None or selected.is_deleted:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Удалить финансовую операцию",
+            "Убрать операцию из расчёта остатков? Её прежние версии останутся в истории.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        ledger, command_id = session.ledger, str(uuid4())
+        self._job(
+            lambda: ledger.delete(selected.id, selected.revision_id, command_id=command_id),
+            lambda _: self.refresh(),
+            "Удаление операции с сохранением истории…",
+        )
+
+    @Slot()
+    def operation_history(self) -> None:
+        session, selected = self.session, self._selected_operation()
+        if session is None or session.ledger is None or selected is None:
+            return
+        try:
+            versions = session.ledger.history(selected.id)
+            related_versions = []
+            for identifier in {
+                version.draft.refund_of
+                for version in versions
+                if version.draft.refund_of is not None
+            }:
+                related_versions.extend(session.ledger.history(identifier))
+        except FinanceError as exc:
+            QMessageBox.warning(self, "Действие не выполнено", str(exc))
+            return
+        OperationHistoryDialog(
+            versions,
+            self,
+            accounts=self._account_records,
+            categories=session.catalog.categories(),
+            related_versions=related_versions,
+            tags=self._tag_records,
+        ).exec()
+
+    @Slot()
+    def edit_query(self) -> None:
+        session = self.session
+        if session is None or session.ledger is None:
+            return
+        dialog = QueryDialog(
+            self._active_query,
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self._tag_records,
+            self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_query is not None:
+            self._set_query(dialog.result_query)
+
+    def _set_query(self, query: OperationQuery) -> None:
+        self._active_query = query
+        self.show_deleted.blockSignals(True)
+        self.show_deleted.setChecked(query.include_deleted)
+        self.show_deleted.blockSignals(False)
+        self.refresh()
+
+    @Slot()
+    def reset_query(self) -> None:
+        self._set_query(OperationQuery())
+
+    def _selected_saved_filter(self) -> SavedFilter | None:
+        identifier = self.saved_filter_combo.currentData()
+        return next((value for value in self._saved_filters if value.id == identifier), None)
+
+    @Slot()
+    def _update_saved_filter_actions(self) -> None:
+        available = self.session is not None and self.session.organization is not None
+        selected = self._selected_saved_filter() is not None
+        self.apply_filter_button.setEnabled(available and selected)
+        self.update_filter_button.setEnabled(available and selected)
+        self.save_filter_button.setEnabled(available)
+
+    @Slot()
+    def apply_saved_filter(self) -> None:
+        selected = self._selected_saved_filter()
+        if selected is not None:
+            self._set_query(selected.query)
+
+    @Slot()
+    def save_query(self) -> None:
+        session = self.session
+        if session is None or session.organization is None:
+            return
+        dialog = NameDialog(self)
+        dialog.setWindowTitle("Сохранить фильтр")
+        dialog.setLabelText("Название фильтра")
+        dialog.setOkButtonText("Сохранить")
+        dialog.setCancelButtonText("Отмена")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        organization, query, name, command = (
+            session.organization,
+            self._active_query,
+            dialog.textValue(),
+            str(uuid4()),
+        )
+        self._job(
+            lambda: organization.save_filter(name, query, command_id=command),
+            lambda _: self.refresh(),
+            "Сохранение фильтра…",
+        )
+
+    @Slot()
+    def update_saved_filter(self) -> None:
+        session = self.session
+        selected = self._selected_saved_filter()
+        if session is None or session.organization is None or selected is None:
+            return
+        organization, query, command = session.organization, self._active_query, str(uuid4())
+        self._job(
+            lambda: organization.save_filter(
+                selected.name,
+                query,
+                identifier=selected.id,
+                expected_revision_id=selected.revision_id,
+                command_id=command,
+            ),
+            lambda _: self.refresh(),
+            "Сохранение новой версии фильтра…",
+        )
+
+    def definition_action(self, kind: str, action: str) -> None:
+        session = self.session
+        if session is None or session.organization is None:
+            return
+        selected = (
+            self.organization_page.selected_tag()
+            if kind == "tag"
+            else self.organization_page.selected_filter()
+        )
+        if action != "add" and selected is None:
+            return
+        organization = session.organization
+        if action == "history":
+            assert selected is not None
+            DefinitionHistoryDialog(
+                organization.history(kind, selected.id),
+                self,
+                accounts=self._account_records,
+                categories=session.catalog.categories(),
+                institutions=session.catalog.institutions(),
+                tags=self._tag_records,
+            ).exec()
+            return
+        name = ""
+        if action in ("add", "rename"):
+            dialog = NameDialog(self)
+            dialog.setWindowTitle("Создать тег" if action == "add" else "Переименовать")
+            dialog.setLabelText("Название")
+            dialog.setOkButtonText("Сохранить")
+            dialog.setCancelButtonText("Отмена")
+            if selected is not None:
+                dialog.setTextValue(selected.name)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            name = dialog.textValue()
+        if (
+            action == "archive"
+            and QMessageBox.question(
+                self,
+                "Переместить в архив",
+                "Убрать запись из активного списка? История и прежние назначения сохранятся.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+        command = str(uuid4())
+
+        def save() -> object:
+            if kind == "tag":
+                if action == "add":
+                    return organization.add_tag(name, command_id=command)
+                assert selected is not None
+                if action == "rename":
+                    return organization.rename_tag(
+                        selected.id, selected.revision_id, name, command_id=command
+                    )
+                return organization.archive_tag(
+                    selected.id,
+                    selected.revision_id,
+                    archived=action == "archive",
+                    command_id=command,
+                )
+            assert selected is not None
+            if action == "rename":
+                return organization.rename_filter(
+                    selected.id, selected.revision_id, name, command_id=command
+                )
+            return organization.archive_filter(
+                selected.id, selected.revision_id, archived=action == "archive", command_id=command
+            )
+
+        self._job(save, lambda _: self.refresh(), "Сохранение тега или фильтра…")
+
+    @Slot()
+    def close_period(self) -> None:
+        self._change_period(True)
+
+    @Slot()
+    def reopen_period(self) -> None:
+        self._change_period(False)
+
+    def _change_period(self, is_closed: bool) -> None:
+        session = self.session
+        if session is None or session.periods is None:
+            return
+        month = self.period_page.month()
+        current = self.period_page.selected_state()
+        dialog = PeriodChangeDialog(month, is_closed, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_reason is None:
+            return
+        periods, reason, command = session.periods, dialog.result_reason, str(uuid4())
+        expected = current.revision_id if current is not None else None
+        if not is_closed and expected is None:
+            return
+
+        def save() -> object:
+            if is_closed:
+                return periods.close(
+                    month, expected_revision_id=expected, reason=reason, command_id=command
+                )
+            assert expected is not None
+            return periods.reopen(month, expected, reason=reason, command_id=command)
+
+        self._job(save, lambda _: self.refresh(), "Сохранение состояния периода…")
+
+    @Slot()
+    def period_history(self) -> None:
+        session = self.session
+        if session is None or session.periods is None:
+            return
+        try:
+            versions = session.periods.history(self.period_page.month())
+        except FinanceError as exc:
+            QMessageBox.warning(self, "Действие не выполнено", str(exc))
+            return
+        PeriodHistoryDialog(versions, self).exec()
 
     def _categories(self) -> QWidget:
         page = QWidget()
@@ -309,29 +1179,70 @@ class MainWindow(QMainWindow):
         return page
 
     def _job(
-        self, action: Callable[[], object], success: Callable[[Any], object], message: str
+        self,
+        action: Callable[[], object],
+        success: Callable[[Any], object],
+        message: str,
+        *,
+        defer_success: bool = False,
     ) -> None:
         if self._busy:
             return
         self._busy = True
         self.root_stack.setEnabled(False)
         self.statusBar().showMessage(message)
-        job = Job(action)
+        job = Job(action, self)
         self._jobs.add(job)
-        job.signals.success.connect(success)
-        job.signals.failure.connect(
-            lambda message: QMessageBox.warning(self, "Действие не выполнено", message)
-        )
-
-        def finished() -> None:
-            self._jobs.discard(job)
-            self._busy = False
-            self.root_stack.setEnabled(True)
-            state = "Книга открыта" if self.session else "Книга закрыта"
-            self.statusBar().showMessage(f"Работает без интернета · {state}")
-
-        job.signals.finished.connect(finished)
+        self._job_callbacks[job.signals] = success
+        if defer_success:
+            self._job_deferred.add(job.signals)
+        # Только QObject-слоты принимают сигналы рабочего потока. Пользовательские
+        # callback вызываются уже в GUI, без циклов Job -> closure -> Job/window.
+        job.signals.success.connect(self._job_succeeded)
+        job.signals.failure.connect(self._job_failed)
+        job.signals.finished.connect(self._job_finished)
         self._pool.start(job)
+
+    @Slot(object)
+    def _job_succeeded(self, result: object) -> None:
+        signals = self.sender()
+        if isinstance(signals, JobSignals):
+            callback = self._job_callbacks.get(signals)
+            if callback is not None:
+                if signals in self._job_deferred:
+                    self._job_results[signals] = result
+                else:
+                    callback(result)
+
+    @Slot(str)
+    def _job_failed(self, message: str) -> None:
+        QMessageBox.warning(self, "Действие не выполнено", message)
+
+    @Slot()
+    def _job_finished(self) -> None:
+        signals = self.sender()
+        if not isinstance(signals, JobSignals):
+            return
+        # finished — последняя команда run(). Дождаться выхода QRunnable до
+        # удаления его сигналов; ожидание Qt освобождает GIL.
+        self._pool.waitForDone()
+        callback = self._job_callbacks.pop(signals, None)
+        has_result = signals in self._job_results
+        result = self._job_results.pop(signals, None)
+        self._job_deferred.discard(signals)
+        for job in tuple(self._jobs):
+            if job.signals is signals:
+                self._jobs.discard(job)
+        signals.success.disconnect(self._job_succeeded)
+        signals.failure.disconnect(self._job_failed)
+        signals.finished.disconnect(self._job_finished)
+        signals.deleteLater()
+        self._busy = False
+        self.root_stack.setEnabled(True)
+        state = "Книга открыта" if self.session else "Книга закрыта"
+        self.statusBar().showMessage(f"Работает без интернета · {state}")
+        if has_result and callback is not None:
+            callback(result)
 
     def activate_session(self, session: VaultSession) -> None:
         if self.session and self.session is not session:
@@ -395,7 +1306,34 @@ class MainWindow(QMainWindow):
         if self.session:
             self.session.close()
             self.session = None
-        self.account_table.setRowCount(0)
+        self.account_model = replace_table(self.account_table, ACCOUNT_HEADERS, [])
+        self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
+        self._journal_operations = []
+        self._account_records = []
+        self.reconcile_button.setEnabled(False)
+        self._refund_candidates = []
+        self._closed_months = set()
+        self._active_query = OperationQuery()
+        self._tag_records = []
+        self._saved_filters = []
+        self.show_deleted.blockSignals(True)
+        self.show_deleted.setChecked(False)
+        self.show_deleted.blockSignals(False)
+        self.saved_filter_combo.clear()
+        self.saved_filter_combo.addItem("Сохранённые фильтры", None)
+        self.query_status.setText("Все действующие операции")
+        for widget in (
+            self.filter_button,
+            self.reset_filter_button,
+            self.apply_filter_button,
+            self.save_filter_button,
+            self.update_filter_button,
+        ):
+            widget.setEnabled(False)
+        self.organization_page.set_records([], [], False)
+        self.rule_page.set_records([], False, [], [])
+        self.period_page.set_states([], False)
+        self._update_journal_actions()
         self.category_tree.clear()
         self.book_title.clear()
         self.account_count.setText("0")
@@ -406,22 +1344,47 @@ class MainWindow(QMainWindow):
         self.root_stack.setCurrentIndex(0)
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
 
+    @Slot()
     def refresh(self) -> None:
         if not self.session:
             return
-        institutions = {bank.id: bank.name for bank in self.session.catalog.institutions()}
-        accounts = self.session.catalog.accounts()
-        self.account_table.setRowCount(len(accounts))
-        for row, account in enumerate(accounts):
-            values = [
+        session = self.session
+        institutions = {bank.id: bank.name for bank in session.catalog.institutions()}
+        accounts = session.catalog.accounts()
+        self._account_records = accounts
+        categories = session.catalog.categories()
+        ledger = session.ledger
+        self.balance_date.setEnabled(ledger is not None)
+        self.opening_button.setEnabled(ledger is not None)
+        self.reconcile_button.setEnabled(ledger is not None and bool(accounts))
+        amounts = {}
+        if ledger is not None:
+            qdate = self.balance_date.date()
+            amounts = {
+                balance.account_id: format_money(balance.amount, include_currency=False)
+                for balance in ledger.balances(date(qdate.year(), qdate.month(), qdate.day()))
+            }
+        self.balance_notice.setText(
+            "Остаток включает начальную позицию и принятые операции по выбранную дату включительно."
+            if ledger is not None
+            else "Для остатков создайте копию в «Защита и копии» и восстановите её в новую папку."
+        )
+        account_rows = [
+            [
                 account.name,
                 ACCOUNT_LABELS[account.kind],
                 institutions.get(account.institution_id or "", "—"),
                 account.currency,
+                amounts.get(account.id, "—"),
             ]
-            for column, value in enumerate(values):
-                self.account_table.setItem(row, column, QTableWidgetItem(value))
-        categories = self.session.catalog.categories()
+            for account in accounts
+        ]
+        self.account_model = replace_table(
+            self.account_table,
+            ACCOUNT_HEADERS,
+            account_rows,
+            right_columns=(4,),
+        )
         self.category_tree.clear()
         nodes = {
             category.id: QTreeWidgetItem(
@@ -436,6 +1399,139 @@ class MainWindow(QMainWindow):
             else:
                 self.category_tree.addTopLevelItem(node)
         self.category_tree.expandAll()
+        period_states = session.periods.states() if session.periods is not None else []
+        self._closed_months = {value.month for value in period_states if value.is_closed}
+        self.period_page.set_states(period_states, session.periods is not None)
+        self._tag_records = (
+            session.organization.tags(include_archived=True) if session.organization else []
+        )
+        all_filters = (
+            session.organization.filters(include_archived=True) if session.organization else []
+        )
+        self._saved_filters = [value for value in all_filters if not value.is_deleted]
+        archived = self.organization_page.archived.isChecked()
+        self.organization_page.set_records(
+            [value for value in self._tag_records if archived or not value.is_deleted],
+            [value for value in all_filters if archived or not value.is_deleted],
+            session.organization is not None,
+        )
+        all_rules = (
+            session.classification.rules(include_disabled=True) if session.classification else []
+        )
+        self.rule_page.set_records(
+            [
+                value
+                for value in all_rules
+                if self.rule_page.disabled.isChecked() or value.rule.enabled
+            ],
+            session.classification is not None,
+            accounts,
+            categories,
+        )
+        current_filter = self.saved_filter_combo.currentData()
+        self.saved_filter_combo.blockSignals(True)
+        self.saved_filter_combo.clear()
+        self.saved_filter_combo.addItem("Сохранённые фильтры", None)
+        for value in self._saved_filters:
+            self.saved_filter_combo.addItem(value.name, value.id)
+        self.saved_filter_combo.setCurrentIndex(
+            max(0, self.saved_filter_combo.findData(current_filter))
+        )
+        self.saved_filter_combo.blockSignals(False)
+        for widget in (self.filter_button, self.reset_filter_button):
+            widget.setEnabled(ledger is not None)
+        self.saved_filter_combo.setEnabled(session.organization is not None)
+        for widget in (
+            self.save_filter_button,
+            self.update_filter_button,
+            self.apply_filter_button,
+        ):
+            widget.setEnabled(session.organization is not None)
+        self._update_saved_filter_actions()
+        self._active_query = replace(
+            self._active_query, include_deleted=self.show_deleted.isChecked()
+        )
+        query_description = describe_query(
+            self._active_query,
+            accounts,
+            categories,
+            session.catalog.institutions(),
+            self._tag_records,
+        )
+        query_summary = query_description.replace("\n", " · ")
+        self.query_status.setText(
+            query_summary if len(query_summary) <= 220 else query_summary[:217] + "…"
+        )
+        self.query_status.setToolTip(
+            "<p>" + escape(query_description).replace("\n", "<br>") + "</p>"
+        )
+        self._journal_operations = ledger.search(self._active_query) if ledger is not None else []
+        self._refund_candidates = (
+            ledger.refund_candidates() if ledger is not None and ledger.supports_refunds else []
+        )
+        account_names = {account.id: account.name for account in accounts}
+        category_names = {
+            category.id: category_title(category, categories) for category in categories
+        }
+        tag_names = {
+            tag.id: tag.name + (" (архив)" if tag.is_deleted else "") for tag in self._tag_records
+        }
+        journal_rows = []
+        for operation in self._journal_operations:
+            draft = operation.draft
+            target = (
+                account_names.get(draft.destination_account_id or "", "—")
+                if draft.kind == OperationKind.TRANSFER
+                else category_names.get(draft.category_id or "", "Начальный остаток")
+            )
+            if draft.parts:
+                target = "; ".join(
+                    f"{category_names.get(part.category_id, '—')}: {format_money(part.amount)}"
+                    for part in draft.parts
+                )
+            journal_rows.append(
+                [
+                    draft.occurred_on.strftime("%d.%m.%Y"),
+                    OPERATION_LABELS[draft.kind],
+                    account_names.get(draft.account_id, "—"),
+                    target,
+                    format_money(draft.amount),
+                    format_money(draft.fee) if draft.fee.minor else "—",
+                    draft.note,
+                    "Удалена" if operation.is_deleted else "Учтена",
+                    "; ".join(
+                        tag_names.get(identifier, "Тег недоступен") for identifier in draft.tag_ids
+                    ),
+                ]
+            )
+        self.operation_model = replace_table(
+            self.operation_table,
+            JOURNAL_HEADERS,
+            journal_rows,
+            selection_changed=self._update_journal_actions,
+        )
+        self.journal_notice.setText(
+            (
+                "Переводы исключены из доходов и расходов; комиссия — расход. "
+                "Возврат уменьшает расходы."
+                + (
+                    " Для новых функций восстановите копию этой книги в новую папку."
+                    if not ledger.supports_refunds
+                    else ""
+                )
+            )
+            if ledger is not None
+            else "Для журнала создайте резервную копию и восстановите её в новую папку. "
+            "Исходная книга сохранится."
+        )
+        self.feature_note.setText(
+            "Доступны ручные операции и остатки. "
+            "OCR, импорт, аналитика и планирование ещё не включены."
+            if ledger is not None
+            else "Эта книга открыта со справочниками. "
+            "Для финансовых операций восстановите её копию в новую папку."
+        )
+        self._update_journal_actions()
         self.account_count.setText(str(len(accounts)))
         self.category_count.setText(str(len(categories)))
         self.backup_overview.setText(self.last_backup)

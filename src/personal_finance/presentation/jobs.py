@@ -14,10 +14,11 @@ class JobSignals(QObject):
 
 
 class Job(QRunnable):
-    def __init__(self, action: Callable[[], object]) -> None:
+    def __init__(self, action: Callable[[], object], parent: QObject) -> None:
         super().__init__()
         self.action = action
-        self.signals = JobSignals()
+        # Qt-владелец в GUI-потоке: Python GC рабочего потока не удаляет QObject.
+        self.signals = JobSignals(parent)
 
     @Slot()
     def run(self) -> None:
