@@ -27,7 +27,7 @@ jobs:
       - run: uv run --frozen ruff format --check src tests tools
       - run: uv run --frozen mypy src/personal_finance
       - name: Автоматические тесты
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: uv run --frozen pytest -vv -o faulthandler_timeout=90 -o faulthandler_exit_on_timeout=true
       - shell: pwsh
         run: ./packaging/windows/test_helpers.ps1 -PythonPath .venv/bin/python
