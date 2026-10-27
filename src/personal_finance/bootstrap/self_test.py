@@ -15,9 +15,11 @@ from uuid import uuid4
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
+from personal_finance.application.importing import Importing
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
 from personal_finance.domain.errors import InvalidCredentials, ValidationError
+from personal_finance.domain.exporting import ExportFormat, ExportSettings
 from personal_finance.domain.imports import ImportSelection, ImportStatus
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
@@ -48,6 +50,50 @@ def _balances(session: VaultSession) -> dict[str, int]:
     if session.ledger is None:
         raise RuntimeError("Финансовый журнал не создан.")
     return {item.account_id: item.amount.minor for item in session.ledger.balances()}
+
+
+def _check_packaged_ofx(importing: Importing, day: date) -> None:
+    stamp = day.strftime("%Y%m%d")
+    body = (
+        "<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>RUB</CURDEF>"
+        "<BANKACCTFROM><BANKID>self-test</BANKID><ACCTID>synthetic-only</ACCTID>"
+        "<ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM><BANKTRANLIST>"
+        f"<DTSTART>{stamp}</DTSTART><DTEND>{stamp}</DTEND><STMTTRN>"
+        f"<TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>{stamp}</DTPOSTED>"
+        "<TRNAMT>-0.01</TRNAMT><FITID>self-test-ofx</FITID>"
+        "<NAME>Проверка кодировки</NAME></STMTTRN></BANKTRANLIST>"
+        "</STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>"
+    )
+    xml = ('<?xml version="1.0" encoding="windows-1251"?>' + body).encode("cp1251")
+    sgml = body
+    for name in (
+        "CURDEF",
+        "BANKID",
+        "ACCTID",
+        "ACCTTYPE",
+        "DTSTART",
+        "DTEND",
+        "TRNTYPE",
+        "DTPOSTED",
+        "TRNAMT",
+        "FITID",
+        "NAME",
+    ):
+        sgml = sgml.replace("</" + name + ">", "\n")
+    header = (
+        "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\n"
+        "ENCODING:USASCII\nCHARSET:1251\n\n"
+    )
+    for contents in (xml, (header + sgml).encode("cp1251")):
+        parsed = importing.parse_ofx(contents)
+        if (
+            parsed.issues
+            or len(parsed.rows) != 1
+            or parsed.rows[0].amount != Money(-1)
+            or parsed.rows[0].occurred_on != day
+            or parsed.rows[0].note != "Проверка кодировки"
+        ):
+            raise RuntimeError("Парсеры OFX или кодировка сборки не прошли проверку.")
 
 
 def self_test(app: QApplication, report_path: Path | None = None) -> int:
@@ -212,6 +258,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             ),
                         ),
                     )
+                    _check_packaged_ofx(importing, today)
                     import_command = str(uuid4())
                     imported = importing.confirm(
                         document,
@@ -231,6 +278,54 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     expected_balances[account.id] -= 123
                     if _balances(source) != expected_balances:
                         raise RuntimeError("Не совпал остаток после импорта.")
+                    source.check_integrity()
+                with _step(report, "export_reviewed_journal"):
+                    exporting = source.exporting
+                    if exporting is None:
+                        raise RuntimeError("Экспорт недоступен.")
+                    operations_before_export = ledger.operations(include_deleted=True)
+                    export_preview = exporting.preview(
+                        ExportSettings(
+                            OperationQuery(tag_ids=(tag.id,)),
+                        )
+                    )
+                    export_path = exporting.save(
+                        root / "Журнал.json",
+                        export_preview,
+                        ExportFormat.JSON,
+                    )
+                    exported_bytes = export_path.read_bytes()
+                    rows = json.loads(exported_bytes)["operations"]
+                    if (
+                        len(rows) != 1
+                        or rows[0]["amount_minor"] != "3000"
+                        or "note" in rows[0]
+                        or "tag_ids" in rows[0]
+                        or source.book_id.encode() in exported_bytes
+                    ):
+                        raise RuntimeError("Состав экспортного файла не соответствует выбору.")
+                    csv_path = exporting.save(root / "Журнал.csv", export_preview, ExportFormat.CSV)
+                    try:
+                        importing.parse_csv(
+                            csv_path.read_bytes(),
+                            CsvMapping("Дата", "Сумма", date_format="%Y-%m-%d"),
+                        )
+                    except ValidationError:
+                        pass
+                    else:
+                        raise RuntimeError("Экспорт журнала принят как банковская выписка.")
+                    try:
+                        exporting.save(export_path, export_preview, ExportFormat.JSON)
+                    except ValidationError:
+                        pass
+                    else:
+                        raise RuntimeError("Экспорт заменил существующий файл.")
+                    if (
+                        export_path.read_bytes() != exported_bytes
+                        or ledger.operations(include_deleted=True) != operations_before_export
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Экспорт изменил книгу или прежний файл.")
                     source.check_integrity()
                 with _step(report, "protect_closed_period"):
                     periods = source.periods

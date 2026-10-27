@@ -41,6 +41,7 @@ from personal_finance import __version__
 from personal_finance.application.importing import read_statement
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.errors import FinanceError, ValidationError
+from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
 from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
 from personal_finance.domain.models import (
@@ -66,6 +67,11 @@ from personal_finance.presentation.dialogs import (
     OpenDialog,
     PasswordDialog,
     RecoveryDialog,
+)
+from personal_finance.presentation.export_dialogs import (
+    ExportOptions,
+    ExportOptionsDialog,
+    ExportPreviewDialog,
 )
 from personal_finance.presentation.import_dialogs import (
     ImportOptions,
@@ -417,9 +423,9 @@ class MainWindow(QMainWindow):
         refund_row.addWidget(self.refund_button)
         self.import_button = button("Импорт CSV/OFX…", self.import_statement)
         refund_row.addWidget(self.import_button)
-        refund_row.addWidget(
-            label("Возврат связан с расходом и уменьшает расходы на дату получения.", "muted"), 1
-        )
+        self.export_button = button("Экспорт…", self.export_journal)
+        refund_row.addWidget(self.export_button)
+        refund_row.addStretch()
         layout.addLayout(refund_row)
         filter_row = QHBoxLayout()
         self.filter_button = button("Фильтр…", self.edit_query)
@@ -478,6 +484,9 @@ class MainWindow(QMainWindow):
         available = self.session is not None and self.session.ledger is not None
         self.add_operation_button.setEnabled(available and bool(self._account_records))
         self.show_deleted.setEnabled(available)
+        self.export_button.setEnabled(
+            self.session is not None and self.session.exporting is not None
+        )
         can_import = self.session is not None and self.session.importing is not None
         self.import_button.setEnabled(
             can_import and any(a.currency == "RUB" for a in self._account_records)
@@ -564,6 +573,69 @@ class MainWindow(QMainWindow):
     @Slot()
     def add_opening_balance(self) -> None:
         self.add_operation(OperationKind.OPENING)
+
+    @Slot()
+    def export_journal(self) -> None:
+        session = self.session
+        if session is None or session.exporting is None or session.ledger is None:
+            return
+        dialog = ExportOptionsDialog(
+            self._active_query,
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self._tag_records,
+            allow_tags=session.ledger.supports_tags,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
+            return
+        options, service = dialog.options, session.exporting
+        self._job(
+            lambda: service.preview(options.settings),
+            lambda preview: self._show_export_preview(session, options, preview),
+            "Подготовка снимка экспорта…",
+            defer_success=True,
+        )
+
+    def _show_export_preview(
+        self, session: VaultSession, options: ExportOptions, preview: ExportPreview
+    ) -> None:
+        if self.session is not session or session.exporting is None:
+            return
+        dialog = ExportPreviewDialog(preview, options.format, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        base = Path(user_data_dir("PersonalFinance", appauthor=False))
+        folder = base / "exports"
+        if folder.resolve().is_relative_to(session.root.resolve()):
+            folder = session.root.parent
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            folder = base.parent
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Новый файл экспорта",
+            str(folder / f"crown-journal-{stamp}-{uuid4().hex[:4]}.{options.format.value}"),
+            f"{options.format.value.upper()} (*.{options.format.value})",
+            options=QFileDialog.Option.DontConfirmOverwrite,
+        )
+        if not filename or self.session is not session:
+            return
+        destination = Path(filename)
+        if not destination.suffix:
+            destination = destination.with_suffix("." + options.format.value)
+        service = session.exporting
+        self._job(
+            lambda: service.save(destination, preview, options.format),
+            lambda path: QMessageBox.information(
+                self, "Экспорт сохранён", f"Файл сохранён:\n{path}"
+            ),
+            "Сохранение нового файла экспорта…",
+            defer_success=True,
+        )
 
     @Slot()
     def import_statement(self) -> None:
