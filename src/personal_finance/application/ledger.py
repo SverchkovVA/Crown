@@ -4,6 +4,8 @@ from datetime import date
 from typing import Protocol
 
 from personal_finance.domain.ledger import AccountBalance, Operation, OperationDraft
+from personal_finance.domain.models import Money
+from personal_finance.domain.reconciliation import Reconciliation
 from personal_finance.domain.refunds import RefundCandidate
 
 
@@ -34,6 +36,10 @@ class LedgerRepository(Protocol):
         *,
         excluding_refund_id: str | None = None,
     ) -> list[RefundCandidate]: ...
+
+    def reconcile(
+        self, account_id: str, as_of: date, statement_balance: Money
+    ) -> Reconciliation: ...
 
     def check_integrity(self) -> None: ...
 
@@ -99,6 +105,9 @@ class Ledger:
 
     def balances(self, as_of: date | None = None) -> list[AccountBalance]:
         return self._repository.balances(as_of)
+
+    def reconcile(self, account_id: str, as_of: date, statement_balance: Money) -> Reconciliation:
+        return self._repository.reconcile(account_id, as_of, statement_balance)
 
     def check_integrity(self) -> None:
         self._repository.check_integrity()

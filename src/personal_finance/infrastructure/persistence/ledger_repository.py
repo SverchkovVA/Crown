@@ -21,6 +21,7 @@ from personal_finance.domain.ledger import (
     require_identifier,
 )
 from personal_finance.domain.models import Currency, Money
+from personal_finance.domain.reconciliation import Reconciliation, reconcile_snapshot
 from personal_finance.domain.refunds import (
     RefundCandidate,
     calculate_refund_candidates,
@@ -413,6 +414,25 @@ class SqlLedgerRepository:
             raise ValidationError("Укажите календарную дату остатка.")
         with self._mutex, self._engine.connect() as connection:
             return self._balances(connection, as_of)
+
+    def reconcile(self, account_id: str, as_of: date, statement_balance: Money) -> Reconciliation:
+        require_identifier(account_id)
+        if type(as_of) is not date or not isinstance(statement_balance, Money):
+            raise ValidationError("Укажите календарную дату и точный остаток выписки.")
+        with self._mutex, self._engine.connect() as connection:
+            balance = next(
+                (
+                    item.amount
+                    for item in self._balances(connection, as_of)
+                    if item.account_id == account_id
+                ),
+                None,
+            )
+            if balance is None:
+                raise ValidationError("Счёт для сверки не найден в этой книге.")
+            return reconcile_snapshot(
+                account_id, as_of, balance, statement_balance, self._current_operations(connection)
+            )
 
     def _validate_timeline(self, connection: Connection) -> None:
         rows = connection.execute(
