@@ -105,3 +105,17 @@ Windows-1251 проверяются и внутри self-test для будущ�
 - roadmap сохранял отдельный запрос разрешения для каждого этапа, несмотря на
   разрешение пользователя продолжать утверждённый план от 26.10.2026; уточнено
   действие разрешения без снятия ручной приёмки или изменения стека/объёма.
+
+## Дополнительный CI чистого ядра категорий
+
+После dev8 отдельно добавлены 37 тестов чистых подсказок. CI коммита 94a22fb:
+[push](https://github.com/SverchkovVA/Crown/actions/runs/40522472432) и
+[PR](https://github.com/SverchkovVA/Crown/actions/runs/40522484165) успешны на
+Linux и Windows. Linux push: 504 passed за 824,98 с. Скачанные Windows JSON/JUnit:
+504 теста за 872,573 с, 0 ошибок/отказов/пропусков, все коды 0 без тайм-аутов,
+обе самопроверки по 16 шагов прошли.
+Исходники SHA-256: `89cb1fe699c5f14f73456ddc244fb9fdf7392af30ad02ffa8e2268ad97b7b7d7`.
+CI EXE SHA-256: `e2bbcd1e0639e8a652c85040934eb97b45964d6aab801cb90b2a82631b3e3321`.
+[Каталог dev8 с ядром](https://github.com/SverchkovVA/Crown/actions/runs/40522472432/artifacts/12743636160)
+(51 183 969 байт, хранение 14 дней). SQL/GUI правил в него ещё не входят.
+Отчёт: `artifacts/ci-dev8-kernel-e63badbe6a8a4520aa4517817dac14e7/report/windows-check-20261027-143513-9301ced842164dd6a8f7a72ddef8321f/report.json`.
