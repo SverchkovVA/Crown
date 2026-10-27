@@ -10,6 +10,7 @@ import pytest
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.exporting import (
     ExportFormat,
+    ExportLabels,
     ExportPreview,
     ExportSettings,
     prepare_journal_export,
@@ -74,7 +75,7 @@ def test_csv_text_cannot_become_formula_but_json_keeps_original(note):
     raw = serialize_journal_export(preview, ExportFormat.CSV)
     assert raw.startswith(b"\xef\xbb\xbf")
     row = next(csv.DictReader(io.StringIO(raw.decode("utf-8-sig")), delimiter=";"))
-    assert row["note"] == "'" + note and row["amount_minor"] == "100"
+    assert row["Примечание"] == "'" + note and row["Сумма, мин. ед."] == "100"
     assert (
         json.loads(serialize_journal_export(preview, ExportFormat.JSON))["operations"][0]["note"]
         == note
@@ -101,9 +102,9 @@ def test_csv_quotes_multiline_and_preserves_parts_tags_and_exact_values():
             delimiter=";",
         )
     )
-    assert row["note"] == value.draft.note
-    assert [part["amount_minor"] for part in json.loads(row["parts_json"])] == ["40", "60"]
-    assert json.loads(row["tag_ids_json"]) == list(value.draft.tag_ids)
+    assert row["Примечание"] == value.draft.note
+    assert [part["amount_minor"] for part in json.loads(row["Части JSON"])] == ["40", "60"]
+    assert json.loads(row["ID тегов JSON"]) == list(value.draft.tag_ids)
     assert preview.rows()[0]["parts"][0]["amount_minor"] == "40"
 
 
@@ -160,3 +161,39 @@ def test_mutable_or_malformed_snapshot_cannot_bypass_preparation():
     invalid = Operation(uid(), uid(), "не финансовая операция")
     with pytest.raises(ValidationError):
         prepare_journal_export((invalid,), ExportSettings())
+
+
+def test_names_are_optional_and_csv_names_cannot_become_formulas():
+    value = operation()
+    secret_name = "=ПРОВЕРОЧНОЕ_ИМЯ"
+    labels = ExportLabels(accounts=((value.draft.account_id, secret_name),))
+    preview = replace(prepare_journal_export((value,), ExportSettings()), labels=labels)
+    row = next(
+        csv.DictReader(
+            io.StringIO(serialize_journal_export(preview, ExportFormat.CSV).decode("utf-8-sig")),
+            delimiter=";",
+        )
+    )
+    assert row["Счёт"] == "'" + secret_name
+    assert row["Сумма"] == "1,00" and row["Вид операции"] == "Расход"
+    private = replace(preview, settings=ExportSettings(include_names=False), source_book_id=uid())
+    for format in ExportFormat:
+        raw = serialize_journal_export(private, format)
+        assert secret_name.encode() not in raw
+        assert private.source_book_id.encode() not in raw
+    assert (
+        json.loads(serialize_journal_export(preview, ExportFormat.JSON))["operations"][0][
+            "account_name"
+        ]
+        == secret_name
+    )
+
+
+def test_export_labels_are_immutable_and_unselected_labels_do_not_leak():
+    value = operation()
+    unrelated = "НЕ_ВЫБРАННОЕ_НАЗВАНИЕ"
+    labels = ExportLabels(accounts=((uid(), unrelated),))
+    preview = replace(prepare_journal_export((value,), ExportSettings()), labels=labels)
+    assert unrelated.encode() not in serialize_journal_export(preview, ExportFormat.JSON)
+    with pytest.raises(ValidationError):
+        ExportLabels(accounts=[(uid(), unrelated)])

@@ -87,6 +87,15 @@ def _header(reader: Iterator[list[str]]) -> list[str]:
         or any(not c.strip() or len(c) > 120 or any(ord(s) < 32 for s in c) for c in header)
     ):
         raise ValidationError("CSV требует 2–100 непустых уникальных заголовков.")
+    journal_signatures = (
+        {"ID операции", "ID версии", "Сумма, мин. ед.", "Дробных знаков валюты"},
+        {"operation_id", "revision_id", "amount_minor", "currency_exponent"},
+    )
+    if any(signature.issubset(header) for signature in journal_signatures):
+        raise ValidationError(
+            "Формат экспорта журнала Crown не поддерживается импортом выписки. "
+            "Для переноса книги используйте проверенную резервную копию."
+        )
     return header
 
 

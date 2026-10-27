@@ -2,6 +2,7 @@ import socket
 from datetime import date
 
 from personal_finance.application.vault import create_vault
+from personal_finance.domain.exporting import ExportFormat, ExportSettings
 from personal_finance.domain.imports import ImportSelection, ImportStatus
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
@@ -63,6 +64,10 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
                 ),
             ),
         )
+        assert source.exporting is not None
+        preview = source.exporting.preview(ExportSettings())
+        source.exporting.save(tmp_path / "offline.json", preview, ExportFormat.JSON)
+        source.exporting.save(tmp_path / "offline.csv", preview, ExportFormat.CSV)
         backup = create_backup(source, tmp_path / "offline.pfbackup", "пароль автономной копии")
         restored, _ = restore_backup(
             backup,

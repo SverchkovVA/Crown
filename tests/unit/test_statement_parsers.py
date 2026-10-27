@@ -224,3 +224,49 @@ def test_source_key_without_id_keeps_identical_legitimate_rows_distinct():
     document = parse_csv(b"a;b\n15.01.2026;-1,00\n15.01.2026;-1,00\n", CsvMapping("a", "b"))
     assert document.rows[0].payload_hash == document.rows[1].payload_hash
     assert document.source_key(document.rows[0]) != document.source_key(document.rows[1])
+
+
+def test_crown_journal_csv_is_rejected_before_bank_import_mapping():
+    from uuid import uuid4
+
+    from personal_finance.domain.exporting import (
+        ExportFormat,
+        ExportSettings,
+        prepare_journal_export,
+        serialize_journal_export,
+    )
+    from personal_finance.domain.ledger import Operation, OperationDraft, OperationKind
+    from personal_finance.domain.models import Money
+
+    operation = Operation(
+        str(uuid4()),
+        str(uuid4()),
+        OperationDraft(
+            OperationKind.EXPENSE,
+            date(2026, 1, 15),
+            str(uuid4()),
+            Money(100),
+            str(uuid4()),
+        ),
+    )
+    contents = serialize_journal_export(
+        prepare_journal_export((operation,), ExportSettings()),
+        ExportFormat.CSV,
+    )
+    with pytest.raises(ValidationError, match="экспорта журнала Crown"):
+        csv_columns(contents)
+    with pytest.raises(ValidationError, match="экспорта журнала Crown"):
+        parse_csv(contents, CsvMapping("Дата", "Сумма", date_format="%Y-%m-%d"))
+
+
+def test_earlier_machine_journal_signature_is_also_not_a_bank_statement():
+    contents = b"operation_id;revision_id;amount_minor;currency_exponent\n"
+    with pytest.raises(ValidationError, match="экспорта журнала Crown"):
+        csv_columns(contents)
+
+
+def test_bank_csv_with_transaction_id_is_not_confused_with_journal_export():
+    contents = "Дата;Сумма;ID операции\n15.01.2026;-100,00;bank-id\n".encode()
+    document = parse_csv(contents, CsvMapping("Дата", "Сумма", id_column="ID операции"))
+    assert document.rows[0].amount.minor == -10000
+    assert document.rows[0].external_id == "bank-id" and not document.issues

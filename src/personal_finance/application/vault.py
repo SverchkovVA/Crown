@@ -14,6 +14,7 @@ from sqlalchemy.exc import DatabaseError
 from sqlcipher3 import dbapi2 as sqlcipher
 
 from personal_finance.application.catalog import Catalog, utc_now
+from personal_finance.application.exporting import Exporting
 from personal_finance.application.importing import Importing
 from personal_finance.application.ledger import Ledger
 from personal_finance.application.organization import Organization
@@ -27,6 +28,7 @@ from personal_finance.infrastructure.persistence.database import (
     encrypted_snapshot,
     make_engine,
 )
+from personal_finance.infrastructure.persistence.export_repository import SqlExportRepository
 from personal_finance.infrastructure.persistence.import_repository import SqlImportRepository
 from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
 from personal_finance.infrastructure.persistence.migration_runner import (
@@ -118,6 +120,17 @@ class VaultSession:
                 else None
             )
             self.ledger = Ledger(ledger_repository) if ledger_repository is not None else None
+            self.exporting = (
+                Exporting(
+                    SqlExportRepository(self.engine, book_id, self.mutex, ledger_repository),
+                    book_id,
+                    root,
+                    self.mutex,
+                    self.ensure_open,
+                )
+                if ledger_repository is not None
+                else None
+            )
             self.importing = (
                 Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
                 if self.schema_revision == "0008" and ledger_repository is not None
