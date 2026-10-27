@@ -14,6 +14,7 @@ from sqlalchemy.exc import DatabaseError
 from sqlcipher3 import dbapi2 as sqlcipher
 
 from personal_finance.application.catalog import Catalog, utc_now
+from personal_finance.application.importing import Importing
 from personal_finance.application.ledger import Ledger
 from personal_finance.application.organization import Organization
 from personal_finance.application.periods import Periods
@@ -26,6 +27,7 @@ from personal_finance.infrastructure.persistence.database import (
     encrypted_snapshot,
     make_engine,
 )
+from personal_finance.infrastructure.persistence.import_repository import SqlImportRepository
 from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
 from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
@@ -100,32 +102,37 @@ class VaultSession:
             self.catalog = Catalog(
                 SqlCatalogRepository(self.engine, book_id, self.replica_id, self.mutex)
             )
-            self.ledger = (
-                Ledger(
-                    SqlLedgerRepository(
-                        self.engine,
-                        book_id,
-                        self.replica_id,
-                        self.mutex,
-                        supports_splits=self.schema_revision in ("0004", "0005", "0006", "0007"),
-                        supports_refunds=self.schema_revision in ("0005", "0006", "0007"),
-                        supports_periods=self.schema_revision in ("0006", "0007"),
-                        supports_tags=self.schema_revision == "0007",
-                    )
+            ledger_repository = (
+                SqlLedgerRepository(
+                    self.engine,
+                    book_id,
+                    self.replica_id,
+                    self.mutex,
+                    supports_splits=self.schema_revision
+                    in ("0004", "0005", "0006", "0007", "0008"),
+                    supports_refunds=self.schema_revision in ("0005", "0006", "0007", "0008"),
+                    supports_periods=self.schema_revision in ("0006", "0007", "0008"),
+                    supports_tags=self.schema_revision in ("0007", "0008"),
                 )
-                if self.schema_revision in ("0003", "0004", "0005", "0006", "0007")
+                if self.schema_revision in ("0003", "0004", "0005", "0006", "0007", "0008")
+                else None
+            )
+            self.ledger = Ledger(ledger_repository) if ledger_repository is not None else None
+            self.importing = (
+                Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
+                if self.schema_revision == "0008" and ledger_repository is not None
                 else None
             )
             self.periods = (
                 Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision in ("0006", "0007")
+                if self.schema_revision in ("0006", "0007", "0008")
                 else None
             )
             self.organization = (
                 Organization(
                     SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision == "0007"
+                if self.schema_revision in ("0007", "0008")
                 else None
             )
         except Exception:
@@ -164,6 +171,8 @@ class VaultSession:
                 self.periods.check_integrity()
             if self.ledger is not None:
                 self.ledger.check_integrity()
+            if self.importing is not None:
+                self.importing.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:

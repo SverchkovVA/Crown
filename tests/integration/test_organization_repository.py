@@ -319,8 +319,8 @@ def test_source6_is_unchanged_and_only_restored_copy_supports_tags(tmp_path, mon
         assert source.ledger.search(OperationQuery(account_ids=(account.id,))) == [opening]
         backup = create_backup(source, tmp_path / "old6.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0006"
-        restored, _ = restore_backup(backup, tmp_path / "new7.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0007" and restored.organization is not None
+        restored, _ = restore_backup(backup, tmp_path / "new8.pfvault", BACKUP_PASSWORD, PASSWORD)
+        assert restored.schema_revision == "0008" and restored.organization is not None
         assert restored.ledger.add(value, command_id=command) == opening
         restored.organization.add_tag("Новый тег")
         assert restored.periods.states()[0].is_closed

@@ -574,6 +574,29 @@ class SqlLedgerRepository:
         is_deleted: bool = False,
         command_id: str | None = None,
     ) -> Operation:
+        with self._mutex, self._engine.begin() as connection:
+            return self._save_in_transaction(
+                connection,
+                draft,
+                operation_id=operation_id,
+                expected_revision_id=expected_revision_id,
+                is_deleted=is_deleted,
+                command_id=command_id,
+            )
+
+    def _save_in_transaction(
+        self,
+        connection: Connection,
+        draft: OperationDraft,
+        *,
+        operation_id: str | None = None,
+        expected_revision_id: str | None = None,
+        is_deleted: bool = False,
+        command_id: str | None = None,
+        group_id: str | None = None,
+        validate_state: bool = True,
+    ) -> Operation:
+        """Общий путь записи; транзакцией и RLock владеет вызывающий адаптер."""
         if not isinstance(draft, OperationDraft) or type(is_deleted) is not bool:
             raise ValidationError("Некорректное действие с финансовой операцией.")
         if draft.tag_ids and not self.supports_tags:
@@ -603,166 +626,171 @@ class SqlLedgerRepository:
                 }
             )
         ).hexdigest()
-        with self._mutex, self._engine.begin() as connection:
-            receipt = (
-                connection.execute(
-                    text("""SELECT command_hash,revision_id
-                FROM command_receipts WHERE id=:id"""),
-                    {"id": command_id},
-                )
-                .mappings()
-                .first()
+        receipt = (
+            connection.execute(
+                text("""SELECT command_hash,revision_id
+            FROM command_receipts WHERE id=:id"""),
+                {"id": command_id},
             )
-            if receipt:
-                if receipt["command_hash"] != digest:
-                    raise ValidationError(
-                        "Идентификатор действия уже использован для других данных."
-                    )
-                return self._revision(connection, receipt["revision_id"])
-            if self._supports_periods:
-                dates = [draft.occurred_on]
-                if operation_id is not None:
-                    row = (
-                        connection.execute(
-                            text(self._select() + " AND e.id=:id AND r.id=e.accepted_revision_id"),
-                            {"book": self._book_id, "id": operation_id},
-                        )
-                        .mappings()
-                        .first()
-                    )
-                    if row is not None:
-                        dates.append(date.fromisoformat(row["occurred_on"]))
-                require_open_dates(connection, self._book_id, *dates)
-            self._require_references(connection, draft, require_active=not is_deleted)
-            self._require_refund_source(connection, draft, current=not is_deleted)
+            .mappings()
+            .first()
+        )
+        if receipt:
+            if receipt["command_hash"] != digest:
+                raise ValidationError("Идентификатор действия уже использован для других данных.")
+            return self._revision(connection, receipt["revision_id"])
+        if self._supports_periods:
+            dates = [draft.occurred_on]
             if operation_id is not None:
-                current = (
+                row = (
                     connection.execute(
-                        text("""SELECT e.accepted_revision_id,r.is_deleted
-                    FROM entities e JOIN entity_revisions r ON r.id=e.accepted_revision_id
-                    WHERE e.id=:id AND e.book_id=:book AND e.kind='operation'"""),
-                        {"id": operation_id, "book": self._book_id},
+                        text(self._select() + " AND e.id=:id AND r.id=e.accepted_revision_id"),
+                        {"book": self._book_id, "id": operation_id},
                     )
                     .mappings()
                     .first()
                 )
-                if not current or current["accepted_revision_id"] != expected_revision_id:
-                    raise ValidationError(
-                        "Операция уже изменена. Обновите журнал и повторите действие."
-                    )
-                if current["is_deleted"]:
-                    raise ValidationError("Операция уже удалена; её история сохранена.")
-            else:
-                operation_id = str(uuid4())
+                if row is not None:
+                    dates.append(date.fromisoformat(row["occurred_on"]))
+            require_open_dates(connection, self._book_id, *dates)
+        self._require_references(connection, draft, require_active=not is_deleted)
+        self._require_refund_source(connection, draft, current=not is_deleted)
+        if operation_id is not None:
+            current = (
                 connection.execute(
-                    text("INSERT INTO entities(id,book_id,kind) VALUES (:id,:book,'operation')"),
+                    text("""SELECT e.accepted_revision_id,r.is_deleted
+                FROM entities e JOIN entity_revisions r ON r.id=e.accepted_revision_id
+                WHERE e.id=:id AND e.book_id=:book AND e.kind='operation'"""),
                     {"id": operation_id, "book": self._book_id},
                 )
-            self._require_tags(
-                connection,
-                draft.tag_ids,
-                previous_revision_id=expected_revision_id,
-                require_active=not is_deleted,
+                .mappings()
+                .first()
             )
-            revision_id, group_id = str(uuid4()), str(uuid4())
-            sequence: int = connection.execute(
-                text("""UPDATE replicas SET sequence=sequence+1
-                WHERE id=:id AND book_id=:book RETURNING sequence"""),
-                {"id": self._replica_id, "book": self._book_id},
-            ).scalar_one()
-            created = utc_now()
+            if not current or current["accepted_revision_id"] != expected_revision_id:
+                raise ValidationError(
+                    "Операция уже изменена. Обновите журнал и повторите действие."
+                )
+            if current["is_deleted"]:
+                raise ValidationError("Операция уже удалена; её история сохранена.")
+        else:
+            operation_id = str(uuid4())
+            connection.execute(
+                text("INSERT INTO entities(id,book_id,kind) VALUES (:id,:book,'operation')"),
+                {"id": operation_id, "book": self._book_id},
+            )
+        self._require_tags(
+            connection,
+            draft.tag_ids,
+            previous_revision_id=expected_revision_id,
+            require_active=not is_deleted,
+        )
+        new_group = group_id is None
+        revision_id, group_id = str(uuid4()), group_id or str(uuid4())
+        sequence: int = connection.execute(
+            text("""UPDATE replicas SET sequence=sequence+1
+            WHERE id=:id AND book_id=:book RETURNING sequence"""),
+            {"id": self._replica_id, "book": self._book_id},
+        ).scalar_one()
+        created = utc_now()
+        if new_group:
             connection.execute(
                 text(
                     "INSERT INTO change_groups(id,book_id,created_at) VALUES (:id,:book,:created)"
                 ),
                 {"id": group_id, "book": self._book_id, "created": created},
             )
+        elif (
             connection.execute(
-                text("""INSERT INTO entity_revisions
-                (id,entity_id,replica_id,sequence,group_id,created_at,content_hash,is_deleted)
-                VALUES (:id,:entity,:replica,:sequence,:group_id,:created,:hash,:deleted)"""),
-                {
-                    "id": revision_id,
-                    "entity": operation_id,
-                    "replica": self._replica_id,
-                    "sequence": sequence,
-                    "group_id": group_id,
-                    "created": created,
-                    "hash": revision_hash(draft, is_deleted, expected_revision_id),
-                    "deleted": int(is_deleted),
-                },
-            )
-            typed_columns = COLUMNS + (
-                ("refund_of", "refund_of_revision_id") if self.supports_refunds else ()
-            )
-            columns = ",".join(("revision_id", *typed_columns))
-            values = ",".join(":" + column for column in ("revision_id", *typed_columns))
-            payload = operation_payload(draft)
-            connection.execute(
-                text(f"INSERT INTO operation_revisions ({columns}) VALUES ({values})"),
-                {"revision_id": revision_id, **{key: payload.get(key) for key in typed_columns}},
-            )
-            if draft.parts:
-                connection.execute(
-                    text(
-                        "INSERT INTO operation_parts "
-                        "(revision_id,position,category_id,amount_minor) "
-                        "VALUES (:revision,:position,:category,:amount)"
-                    ),
-                    [
-                        {
-                            "revision": revision_id,
-                            "position": index,
-                            "category": part.category_id,
-                            "amount": part.amount.minor,
-                        }
-                        for index, part in enumerate(draft.parts)
-                    ],
-                )
-            self._insert_postings(connection, revision_id, draft)
-            self._insert_tags(connection, revision_id, draft.tag_ids)
-            if expected_revision_id:
-                connection.execute(
-                    text(
-                        "INSERT INTO revision_parents(revision_id,parent_id) "
-                        "VALUES (:revision,:parent)"
-                    ),
-                    {"revision": revision_id, "parent": expected_revision_id},
-                )
-            connection.execute(
-                text("UPDATE entity_revisions SET sealed=1 WHERE id=:id"), {"id": revision_id}
-            )
-            connection.execute(
-                text("UPDATE entities SET accepted_revision_id=:revision WHERE id=:id"),
-                {"revision": revision_id, "id": operation_id},
-            )
-            self._validate_state(connection)
-            connection.execute(
-                text("DELETE FROM revision_heads WHERE entity_id=:entity"), {"entity": operation_id}
-            )
+                text("SELECT 1 FROM change_groups WHERE id=:id AND book_id=:book"),
+                {"id": group_id, "book": self._book_id},
+            ).first()
+            is None
+        ):
+            raise ValidationError("Группа импорта не найдена в этой книге.")
+        connection.execute(
+            text("""INSERT INTO entity_revisions
+            (id,entity_id,replica_id,sequence,group_id,created_at,content_hash,is_deleted)
+            VALUES (:id,:entity,:replica,:sequence,:group_id,:created,:hash,:deleted)"""),
+            {
+                "id": revision_id,
+                "entity": operation_id,
+                "replica": self._replica_id,
+                "sequence": sequence,
+                "group_id": group_id,
+                "created": created,
+                "hash": revision_hash(draft, is_deleted, expected_revision_id),
+                "deleted": int(is_deleted),
+            },
+        )
+        typed_columns = COLUMNS + (
+            ("refund_of", "refund_of_revision_id") if self.supports_refunds else ()
+        )
+        columns = ",".join(("revision_id", *typed_columns))
+        values = ",".join(":" + column for column in ("revision_id", *typed_columns))
+        payload = operation_payload(draft)
+        connection.execute(
+            text(f"INSERT INTO operation_revisions ({columns}) VALUES ({values})"),
+            {"revision_id": revision_id, **{key: payload.get(key) for key in typed_columns}},
+        )
+        if draft.parts:
             connection.execute(
                 text(
-                    "INSERT INTO revision_heads(entity_id,revision_id) VALUES (:entity,:revision)"
+                    "INSERT INTO operation_parts "
+                    "(revision_id,position,category_id,amount_minor) "
+                    "VALUES (:revision,:position,:category,:amount)"
                 ),
-                {"entity": operation_id, "revision": revision_id},
+                [
+                    {
+                        "revision": revision_id,
+                        "position": index,
+                        "category": part.category_id,
+                        "amount": part.amount.minor,
+                    }
+                    for index, part in enumerate(draft.parts)
+                ],
             )
+        self._insert_postings(connection, revision_id, draft)
+        self._insert_tags(connection, revision_id, draft.tag_ids)
+        if expected_revision_id:
             connection.execute(
-                text("""INSERT INTO change_log(id,replica_id,sequence,group_id,revision_id)
-                VALUES (:id,:replica,:sequence,:group_id,:revision)"""),
-                {
-                    "id": str(uuid4()),
-                    "replica": self._replica_id,
-                    "sequence": sequence,
-                    "group_id": group_id,
-                    "revision": revision_id,
-                },
+                text(
+                    "INSERT INTO revision_parents(revision_id,parent_id) VALUES (:revision,:parent)"
+                ),
+                {"revision": revision_id, "parent": expected_revision_id},
             )
-            connection.execute(
-                text("""INSERT INTO command_receipts(id,command_hash,entity_id,revision_id)
-                VALUES (:id,:hash,:entity,:revision)"""),
-                {"id": command_id, "hash": digest, "entity": operation_id, "revision": revision_id},
-            )
-            return Operation(operation_id, revision_id, draft, is_deleted)
+        connection.execute(
+            text("UPDATE entity_revisions SET sealed=1 WHERE id=:id"), {"id": revision_id}
+        )
+        connection.execute(
+            text("UPDATE entities SET accepted_revision_id=:revision WHERE id=:id"),
+            {"revision": revision_id, "id": operation_id},
+        )
+        if validate_state:
+            self._validate_state(connection)
+        connection.execute(
+            text("DELETE FROM revision_heads WHERE entity_id=:entity"), {"entity": operation_id}
+        )
+        connection.execute(
+            text("INSERT INTO revision_heads(entity_id,revision_id) VALUES (:entity,:revision)"),
+            {"entity": operation_id, "revision": revision_id},
+        )
+        connection.execute(
+            text("""INSERT INTO change_log(id,replica_id,sequence,group_id,revision_id)
+            VALUES (:id,:replica,:sequence,:group_id,:revision)"""),
+            {
+                "id": str(uuid4()),
+                "replica": self._replica_id,
+                "sequence": sequence,
+                "group_id": group_id,
+                "revision": revision_id,
+            },
+        )
+        connection.execute(
+            text("""INSERT INTO command_receipts(id,command_hash,entity_id,revision_id)
+            VALUES (:id,:hash,:entity,:revision)"""),
+            {"id": command_id, "hash": digest, "entity": operation_id, "revision": revision_id},
+        )
+        return Operation(operation_id, revision_id, draft, is_deleted)
 
     def check_integrity(self) -> None:
         with self._mutex, self._engine.connect() as connection:
