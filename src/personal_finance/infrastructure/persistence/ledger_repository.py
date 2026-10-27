@@ -21,6 +21,7 @@ from personal_finance.domain.ledger import (
     require_identifier,
 )
 from personal_finance.domain.models import Currency, Money
+from personal_finance.domain.query import OperationQuery
 from personal_finance.domain.reconciliation import Reconciliation, reconcile_snapshot
 from personal_finance.domain.refunds import (
     RefundCandidate,
@@ -67,6 +68,8 @@ def operation_payload(draft: OperationDraft) -> dict[str, Any]:
     if draft.refund_of is not None:
         payload["refund_of"] = draft.refund_of
         payload["refund_of_revision_id"] = draft.refund_of_revision_id
+    if draft.tag_ids:
+        payload["tag_ids"] = list(draft.tag_ids)
     return payload
 
 
@@ -98,6 +101,7 @@ class SqlLedgerRepository:
         supports_splits: bool = True,
         supports_refunds: bool = False,
         supports_periods: bool = False,
+        supports_tags: bool = False,
     ) -> None:
         self._engine = engine
         self._book_id = book_id
@@ -106,6 +110,7 @@ class SqlLedgerRepository:
         self.supports_splits = supports_splits
         self.supports_refunds = supports_refunds
         self._supports_periods = supports_periods
+        self.supports_tags = supports_tags
 
     def _record(self, connection: Connection, row: RowMapping) -> Operation:
         currency = Currency(row["currency"], row["exponent"])
@@ -144,6 +149,17 @@ class SqlLedgerRepository:
                 parts,
                 row["refund_of"],
                 row["refund_of_revision_id"],
+                tuple(
+                    connection.execute(
+                        text(
+                            "SELECT tag_id FROM operation_tags WHERE revision_id=:revision "
+                            "ORDER BY tag_id"
+                        ),
+                        {"revision": row["revision_id"]},
+                    ).scalars()
+                )
+                if self.supports_tags
+                else (),
             ),
             bool(row["is_deleted"]),
         )
@@ -285,6 +301,71 @@ class SqlLedgerRepository:
                 raise ValidationError(
                     "Исходный расход изменён. Обновите список и повторите возврат."
                 )
+
+    def search(self, query: OperationQuery) -> list[Operation]:
+        if not isinstance(query, OperationQuery):
+            raise ValidationError("Некорректный фильтр журнала.")
+        if query.tag_ids and not self.supports_tags:
+            raise ValidationError("Для тегов создайте копию и восстановите её в новую папку.")
+        with self._mutex, self._engine.connect() as connection:
+            institutions: dict[str, str | None] = {
+                row["id"]: row["institution_id"]
+                for row in connection.execute(
+                    text("""SELECT e.id,a.institution_id
+                    FROM entities e JOIN account_revisions a ON a.revision_id=e.accepted_revision_id
+                    WHERE e.book_id=:book AND e.kind='account'"""),
+                    {"book": self._book_id},
+                ).mappings()
+            }
+            return [
+                value
+                for value in self._current_operations(connection)
+                if query.matches(value, institutions)
+            ]
+
+    def _require_tags(
+        self,
+        connection: Connection,
+        tag_ids: tuple[str, ...],
+        *,
+        previous_revision_id: str | None = None,
+        require_active: bool = True,
+    ) -> None:
+        if not self.supports_tags:
+            if tag_ids:
+                raise ValidationError("Теги не поддерживаются схемой этой книги.")
+            return
+        previous: set[str] = (
+            set(
+                connection.execute(
+                    text("SELECT tag_id FROM operation_tags WHERE revision_id=:revision"),
+                    {"revision": previous_revision_id},
+                ).scalars()
+            )
+            if previous_revision_id
+            else set()
+        )
+        for identifier in tag_ids:
+            valid = connection.execute(
+                text("""SELECT 1 FROM entities e JOIN entity_revisions r
+                ON r.id=e.accepted_revision_id JOIN tag_revisions p ON p.revision_id=r.id
+                WHERE e.id=:id AND e.book_id=:book AND e.kind='tag' AND r.sealed=1
+                AND (:active=0 OR r.is_deleted=0)"""),
+                {
+                    "id": identifier,
+                    "book": self._book_id,
+                    "active": int(require_active and identifier not in previous),
+                },
+            ).first()
+            if valid is None:
+                raise ValidationError("Тег не найден в этой книге или находится в архиве.")
+
+    def _insert_tags(self, connection: Connection, revision: str, tag_ids: tuple[str, ...]) -> None:
+        if tag_ids:
+            connection.execute(
+                text("INSERT INTO operation_tags(revision_id,tag_id) VALUES (:revision,:tag)"),
+                [{"revision": revision, "tag": identifier} for identifier in tag_ids],
+            )
 
     def _require_references(
         self,
@@ -495,6 +576,8 @@ class SqlLedgerRepository:
     ) -> Operation:
         if not isinstance(draft, OperationDraft) or type(is_deleted) is not bool:
             raise ValidationError("Некорректное действие с финансовой операцией.")
+        if draft.tag_ids and not self.supports_tags:
+            raise ValidationError("Для тегов создайте копию и восстановите её в новую папку.")
         if draft.kind == OperationKind.REFUND and not self.supports_refunds:
             raise ValidationError("Для возвратов создайте копию и восстановите её в новую папку.")
         if draft.parts and not self.supports_splits:
@@ -575,6 +658,12 @@ class SqlLedgerRepository:
                     text("INSERT INTO entities(id,book_id,kind) VALUES (:id,:book,'operation')"),
                     {"id": operation_id, "book": self._book_id},
                 )
+            self._require_tags(
+                connection,
+                draft.tag_ids,
+                previous_revision_id=expected_revision_id,
+                require_active=not is_deleted,
+            )
             revision_id, group_id = str(uuid4()), str(uuid4())
             sequence: int = connection.execute(
                 text("""UPDATE replicas SET sequence=sequence+1
@@ -631,6 +720,7 @@ class SqlLedgerRepository:
                     ],
                 )
             self._insert_postings(connection, revision_id, draft)
+            self._insert_tags(connection, revision_id, draft.tag_ids)
             if expected_revision_id:
                 connection.execute(
                     text(
@@ -704,6 +794,7 @@ class SqlLedgerRepository:
                         raise VaultError("Содержимое финансовой версии не соответствует хешу.")
                     self._require_references(connection, operation.draft, require_active=False)
                     self._require_refund_source(connection, operation.draft, current=False)
+                    self._require_tags(connection, operation.draft.tag_ids, require_active=False)
                     stored = list(
                         connection.execute(
                             text("""SELECT p.position,l.id,l.role,l.reference_id,

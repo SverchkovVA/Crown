@@ -52,7 +52,7 @@ def test_old_book_opens_unchanged_and_restore_upgrades_only_new_folder(legacy_se
         "новый пароль новой схемы",
     )
     try:
-        assert restored.schema_revision == "0006"
+        assert restored.schema_revision == "0007"
         assert restored.book_id == source.book_id
         assert restored.replica_id != source.replica_id
         assert restored.catalog.accounts() == source.catalog.accounts()

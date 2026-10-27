@@ -5,6 +5,7 @@ from typing import Protocol
 
 from personal_finance.domain.ledger import AccountBalance, Operation, OperationDraft
 from personal_finance.domain.models import Money
+from personal_finance.domain.query import OperationQuery
 from personal_finance.domain.reconciliation import Reconciliation
 from personal_finance.domain.refunds import RefundCandidate
 
@@ -12,6 +13,7 @@ from personal_finance.domain.refunds import RefundCandidate
 class LedgerRepository(Protocol):
     supports_splits: bool
     supports_refunds: bool
+    supports_tags: bool
 
     def save(
         self,
@@ -41,6 +43,8 @@ class LedgerRepository(Protocol):
         self, account_id: str, as_of: date, statement_balance: Money
     ) -> Reconciliation: ...
 
+    def search(self, query: OperationQuery) -> list[Operation]: ...
+
     def check_integrity(self) -> None: ...
 
 
@@ -55,6 +59,13 @@ class Ledger:
     @property
     def supports_refunds(self) -> bool:
         return self._repository.supports_refunds
+
+    @property
+    def supports_tags(self) -> bool:
+        return self._repository.supports_tags
+
+    def search(self, query: OperationQuery) -> list[Operation]:
+        return self._repository.search(query)
 
     def refund_candidates(
         self,

@@ -85,6 +85,7 @@ class OperationDraft:
     parts: tuple[OperationPart, ...] = ()
     refund_of: str | None = None
     refund_of_revision_id: str | None = None
+    tag_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, OperationKind):
@@ -101,6 +102,13 @@ class OperationDraft:
         ):
             if value is not None:
                 require_identifier(value)
+        if not isinstance(self.tag_ids, tuple) or len(self.tag_ids) > 100:
+            raise ValidationError("Укажите не более 100 тегов операции.")
+        for identifier in self.tag_ids:
+            require_identifier(identifier)
+        if len(set(self.tag_ids)) != len(self.tag_ids):
+            raise ValidationError("Тег операции повторяется.")
+        object.__setattr__(self, "tag_ids", tuple(sorted(self.tag_ids)))
         if not isinstance(self.amount, Money) or not isinstance(self.fee, Money):
             raise ValidationError("Сумма операции должна быть точным денежным значением.")
         if self.amount.currency != self.fee.currency:

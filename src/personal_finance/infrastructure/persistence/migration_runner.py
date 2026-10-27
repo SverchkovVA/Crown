@@ -9,8 +9,8 @@ from sqlalchemy import Engine
 
 from personal_finance.domain.errors import UnsupportedFormat, VaultError
 
-SCHEMA_HEAD = "0006"
-SUPPORTED_SCHEMAS = ("0002", "0003", "0004", "0005", SCHEMA_HEAD)
+SCHEMA_HEAD = "0007"
+SUPPORTED_SCHEMAS = ("0002", "0003", "0004", "0005", "0006", SCHEMA_HEAD)
 
 
 def _configuration() -> Config:

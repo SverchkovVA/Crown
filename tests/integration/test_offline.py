@@ -4,6 +4,7 @@ from datetime import date
 from personal_finance.application.vault import create_vault
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
+from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 
 
@@ -17,6 +18,8 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
     try:
         account = source.catalog.add_account("Наличные", AccountKind.CASH)
         categories = [c for c in source.catalog.categories() if c.kind == CategoryKind.INCOME]
+        assert source.organization is not None
+        tag = source.organization.add_tag("Автономный тег")
         assert source.ledger is not None
         operation = source.ledger.add(
             OperationDraft(
@@ -24,12 +27,17 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
                 date(2026, 10, 26),
                 account.id,
                 Money(12345),
+                tag_ids=(tag.id,),
                 parts=(
                     OperationPart(categories[0].id, Money(10000)),
                     OperationPart(categories[1].id, Money(2345)),
                 ),
             )
         )
+        saved = source.organization.save_filter(
+            "Автономный фильтр", OperationQuery(tag_ids=(tag.id,))
+        )
+        assert source.ledger.search(saved.query) == [operation]
         backup = create_backup(source, tmp_path / "offline.pfbackup", "пароль автономной копии")
         restored, _ = restore_backup(
             backup,
@@ -41,6 +49,9 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
             assert restored.ledger is not None
             assert restored.ledger.operations() == [operation]
             assert restored.ledger.balances(date(2026, 10, 26))[0].amount == Money(12345)
+            assert restored.organization is not None
+            assert restored.organization.filters() == [saved]
+            assert restored.ledger.search(saved.query) == [operation]
             restored.check_integrity()
         finally:
             restored.close()
