@@ -52,7 +52,18 @@ CSV: **467 тестов за 582.693 с**, без ошибок/пропуско�
 `artifacts/windows-check-20261027-165921-5d04a15bcf044c9bb7f2669a4de76330/report.json` и `tests.xml`.
 Исходники SHA-256: `a490c985cb2a90ea81421fe967ba012deaaa5ebfa7371ab6242bd6cbfb057dff`.
 EXE SHA-256: `335567f64e4c5ba9b0a1c56d93d0e96dfa82979485d2958033ec73f4d3ff28f7`.
-Linux/Windows CI этой поставки ещё не завершён; его успех пока не утверждается.
+Оба CI коммита 90b326e успешны: [push](https://github.com/SverchkovVA/Crown/actions/runs/40519882591)
+и [PR](https://github.com/SverchkovVA/Crown/actions/runs/40519892976), Linux и Windows.
+Linux push: 467 passed за 562,00 с. Скачанные JSON/JUnit Windows push:
+467 тестов за 607,465 с, 0 ошибок/отказов/пропусков, все десять кодов 0 без
+тайм-аутов, обе самопроверки по 16 шагов прошли, frozen=true.
+Отпечаток исходников совпал с локальным прогоном выше.
+CI EXE SHA-256: `272c80cfb26faee19de3589e258397aaa49a0e841481ffb6c93cdcbe6def30ac`.
+[Готовый полный каталог Windows](https://github.com/SverchkovVA/Crown/actions/runs/40519882591/artifacts/12741403563)
+(51 183 470 байт, хранение 14 дней). Распаковывать целиком вместе с _internal.
+Технический отчёт: `artifacts/ci-dev8-final-447ca87a4a66474b90e9902c5aba55c7/report/windows-check-20261027-141851-8203959457434513bc785001dfda9ace/report.json`.
+Подготовленное после этого ядро правил категорий проверялось отдельно:
+[classification-rules-draft](classification-rules-draft.md). Оно не входило в этот EXE.
 
 Нативный сценарий настройки/предпросмотра/сохранения CSV и JSON пройден на
 одноразовых книгах при коэффициентах Qt 1/1,25/1,5, без активации окон.
