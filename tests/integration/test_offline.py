@@ -1,7 +1,9 @@
 import socket
 from datetime import date
+from uuid import uuid4
 
 from personal_finance.application.vault import create_vault
+from personal_finance.domain.classification import CategoryRule, ClassificationInput
 from personal_finance.domain.exporting import ExportFormat, ExportSettings
 from personal_finance.domain.imports import ImportSelection, ImportStatus
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
@@ -41,6 +43,22 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
             "Автономный фильтр", OperationQuery(tag_ids=(tag.id,))
         )
         assert source.ledger.search(saved.query) == [operation]
+        assert source.classification is not None
+        rule = source.classification.save(
+            CategoryRule(
+                str(uuid4()),
+                "Автономное правило",
+                OperationKind.INCOME,
+                "автоном",
+                categories[0].id,
+            )
+        )
+        assert (
+            source.classification.snapshot()
+            .suggest(ClassificationInput(OperationKind.INCOME, account.id, "АВТОНОМНЫЙ доход"))
+            .category_id
+            == categories[0].id
+        )
         assert source.importing is not None
         document = source.importing.parse_csv(
             b"date;amount;id\n2026-10-26;1.00;offline-id\n",
@@ -90,6 +108,8 @@ def test_book_catalog_journal_and_backup_do_not_use_network(tmp_path, monkeypatc
                 restored.importing.preview(document, account.id).lines[0].status
                 == ImportStatus.DUPLICATE
             )
+            assert restored.classification is not None
+            assert restored.classification.rules() == [rule]
             restored.check_integrity()
         finally:
             restored.close()

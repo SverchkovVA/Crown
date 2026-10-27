@@ -49,6 +49,13 @@ class CategoryRule:
 
 
 @dataclass(frozen=True, slots=True)
+class CategoryRuleVersion:
+    rule: CategoryRule
+    revision_id: str
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
 class ClassificationInput:
     kind: OperationKind
     account_id: str
@@ -120,12 +127,13 @@ def suggest_category(
     if len(available) != len(categories):
         raise ValidationError("Категория повторяется в справочнике.")
     matches = []
+    normalized_text = value.text.casefold()
     for rule in rules:
         if (
             not rule.enabled
             or rule.kind != value.kind
             or (rule.account_id is not None and rule.account_id != value.account_id)
-            or rule.contains.casefold() not in value.text.casefold()
+            or rule.contains.casefold() not in normalized_text
         ):
             continue
         category = available.get(rule.category_id)
@@ -144,3 +152,12 @@ def suggest_category(
     return CategorySuggestion(
         ClassificationStatus.SUGGESTED, winners[0].category_id, identifiers, priority
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ClassificationSnapshot:
+    rules: tuple[CategoryRule, ...]
+    categories: tuple[Category, ...]
+
+    def suggest(self, value: ClassificationInput) -> CategorySuggestion:
+        return suggest_category(value, self.rules, self.categories)
