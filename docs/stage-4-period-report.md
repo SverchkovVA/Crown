@@ -40,7 +40,29 @@ Windows 11 x64 build 26300/26H2, PowerShell 5.1.26100.9711, Python 3.13.16:
 SHA-256 локального EXE:
 `7230c31cd4d94a2f5ed86a4aa4c5c8e12b414a5a1df554572d06f0f99942d617`.
 
-GitHub CI этой версии ещё предстоит; его успех пока не утверждается.
+[Основной CI 789db13](https://github.com/SverchkovVA/Crown/actions/runs/40416669924)
+и [параллельный PR-прогон](https://github.com/SverchkovVA/Crown/actions/runs/40416674708)
+успешны в обеих средах.
+
+| Среда | Тесты | Источник |
+|---|---|---|
+| Windows 11 локально | 272; 233,844 с; без ошибок/отказов/пропусков | Локальные JSON/JUnit |
+| Windows Server build 26100, PowerShell 5.1.26100.33648, PR CI | 272; 377,640 с; без ошибок/отказов/пропусков | Скачанные JSON/JUnit/build-result |
+| Linux PR CI | 272 passed; 330,82 с | Проверенный журнал задания |
+| Linux push CI | 272 passed; 373,32 с | Проверенный журнал задания |
+
+В отчёте PR Windows все десять шагов имеют код 0, без тайм-аутов; обе самопроверки
+по 12 шагов passed, Qt offscreen, EXE frozen=true. Отпечаток совпал с локальным.
+SHA-256 CI EXE:
+`ddf8a877ee5d514279447e850e0c0a0d0d247718c560f8dde7c2532af6e037a9`.
+Локальная копия технического отчёта:
+`artifacts/ci-dev4-cf53a172dd754a178ad00480cd56901e/report/windows-check-20261026-230045-4286e0b8ebb34bd386595c90d8d28798/report.json`.
+
+[Полный каталог Windows 0.2.0.dev4](https://github.com/SverchkovVA/Crown/actions/runs/40416674708/artifacts/12696310012)
+— ZIP 50 928 419 байт, хранится 14 дней. Распаковывать целиком с `_internal`
+и соседними файлами рядом с PersonalFinance.exe. Финальная правка документации
+не меняет проверенный код/отпечаток. [PR №1](https://github.com/SverchkovVA/Crown/pull/1)
+остаётся черновиком, main сохраняет 0.1.2.
 
 Отдельно прошли 47 проверок правил/адаптера/JSON-самопроверки, затем 6 GUI/аварийных
 проверок. После усиления SQL- и конкурентных сценариев адаптер: 26 passed, 30,38 с.
