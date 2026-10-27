@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from platformdirs import user_data_dir
 from PySide6.QtCore import QDate, Qt, QThreadPool, Slot
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -43,6 +43,11 @@ from personal_finance.application.classification import (
     prepare_import_categories,
 )
 from personal_finance.application.importing import read_statement
+from personal_finance.application.ocr_cards import (
+    CardRecognition,
+    OcrCardPreview,
+    OcrHistoryPreview,
+)
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
@@ -94,6 +99,8 @@ from personal_finance.presentation.ledger_dialogs import (
     category_title,
     format_money,
 )
+from personal_finance.presentation.ocr_history import OcrHistoryDialog
+from personal_finance.presentation.ocr_preview import OcrPreviewDialog
 from personal_finance.presentation.organization import (
     DefinitionHistoryDialog,
     OrganizationPage,
@@ -138,8 +145,8 @@ QTableView, QTableWidget, QTreeWidget { background: white; alternate-background-
                           border-radius: 8px; gridline-color: #edf1f2; }
 QTableCornerButton::section { background: #edf3f1; border: 0; }
 QHeaderView::section { background: #edf3f1; border: 0; padding: 12px; font-weight: 600; }
-QScrollArea#operationScroll { background: #f5f7f9; border: 0; }
-QWidget#operationBody { background: #f5f7f9; }
+QScrollArea#operationScroll, QScrollArea#ocrScroll { background: #f5f7f9; border: 0; }
+QWidget#operationBody, QWidget#ocrBody { background: #f5f7f9; }
 QTabWidget::pane { border: 1px solid #dce5e8; background: #f5f7f9; }
 QTabBar::tab { background: #edf3f1; color: #172b35; border: 1px solid #dce5e8;
                padding: 8px 12px; }
@@ -175,12 +182,15 @@ def accept_named_form(dialog: QDialog, field: QLineEdit) -> None:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, *, ocr_recognition: CardRecognition | None = None) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
         self.resize(1160, 760)
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
+        self._ocr_recognition = ocr_recognition
+        self._ocr_action: QAction | None = None
+        self._ocr_history_action: QAction | None = None
         self.session: VaultSession | None = None
         self._account_records: list[Account] = []
         self._journal_operations: list[Operation] = []
@@ -202,6 +212,51 @@ class MainWindow(QMainWindow):
         self.root_stack.addWidget(self._welcome())
         self.root_stack.addWidget(self._workspace())
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
+        if self._ocr_recognition is not None:
+            self._ocr_action = self.menuBar().addAction("Проверить изображение операции")
+            self._ocr_action.triggered.connect(self.review_ocr)
+            if self._ocr_recognition.supports_history:
+                self._ocr_history_action = self.menuBar().addAction("Проверить историю Т-Банка")
+                self._ocr_history_action.triggered.connect(self.review_ocr_history)
+
+    def review_ocr_history(self) -> None:
+        self._start_ocr(history=True)
+
+    def review_ocr(self) -> None:
+        self._start_ocr()
+
+    def _start_ocr(self, *, history: bool = False) -> None:
+        if self._busy or self._ocr_recognition is None:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "История Т-Банка" if history else "Карточка одной операции Т-Банка",
+            "",
+            "Изображения (*.png *.jpg *.jpeg)",
+        )
+        if not path:
+            return
+        service = self._ocr_recognition
+        self._job(
+            lambda: service.history(Path(path)) if history else service.preview(Path(path)),
+            self._show_ocr_preview,
+            "Локальное распознавание карточки…",
+            defer_success=True,
+        )
+
+    def _show_ocr_preview(self, preview: OcrCardPreview | OcrHistoryPreview) -> None:
+        dialog = (
+            OcrHistoryDialog(preview, self)
+            if isinstance(preview, OcrHistoryPreview)
+            else OcrPreviewDialog(preview, self)
+        )
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.statusBar().showMessage(
+                    "Поля проверены · Запись операции в книгу ещё не подключена"
+                )
+        finally:
+            dialog.deleteLater()
 
     def _welcome(self) -> QWidget:
         page = QWidget()
@@ -1190,6 +1245,10 @@ class MainWindow(QMainWindow):
             return
         self._busy = True
         self.root_stack.setEnabled(False)
+        if self._ocr_action is not None:
+            self._ocr_action.setEnabled(False)
+        if self._ocr_history_action is not None:
+            self._ocr_history_action.setEnabled(False)
         self.statusBar().showMessage(message)
         job = Job(action, self)
         self._jobs.add(job)
@@ -1239,6 +1298,10 @@ class MainWindow(QMainWindow):
         signals.deleteLater()
         self._busy = False
         self.root_stack.setEnabled(True)
+        if self._ocr_action is not None:
+            self._ocr_action.setEnabled(True)
+        if self._ocr_history_action is not None:
+            self._ocr_history_action.setEnabled(True)
         state = "Книга открыта" if self.session else "Книга закрыта"
         self.statusBar().showMessage(f"Работает без интернета · {state}")
         if has_result and callback is not None:

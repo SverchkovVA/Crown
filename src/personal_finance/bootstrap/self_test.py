@@ -558,6 +558,10 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     restored.close()
             finally:
                 source.close()
+        with _step(report, "preview_ocr_without_engine"):
+            from personal_finance.bootstrap.ocr_self_test import check_packaged_ocr_preview
+
+            check_packaged_ocr_preview()
         report["status"] = "passed"
     except Exception as exc:
         report["status"] = "failed"
