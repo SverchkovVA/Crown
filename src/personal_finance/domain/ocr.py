@@ -162,3 +162,14 @@ class OcrDocument:
         for word in self.words:
             groups.setdefault(word.line_key, []).append(word)
         return tuple(tuple(sorted(words, key=lambda w: w.word_number)) for words in groups.values())
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedOcrImage:
+    source_sha256: str
+    image: OcrImage
+
+    def __post_init__(self) -> None:
+        require_sha256(self.source_sha256)
+        if not isinstance(self.image, OcrImage):
+            raise ValidationError("Некорректное исходное изображение OCR.")

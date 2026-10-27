@@ -2,22 +2,20 @@
 
 import hashlib
 import stat
-from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QIODevice
 from PySide6.QtGui import QImage, QImageReader, QImageWriter, QPainter
 
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.ocr import MAX_OCR_IMAGE_BYTES, OcrImage, require_dimensions
+from personal_finance.domain.ocr import (
+    MAX_OCR_IMAGE_BYTES,
+    LoadedOcrImage,
+    OcrImage,
+    require_dimensions,
+)
 
 _ERROR = "Не удалось прочитать PNG/JPEG для OCR. Проверьте формат, размер и доступ к файлу."
-
-
-@dataclass(frozen=True, slots=True)
-class LoadedOcrImage:
-    source_sha256: str
-    image: OcrImage
 
 
 def decode_ocr_image(contents: bytes) -> LoadedOcrImage:
