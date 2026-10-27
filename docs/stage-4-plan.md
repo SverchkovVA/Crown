@@ -31,6 +31,7 @@
 см. docs/stage-4-split-report.md. В 0.2.0.dev3 добавлены связанные возвраты,
 см. docs/stage-4-refund-report.md. В 0.2.0.dev4 добавлено локальное закрытие месяцев,
 см. docs/stage-4-period-report.md. В 0.2.0.dev5 добавлена контрольная сверка
-без записи данных, см. docs/stage-4-reconciliation-report.md. Теги, фильтры
-и CSV/OFX — ещё не выполненное согласованное расширение этапа 4.
+без записи данных, см. docs/stage-4-reconciliation-report.md. В 0.2.0.dev6 добавлены
+теги и сохранённые фильтры, см. docs/stage-4-organization-report.md.
+CSV/OFX — ещё не выполненное согласованное расширение этапа 4.
 OCR и инвестиции не реализуются внутри финансового журнала.
