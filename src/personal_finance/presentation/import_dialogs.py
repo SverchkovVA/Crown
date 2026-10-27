@@ -6,6 +6,7 @@ from html import escape
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -22,7 +23,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from personal_finance.application.classification import PreparedImportCategories
 from personal_finance.application.importing import Importing
+from personal_finance.domain.classification import ClassificationStatus
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.imports import (
     ImportIssue,
@@ -59,6 +62,7 @@ class ImportOptions:
     expense_category_id: str | None
     income_category_id: str | None
     mapping: CsvMapping | None
+    use_rules: bool = True
 
 
 class ImportOptionsDialog(QDialog):
@@ -69,6 +73,7 @@ class ImportOptionsDialog(QDialog):
         is_csv: bool,
         accounts: list[Account],
         categories: list[Category],
+        allow_rules: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -103,10 +108,15 @@ class ImportOptionsDialog(QDialog):
                     combo.addItem(category_title(category, categories), category.id)
         form.addRow("Категория расходов", self.expense_category)
         form.addRow("Категория доходов", self.income_category)
+        self.use_rules = QCheckBox("Предлагать категории по правилам")
+        self.use_rules.setEnabled(allow_rules)
+        self.use_rules.setChecked(allow_rules)
+        form.addRow(self.use_rules)
         form.addRow(
             plain(
                 "Общие категории только заполняют предпросмотр. Переводы, возвраты, части и теги "
-                "можно уточнить в каждой строке. Начальные остатки импорт не создаёт."
+                "можно уточнить в каждой строке. Начальные остатки импорт не создаёт. "
+                "Выбранная общая категория имеет приоритет над правилами."
             )
         )
         tabs.addTab(general, "Книга и категории")
@@ -210,6 +220,7 @@ class ImportOptionsDialog(QDialog):
                 self.expense_category.currentData(),
                 self.income_category.currentData(),
                 mapping,
+                self.use_rules.isChecked(),
             )
             self.accept()
         except FinanceError as error:
@@ -227,6 +238,8 @@ class ImportPreviewDialog(QDialog):
         tags: list[Tag],
         refund_candidates: list[RefundCandidate],
         parent: QWidget | None = None,
+        *,
+        classification: PreparedImportCategories | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Проверить строки перед импортом")
@@ -237,7 +250,13 @@ class ImportPreviewDialog(QDialog):
         self._lines = {line.row.position: line for line in preview.lines}
         self._drafts: dict[int, OperationDraft] = {}
         self._links: dict[int, Operation] = {}
+        self._classification_hints: dict[int, str] = {}
         self.selections: tuple[ImportSelection, ...] = ()
+        self._category_titles = {
+            category.id: category_title(category, categories) for category in categories
+        }
+        decisions = dict(classification.decisions) if classification is not None else {}
+        rule_names = dict(classification.rule_names) if classification is not None else {}
         for line in preview.lines:
             kind = OperationKind.INCOME if line.row.amount.minor > 0 else OperationKind.EXPENSE
             category = (
@@ -245,6 +264,21 @@ class ImportPreviewDialog(QDialog):
                 if kind == OperationKind.INCOME
                 else options.expense_category_id
             )
+            suggestion = decisions.get(line.row.position) if options.use_rules else None
+            if suggestion is not None and category is None:
+                explanation = "; ".join(
+                    rule_names.get(identifier, "Недоступное правило")
+                    for identifier in suggestion.rule_ids[:3]
+                )
+                if len(suggestion.rule_ids) > 3:
+                    explanation += f"; ещё {len(suggestion.rule_ids) - 3}"
+                if suggestion.status == ClassificationStatus.SUGGESTED:
+                    category = suggestion.category_id
+                    self._classification_hints[line.row.position] = "Правило: " + explanation
+                elif suggestion.status == ClassificationStatus.CONFLICT:
+                    self._classification_hints[line.row.position] = (
+                        "Конфликт правил: " + explanation + ". Выберите категорию вручную."
+                    )
             if category is not None:
                 self._drafts[line.row.position] = OperationDraft(
                     kind,
@@ -278,7 +312,15 @@ class ImportPreviewDialog(QDialog):
             "border: 1px solid #668577; background: white; }"
         )
         self.table.setHorizontalHeaderLabels(
-            ["Включить", "Строка", "Дата", "Движение, RUB", "Вид / связь", "Примечание", "Проверка"]
+            [
+                "Включить",
+                "Строка",
+                "Дата",
+                "Движение, RUB",
+                "Вид / категория / связь",
+                "Примечание",
+                "Проверка",
+            ]
         )
         self.table.verticalHeader().hide()
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -340,6 +382,13 @@ class ImportPreviewDialog(QDialog):
     def _render(self, position: int) -> None:
         line, index = self._lines[position], self._table_rows[position]
         draft = self._drafts.get(position)
+        kind_description = OPERATION_LABELS[draft.kind] if draft else "Укажите категорию"
+        if draft is not None and draft.category_id is not None:
+            kind_description += " · " + self._category_titles.get(
+                draft.category_id, "Недоступная категория"
+            )
+        elif draft is not None and draft.parts:
+            kind_description += f" · частей: {len(draft.parts)}"
         values = (
             str(position),
             (draft.occurred_on if draft else line.row.occurred_on).strftime("%d.%m.%Y"),
@@ -350,10 +399,13 @@ class ImportPreviewDialog(QDialog):
                 line.row.amount.currency,
                 include_currency=False,
             ),
-            ("Связь: " if position in self._links else "")
-            + (OPERATION_LABELS[draft.kind] if draft else "Укажите категорию"),
+            ("Связь: " if position in self._links else "") + kind_description,
             draft.note if draft else line.row.note,
-            line.message,
+            " ".join(
+                value
+                for value in (line.message, self._classification_hints.get(position, ""))
+                if value
+            ),
         )
         self.table.blockSignals(True)
         for column, value in enumerate(values, 1):
@@ -456,6 +508,7 @@ class ImportPreviewDialog(QDialog):
             )
             dialog.note.setPlainText(line.row.note)
         if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_draft is not None:
+            self._classification_hints[line.row.position] = "Строка уточнена вручную."
             self._drafts[line.row.position] = dialog.result_draft
             self._links.pop(line.row.position, None)
             self._render(line.row.position)
@@ -500,6 +553,7 @@ class ImportPreviewDialog(QDialog):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._classification_hints[line.row.position] = "Связь уточнена вручную."
             linked = next((op for op in line.candidates if op.id == choices.currentData()), None)
             if linked:
                 self._links[line.row.position] = linked

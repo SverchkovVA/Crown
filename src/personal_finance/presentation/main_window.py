@@ -38,6 +38,10 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance import __version__
+from personal_finance.application.classification import (
+    PreparedImportCategories,
+    prepare_import_categories,
+)
 from personal_finance.application.importing import read_statement
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.errors import FinanceError, ValidationError
@@ -60,6 +64,11 @@ from personal_finance.infrastructure.backup.container import (
     create_backup,
     restore_backup,
     verify_backup,
+)
+from personal_finance.presentation.classification import (
+    CategoryRuleDialog,
+    CategoryRuleHistoryDialog,
+    CategoryRulePage,
 )
 from personal_finance.presentation.dialogs import (
     CreateDialog,
@@ -250,6 +259,7 @@ class MainWindow(QMainWindow):
                 "Защита и копии",
                 "Периоды",
                 "Теги и фильтры",
+                "Правила категорий",
             ]
         )
         side.addWidget(self.navigation, 1)
@@ -301,6 +311,13 @@ class MainWindow(QMainWindow):
             lambda: self.definition_action("saved_filter", "history")
         )
         self.pages.addWidget(self.organization_page)
+        self.rule_page = CategoryRulePage()
+        self.rule_page.changedFilter.connect(self.refresh)
+        self.rule_page.addRequested.connect(lambda: self.rule_action("add"))
+        self.rule_page.editRequested.connect(lambda: self.rule_action("edit"))
+        self.rule_page.toggleRequested.connect(lambda: self.rule_action("toggle"))
+        self.rule_page.historyRequested.connect(lambda: self.rule_action("history"))
+        self.pages.addWidget(self.rule_page)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
@@ -637,6 +654,39 @@ class MainWindow(QMainWindow):
             defer_success=True,
         )
 
+    def rule_action(self, action: str) -> None:
+        session = self.session
+        if session is None or session.classification is None:
+            return
+        service, selected = session.classification, self.rule_page.selected()
+        if action != "add" and selected is None:
+            return
+        categories = session.catalog.categories()
+        if action == "history" and selected is not None:
+            CategoryRuleHistoryDialog(
+                service.history(selected.rule.id), self._account_records, categories, self
+            ).exec()
+            return
+        if action == "toggle" and selected is not None:
+            rule = replace(selected.rule, enabled=not selected.rule.enabled)
+        else:
+            dialog = CategoryRuleDialog(
+                self._account_records,
+                categories,
+                self,
+                existing=selected.rule if action == "edit" and selected is not None else None,
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.rule is None:
+                return
+            rule = dialog.rule
+        expected = selected.revision_id if action != "add" and selected is not None else None
+        command = str(uuid4())
+        self._job(
+            lambda: service.save(rule, expected_revision_id=expected, command_id=command),
+            lambda _: self.refresh(),
+            "Сохранение версии правила…",
+        )
+
     @Slot()
     def import_statement(self) -> None:
         session = self.session
@@ -665,29 +715,50 @@ class MainWindow(QMainWindow):
             is_csv=is_csv,
             accounts=self._account_records,
             categories=session.catalog.categories(),
+            allow_rules=session.classification is not None,
             parent=self,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
             return
         options, service = dialog.options, session.importing
 
-        def prepare() -> ImportPreview:
+        def prepare() -> tuple[ImportPreview, PreparedImportCategories | None]:
             document = (
                 service.parse_csv(contents, options.mapping)
                 if options.mapping is not None
                 else service.parse_ofx(contents)
             )
-            return service.preview(document, options.account_id)
+            preview = service.preview(document, options.account_id)
+            classification = (
+                session.classification.snapshot()
+                if options.use_rules and session.classification is not None
+                else None
+            )
+            prepared = (
+                prepare_import_categories(
+                    classification, preview, options.expense_category_id, options.income_category_id
+                )
+                if classification is not None
+                else None
+            )
+            return preview, prepared
 
         self._job(
             prepare,
-            lambda preview: self._preview_import(session, options, preview),
+            lambda prepared: self._preview_import(
+                session, options, prepared[0], classification=prepared[1]
+            ),
             "Подготовка предпросмотра без записи…",
             defer_success=True,
         )
 
     def _preview_import(
-        self, session: VaultSession, options: ImportOptions, preview: ImportPreview
+        self,
+        session: VaultSession,
+        options: ImportOptions,
+        preview: ImportPreview,
+        *,
+        classification: PreparedImportCategories | None = None,
     ) -> None:
         if self.session is not session or session.importing is None or session.ledger is None:
             return
@@ -700,6 +771,7 @@ class MainWindow(QMainWindow):
             self._tag_records,
             session.ledger.refund_candidates(),
             self,
+            classification=classification,
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selections:
             return
@@ -1259,6 +1331,7 @@ class MainWindow(QMainWindow):
         ):
             widget.setEnabled(False)
         self.organization_page.set_records([], [], False)
+        self.rule_page.set_records([], False, [], [])
         self.period_page.set_states([], False)
         self._update_journal_actions()
         self.category_tree.clear()
@@ -1341,6 +1414,19 @@ class MainWindow(QMainWindow):
             [value for value in self._tag_records if archived or not value.is_deleted],
             [value for value in all_filters if archived or not value.is_deleted],
             session.organization is not None,
+        )
+        all_rules = (
+            session.classification.rules(include_disabled=True) if session.classification else []
+        )
+        self.rule_page.set_records(
+            [
+                value
+                for value in all_rules
+                if self.rule_page.disabled.isChecked() or value.rule.enabled
+            ],
+            session.classification is not None,
+            accounts,
+            categories,
         )
         current_filter = self.saved_filter_combo.currentData()
         self.saved_filter_combo.blockSignals(True)

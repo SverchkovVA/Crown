@@ -6,6 +6,7 @@ import tempfile
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from time import monotonic
@@ -18,6 +19,11 @@ from PySide6.QtWidgets import QApplication
 from personal_finance.application.importing import Importing
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
+from personal_finance.domain.classification import (
+    CategoryRule,
+    ClassificationInput,
+    ClassificationStatus,
+)
 from personal_finance.domain.errors import InvalidCredentials, ValidationError
 from personal_finance.domain.exporting import ExportFormat, ExportSettings
 from personal_finance.domain.imports import ImportSelection, ImportStatus
@@ -232,6 +238,46 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     if ledger.search(saved_filter.query) != [corrected_spending]:
                         raise RuntimeError("Фильтр не нашёл проверочный расход.")
                     source.check_integrity()
+                with _step(report, "persist_category_rules"):
+                    classification = source.classification
+                    if classification is None:
+                        raise RuntimeError("Правила категорий недоступны.")
+                    operations_before_rules = ledger.operations(include_deleted=True)
+                    rule = CategoryRule(
+                        str(uuid4()),
+                        "Проверочное правило",
+                        OperationKind.EXPENSE,
+                        "проверка",
+                        expense,
+                        10,
+                        account.id,
+                    )
+                    rule_command = str(uuid4())
+                    initial_rule = classification.save(rule, command_id=rule_command)
+                    changed_rule = classification.save(
+                        replace(rule, priority=20), expected_revision_id=initial_rule.revision_id
+                    )
+                    expected_rule_history = [initial_rule, changed_rule]
+                    rule_input = ClassificationInput(
+                        OperationKind.EXPENSE, account.id, "ПРОВЕРКА импорта"
+                    )
+                    suggestion = classification.snapshot().suggest(rule_input)
+                    manual = classification.suggest(
+                        replace(rule_input, manual_category_id=expenses[1])
+                    )
+                    if (
+                        suggestion.category_id != expense
+                        or suggestion.rule_ids != (rule.id,)
+                        or manual.status != ClassificationStatus.MANUAL
+                        or manual.category_id != expenses[1]
+                        or classification.save(rule, command_id=rule_command) != initial_rule
+                        or ledger.operations(include_deleted=True) != operations_before_rules
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError(
+                            "Подсказки правил изменили ручной выбор или финансовые факты."
+                        )
+                    source.check_integrity()
                 with _step(report, "confirm_statement_import"):
                     importing = source.importing
                     if importing is None:
@@ -436,6 +482,12 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             != imported
                         ):
                             raise RuntimeError("История импорта не восстановлена.")
+                        if (
+                            restored.classification is None
+                            or restored.classification.history(rule.id) != expected_rule_history
+                            or restored.classification.suggest(rule_input) != suggestion
+                        ):
+                            raise RuntimeError("Правила категорий не восстановлены.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (
