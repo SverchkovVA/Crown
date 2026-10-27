@@ -74,7 +74,7 @@ try {
     Invoke-VerificationStep '04-lint' $python @('-m', 'ruff', 'check', 'src', 'tests', 'tools') $environment
     Invoke-VerificationStep '05-format' $python @('-m', 'ruff', 'format', '--check', 'src', 'tests', 'tools') $environment
     Invoke-VerificationStep '06-types' $python @('-m', 'mypy', 'src/personal_finance') $environment
-    Invoke-VerificationStep '07-tests' $python @('-m', 'pytest', '-q', '--junitxml', (Join-Path $runRoot 'tests.xml')) $environment
+    Invoke-VerificationStep '07-tests' $python @('-m', 'pytest', '-q', '--junitxml', (Join-Path $runRoot 'tests.xml')) $environment 1200
     $qtPlatform = $(if ($Headless) { 'offscreen' } else { 'windows' })
     $nativeEnvironment = @{ PYTHONUTF8 = '1'; QT_QPA_PLATFORM = $qtPlatform }
     $sourceReport = Join-Path $runRoot 'source-self-test.json'
