@@ -177,6 +177,21 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     periods.close(month, expected_revision_id=opened.revision_id)
                     expected_period_history = periods.history(month)
                     source.check_integrity()
+                with _step(report, "reconcile_read_only"):
+                    before_operations = ledger.operations(include_deleted=True)
+                    expected_reconciliation = ledger.reconcile(
+                        account.id, today, Money(expected_balances[account.id])
+                    )
+                    mismatch = ledger.reconcile(
+                        account.id, today, Money(expected_balances[account.id] + 1)
+                    )
+                    if (
+                        not expected_reconciliation.matches
+                        or mismatch.difference_minor != 1
+                        or ledger.operations(include_deleted=True) != before_operations
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Сверка изменила данные или дала неверную разницу.")
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
                     source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
@@ -226,6 +241,14 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             pass
                         else:
                             raise RuntimeError("Восстановленный период не защищён.")
+                        if (
+                            restored.ledger is None
+                            or restored.ledger.reconcile(
+                                account.id, today, Money(expected_balances[account.id])
+                            )
+                            != expected_reconciliation
+                        ):
+                            raise RuntimeError("Сверка после восстановления изменилась.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (

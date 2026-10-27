@@ -47,6 +47,7 @@ from personal_finance.domain.models import (
     validate_name,
 )
 from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.reconciliation import Reconciliation
 from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.infrastructure.backup.container import (
     create_backup,
@@ -71,6 +72,10 @@ from personal_finance.presentation.periods import (
     PeriodChangeDialog,
     PeriodHistoryDialog,
     PeriodPage,
+)
+from personal_finance.presentation.reconciliation import (
+    ReconciliationInputDialog,
+    ReconciliationResultDialog,
 )
 from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
 
@@ -298,6 +303,8 @@ class MainWindow(QMainWindow):
         balance_row.addStretch()
         self.opening_button = button("Начальный остаток", self.add_opening_balance)
         balance_row.addWidget(self.opening_button)
+        self.reconcile_button = button("Сверить остаток", self.reconcile_account)
+        balance_row.addWidget(self.reconcile_button)
         layout.addLayout(balance_row)
         self.balance_notice = label("", "muted")
         layout.addWidget(self.balance_notice)
@@ -421,6 +428,36 @@ class MainWindow(QMainWindow):
             and self.session.ledger.supports_refunds
         ):
             self.add_operation(OperationKind.REFUND)
+
+    @Slot()
+    def reconcile_account(self) -> None:
+        session = self.session
+        if session is None or session.ledger is None:
+            return
+        selected = self.account_table.currentIndex().row()
+        account_id = (
+            self._account_records[selected].id
+            if self.account_table.selectionModel().hasSelection()
+            and 0 <= selected < len(self._account_records)
+            else None
+        )
+        qdate = self.balance_date.date()
+        dialog = ReconciliationInputDialog(
+            self._account_records,
+            date(qdate.year(), qdate.month(), qdate.day()),
+            self,
+            account_id=account_id,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_request is None:
+            return
+        identifier, as_of, statement = dialog.result_request
+        ledger = session.ledger
+        names = {account.id: account.name for account in self._account_records}
+
+        def show(result: Reconciliation) -> None:
+            ReconciliationResultDialog(result, names.get(identifier, "Счёт"), self).exec()
+
+        self._job(lambda: ledger.reconcile(identifier, as_of, statement), show, "Сверка остатка…")
 
     @Slot()
     def add_opening_balance(self) -> None:
@@ -757,6 +794,7 @@ class MainWindow(QMainWindow):
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
         self._journal_operations = []
         self._account_records = []
+        self.reconcile_button.setEnabled(False)
         self._refund_candidates = []
         self._closed_months = set()
         self.period_page.set_states([], False)
@@ -783,6 +821,7 @@ class MainWindow(QMainWindow):
         ledger = session.ledger
         self.balance_date.setEnabled(ledger is not None)
         self.opening_button.setEnabled(ledger is not None)
+        self.reconcile_button.setEnabled(ledger is not None and bool(accounts))
         amounts = {}
         if ledger is not None:
             qdate = self.balance_date.date()
