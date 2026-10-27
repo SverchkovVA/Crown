@@ -126,8 +126,26 @@ artifacts/ocr-history-native-c895ecd850a84a408b475c8dd08ef0b9/report.json.
 Проверяется исходный коммит fff77f9:
 [push](https://github.com/SverchkovVA/Crown/actions/runs/40589309416),
 [PR](https://github.com/SverchkovVA/Crown/actions/runs/40589315481).
-Результат будет записан после завершения. Отпечаток отправленных исходников:
+Оба запуска успешны; все четыре задания Linux/Windows завершились success.
+Linux push: 698 passed за 974,87 с; Linux PR: 698 passed за 1073,48 с.
+
+Скачанные JSON/JUnit Windows push: 698 тестов за 1025,465 с, 0 ошибок/отказов/
+пропусков, все коды шагов 0 без тайм-аутов. Ruff, форматирование, Mypy и сборка
+прошли; обе самопроверки имеют 18 успешных шагов, последний —
+preview_ocr_without_engine. frozen=true, Qt=offscreen. Отпечаток совпал
+с текущими локальными исходниками:
 3849759076396480336661f92103471f4f8326e9bc5dbeeb89cc51ee9b620428.
+
+CI EXE SHA-256:
+73261dc4e61c92746c0e4c163513d34082bd00304ebe4a4795c5982a56b274f6.
+[Каталог обычного EXE](https://github.com/SverchkovVA/Crown/actions/runs/40589309416/artifacts/12774347026):
+51 265 476 байт, хранение 14 дней. OCR-runtime и команды в обычном запуске ещё
+не подключены; для полей используется отдельный опытный запуск.
+Технический отчёт:
+artifacts/ci-ocr-ab-bb7d0cfc74814f08bb795d837b48e230/report/windows-check-20261027-214459-0554e9a965fb46f8894e943bfdf687bc/report.json.
+
+CI Windows Server не подменяет ручную Windows 11, системный DPI или чистую
+машину. После проверенного коммита менялась только документация.
 
 Отдельная самопроверка исходников прошла: 18 шагов, последний
 preview_ocr_without_engine. JSON:
