@@ -226,4 +226,6 @@ LoadedOcrImage, OcrCardDraft/OcrHistoryDraft и ReviewedOcrCard существу
 предложение и перечень изменений. Не создаются OperationDraft, проводки,
 ImportBatch или квитанции. После закрытия опытного окна данные не сохраняются.
 Постоянный OCR-аудит/повторы потребуют отдельного контракта и миграционных проверок.
-[Текущий срез](stage-5-card-report.md).
+OcrCardPreview/OcrHistoryPreview дополнительно хранят явный bank_name; это
+выбранный профиль, не установленная по изображению банковская идентичность.
+[Текущий срез](stage-5-vtb-report.md).

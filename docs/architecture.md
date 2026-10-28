@@ -130,11 +130,14 @@ Runtime кандидата в EXE не включён. [Контракт](contra
 ## Опытная проверка OCR-полей
 
 domain/ocr_cards.py хранит предложения, происхождение и ручную проверку;
-application/ocr_cards.py оркестрирует порты. t_bank.py и t_bank_history.py
-отделяют тип A от B; банк выбирается явно. Qt остаётся в infrastructure/presentation.
+application/ocr_cards.py оркестрирует порты. t_bank.py/t_bank_history.py и
+vtb.py/vtb_history.py отделяют тип A от B; банк выбирается явно. rub_fields.py
+разбирает общие точные поля, rows.py сохраняет индексы исходных слов.
+Qt остаётся в infrastructure/presentation.
 ocr_preview.py показывает источник/поля, ocr_history.py — выбор строки.
-MainWindow получает необязательный CardRecognition; обычный bootstrap его
-не создаёт. tools/preview_ocr.py внедряет локальный комплект по закреплённому
+MainWindow получает tuple профилей CardRecognition; обычный bootstrap
+оставляет его пустым. bank_name передаётся до дочерней карточки.
+tools/preview_ocr.py внедряет локальный комплект по закреплённому
 манифесту репозитория. Окно открывается после завершения Job, финансовых команд нет.
 [Опытный запуск](windows-quickstart.md#опытная-проверка-ocr--этап-5),
-[результаты](stage-5-card-report.md).
+[результаты](stage-5-vtb-report.md).
