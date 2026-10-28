@@ -446,6 +446,14 @@ class GenericHistoryAdapter:
 
     def parse(self, document: OcrDocument) -> OcrHistoryDraft:
         rows = visual_rows(document)
+        if not self.has_heading(document) and any(
+            _FIELD.match(row.text)
+            or row.text.casefold() in ("детали операции", "информация об операции")
+            for row in rows
+        ):
+            return OcrHistoryDraft(
+                document, (), 0, "Выделены поля карточки. Выберите одну операцию, а не историю."
+            )
         active_date = None
         cards: list[OcrCardDraft] = []
         fragments = 0

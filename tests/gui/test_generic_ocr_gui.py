@@ -190,3 +190,13 @@ def test_readonly_preview_does_not_apply_hidden_financial_exclusion_rules(qtbot)
     dialog.unknown_flow.setCurrentIndex(dialog.unknown_flow.findData(CashDirection.OUT))
     dialog.prepare()
     assert len(dialog.reviewed_cards) == 2 and dialog.saved_count == 0
+
+
+@pytest.mark.parametrize("second", ["Сумма операции: 12,50 RUB", "Сумма операции: 13,50 RUB"])
+def test_auto_does_not_turn_repeated_card_amounts_into_a_list(second):
+    recognition, engine = service(document(("Платёж", "-12,50 RUB", second, "03.01.2026")))
+    result = recognition.analyze(Path("unused.png"))
+    assert isinstance(result, OcrCardPreview) and engine.calls == 1
+    assert bool(result.card.blocked_reason) == ("13,50" in second)
+    if not result.card.blocked_reason:
+        assert result.card.amount.value == 1250
