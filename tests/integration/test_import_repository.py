@@ -392,7 +392,7 @@ def test_schema7_is_read_unchanged_and_only_restored_copy_gets_import(tmp_path, 
         backup = create_backup(old, tmp_path / "old7.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0007"
         restored, _ = restore_backup(backup, tmp_path / "new8.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0009" and restored.importing is not None
+        assert restored.schema_revision == "0010" and restored.importing is not None
         assert restored.organization.tags() == [tag]
         assert [hashlib.sha256(p.read_bytes()).hexdigest() for p in files] == before
         restored.check_integrity()

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 from personal_finance.application.importing import Importing
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
+from personal_finance.bootstrap.ocr_audit_self_test import check_audited_ocr_link
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -29,6 +30,7 @@ from personal_finance.domain.exporting import ExportFormat, ExportSettings
 from personal_finance.domain.imports import ImportSelection, ImportStatus
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
+from personal_finance.domain.ocr_imports import OcrImportStatus
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
@@ -373,6 +375,11 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     ):
                         raise RuntimeError("Экспорт изменил книгу или прежний файл.")
                     source.check_integrity()
+                with _step(report, "confirm_ocr_with_audit"):
+                    ocr_command = str(uuid4())
+                    ocr_selection, ocr_result = check_audited_ocr_link(
+                        source, corrected_spending, account.id, ocr_command
+                    )
                 with _step(report, "protect_closed_period"):
                     periods = source.periods
                     if periods is None:
@@ -488,6 +495,14 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             or restored.classification.suggest(rule_input) != suggestion
                         ):
                             raise RuntimeError("Правила категорий не восстановлены.")
+                        if (
+                            restored.ocr_importing is None
+                            or restored.ocr_importing.preview(ocr_selection).status
+                            != OcrImportStatus.DUPLICATE
+                            or restored.ocr_importing.confirm(ocr_selection, command_id=ocr_command)
+                            != ocr_result
+                        ):
+                            raise RuntimeError("Аудит OCR или защита повторов не восстановлены.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (
