@@ -21,8 +21,8 @@ _NAMES = "|".join(sorted(MONTHS, key=len, reverse=True))
 _BODY = (
     r"(?:(?P<iso>[0-9]{4}-[0-9]{2}-[0-9]{2})|"
     r"(?P<day_num>[0-9]{1,2})[./](?P<month_num>[0-9]{1,2})(?:[./](?P<year_num>[0-9]{4}))?|"
-    rf"(?P<day_text>[0-9]{{1,2}})\s+(?P<month_name>{_NAMES})\.?"
-    r"(?:\s+(?P<year_text>[0-9]{4})(?:\s*г\.?)?)?)"
+    rf"(?P<day_text>[0-9]{{1,2}})\s*(?P<month_name>{_NAMES})\.?"
+    r"(?:\s*(?P<year_text>[0-9]{4})(?:\s*г\.?)?)?)"
 )
 _CLOCK = r"(?:\s*(?:,|в)?\s*(?P<hour>[0-9]{1,2}):(?P<minute>[0-9]{2})(?::(?P<second>[0-9]{2}))?)?"
 _FULL = re.compile(_BODY + _CLOCK, re.I)

@@ -353,3 +353,23 @@ def test_thousand_grouping_never_truncates_money_property():
         assert card.amount.value == minor
 
     check()
+
+
+@pytest.mark.parametrize(
+    "value", ["24октября", "24октября2026", "24 окт.2026", "24окт2026", "24октября 2026 в 13:42"]
+)
+def test_known_month_without_ocr_spaces_keeps_explicit_calendar(value):
+    parts = parse_date(value)
+    assert parts is not None and parts.calendar(2026) == date(2026, 10, 24)
+    card = GenericCardAdapter().parse(document(("Покупка", "-12,50 RUB", value)))
+    assert (
+        suggest_corrections(card, OcrReviewDefaults(reference_year=2026)).occurred_on
+        == "24.10.2026"
+    )
+
+
+@pytest.mark.parametrize("value", ["124октября", "24октября26", "24октября20261", "24октябрв2026"])
+def test_compact_month_format_does_not_repair_digits_or_letters(value):
+    assert parse_date(value) is None
+    card = GenericCardAdapter().parse(document(("Покупка", "-12,50 RUB", value)))
+    assert not suggest_corrections(card, OcrReviewDefaults(reference_year=2026)).occurred_on
