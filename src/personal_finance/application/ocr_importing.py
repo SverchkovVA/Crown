@@ -18,6 +18,15 @@ from personal_finance.domain.ocr_imports import (
 class OcrImportRepository(Protocol):
     def preview(self, selection: OcrSelection) -> OcrImportPreview: ...
     def confirm(self, selection: OcrSelection, command_id: str) -> OcrImportResult: ...
+
+    supports_batches: bool
+
+    def preview_many(
+        self, selections: tuple[OcrSelection, ...]
+    ) -> tuple[OcrImportPreview, ...]: ...
+    def confirm_many(
+        self, selections: tuple[OcrSelection, ...], command_id: str
+    ) -> tuple[OcrImportResult, ...]: ...
     def check_integrity(self) -> None: ...
 
 
@@ -49,6 +58,18 @@ class OcrImporting:
 
     def confirm(self, selection: OcrSelection, *, command_id: str | None = None) -> OcrImportResult:
         return self._repository.confirm(selection, command_id or str(uuid4()))
+
+    @property
+    def supports_batches(self) -> bool:
+        return self._repository.supports_batches
+
+    def preview_many(self, selections: tuple[OcrSelection, ...]) -> tuple[OcrImportPreview, ...]:
+        return self._repository.preview_many(selections)
+
+    def confirm_many(
+        self, selections: tuple[OcrSelection, ...], *, command_id: str | None = None
+    ) -> tuple[OcrImportResult, ...]:
+        return self._repository.confirm_many(selections, command_id or str(uuid4()))
 
     def check_integrity(self) -> None:
         self._repository.check_integrity()

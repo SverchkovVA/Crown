@@ -25,9 +25,16 @@ from personal_finance.infrastructure.persistence.ledger_repository import (
 
 class SqlOcrRepository:
     def __init__(
-        self, engine: Engine, book_id: str, mutex: RLock, ledger: SqlLedgerRepository
+        self,
+        engine: Engine,
+        book_id: str,
+        mutex: RLock,
+        ledger: SqlLedgerRepository,
+        *,
+        supports_batches: bool = False,
     ) -> None:
         self._engine, self._book_id, self._mutex, self._ledger = engine, book_id, mutex, ledger
+        self.supports_batches = supports_batches
 
     def _request(self, selection: OcrSelection) -> str:
         if not isinstance(selection, OcrSelection):
@@ -62,12 +69,25 @@ class SqlOcrRepository:
         data = selection.evidence.data
         previous = list(
             connection.execute(
-                text("SELECT * FROM ocr_records WHERE book_id=:book AND image_sha256=:image"),
-                {"book": self._book_id, "image": data["image_sha256"]},
+                text(
+                    """SELECT * FROM ocr_records WHERE book_id=:book
+                    AND (image_sha256=:image OR file_sha256=:file)"""
+                ),
+                {"book": self._book_id, "image": data["image_sha256"], "file": data["file_sha256"]},
             ).mappings()
         )
         money = set(data["fields"]["amount"]["words"])
         for old in previous:
+            if (
+                old["file_sha256"] == data["file_sha256"]
+                and old["image_sha256"] != data["image_sha256"]
+            ):
+                return OcrImportPreview(
+                    selection,
+                    OcrImportStatus.CONFLICT,
+                    message="Этот исходный файл уже использован с другой подготовкой изображения. "
+                    "Повтор не записывается.",
+                )
             old_evidence = OcrEvidence(old["evidence_json"])
             if old["document_sha256"] != data["document_sha256"] or old["bank"] != data["bank"]:
                 return OcrImportPreview(
@@ -136,127 +156,124 @@ class SqlOcrRepository:
             row["id"], self._ledger._revision(connection, row["revision_id"]), bool(row["linked"])
         )
 
-    def confirm(self, selection: OcrSelection, command_id: str) -> OcrImportResult:
+    def _confirm_in_transaction(
+        self, connection: Connection, selection: OcrSelection, command_id: str
+    ) -> OcrImportResult:
         digest = self._request(selection)
         require_identifier(command_id)
+        if (
+            self.supports_batches
+            and connection.execute(
+                text("SELECT 1 FROM ocr_batches WHERE id=:id"), {"id": command_id}
+            ).first()
+        ):
+            raise ValidationError("Идентификатор действия уже использован пакетным OCR.")
+        previous = (
+            connection.execute(
+                text(
+                    "SELECT id,command_hash FROM ocr_records WHERE command_id=:id AND book_id=:book"
+                ),
+                {"id": command_id, "book": self._book_id},
+            )
+            .mappings()
+            .first()
+        )
+        if previous is not None:
+            if previous["command_hash"] != digest:
+                raise ValidationError("Идентификатор действия уже использован для других данных.")
+            return self._result(connection, previous["id"])
+        if connection.execute(
+            text("SELECT 1 FROM command_receipts WHERE id=:id"), {"id": command_id}
+        ).first():
+            raise ValidationError("Идентификатор действия уже использован для других данных.")
+        preview = self._preview(connection, selection)
+        if preview.status in (OcrImportStatus.DUPLICATE, OcrImportStatus.CONFLICT):
+            raise ValidationError("Повторная или противоречивая строка OCR. Обновите предпросмотр.")
+        if (
+            preview.status == OcrImportStatus.POSSIBLE
+            and not selection.acknowledged_duplicate
+            and selection.existing_operation_id is None
+        ):
+            raise ValidationError(
+                "Возможный повтор требует явного выбора связи или отдельной операции."
+            )
+        identifier, group_id = str(uuid4()), str(uuid4())
+        connection.execute(
+            text("INSERT INTO change_groups(id,book_id,created_at) VALUES (:id,:book,:created)"),
+            {"id": group_id, "book": self._book_id, "created": utc_now()},
+        )
+        linked = selection.existing_operation_id is not None
+        if linked:
+            operation = self._ledger._revision(connection, selection.expected_revision_id or "")
+            current = connection.execute(
+                text("SELECT accepted_revision_id FROM entities WHERE id=:id AND book_id=:book"),
+                {"id": selection.existing_operation_id, "book": self._book_id},
+            ).scalar_one_or_none()
+            if (
+                operation.id != selection.existing_operation_id
+                or operation.revision_id != current
+                or operation.is_deleted
+                or operation.draft != selection.draft
+                or all(op.revision_id != operation.revision_id for op in preview.candidates)
+            ):
+                raise ValidationError(
+                    "Операция для связи изменилась или не соответствует движению OCR."
+                )
+        else:
+            operation = self._ledger._save_in_transaction(
+                connection,
+                selection.draft,
+                command_id=str(uuid5(UUID(command_id), "ocr-operation-v1")),
+                group_id=group_id,
+            )
+        connection.execute(
+            text(
+                "INSERT INTO "
+                "command_receipts(id,command_hash,entity_id,revision_id) "
+                "VALUES (:id,:hash,:entity,:revision)"
+            ),
+            {
+                "id": command_id,
+                "hash": digest,
+                "entity": operation.id,
+                "revision": operation.revision_id,
+            },
+        )
+        data = selection.evidence.data
+        connection.execute(
+            text("""INSERT INTO ocr_records
+            (id,book_id,account_id,bank,file_sha256,image_sha256,document_sha256,
+            source_key,evidence_hash,evidence_json,operation_id,revision_id,group_id,
+            command_id,command_hash,linked,acknowledged_duplicate,created_at)
+            VALUES (:id,:book,:account,:bank,:file,:image,:document,:key,:evidence_hash,
+            :evidence,:operation,:revision,:group,:command,:digest,:linked,:ack,:created)"""),
+            {
+                "id": identifier,
+                "book": self._book_id,
+                "account": selection.account_id,
+                "bank": data["bank"],
+                "file": data["file_sha256"],
+                "image": data["image_sha256"],
+                "document": data["document_sha256"],
+                "key": selection.evidence.source_key,
+                "evidence_hash": selection.evidence.content_hash,
+                "evidence": selection.evidence.payload,
+                "operation": operation.id,
+                "revision": operation.revision_id,
+                "group": group_id,
+                "command": command_id,
+                "digest": digest,
+                "linked": int(linked),
+                "ack": int(selection.acknowledged_duplicate),
+                "created": utc_now(),
+            },
+        )
+        return self._result(connection, identifier)
+
+    def confirm(self, selection: OcrSelection, command_id: str) -> OcrImportResult:
         try:
             with self._mutex, self._engine.begin() as connection:
-                previous = (
-                    connection.execute(
-                        text(
-                            "SELECT id,command_hash FROM ocr_records WHERE "
-                            "command_id=:id AND book_id=:book"
-                        ),
-                        {"id": command_id, "book": self._book_id},
-                    )
-                    .mappings()
-                    .first()
-                )
-                if previous is not None:
-                    if previous["command_hash"] != digest:
-                        raise ValidationError(
-                            "Идентификатор действия уже использован для других данных."
-                        )
-                    return self._result(connection, previous["id"])
-                if connection.execute(
-                    text("SELECT 1 FROM command_receipts WHERE id=:id"), {"id": command_id}
-                ).first():
-                    raise ValidationError(
-                        "Идентификатор действия уже использован для других данных."
-                    )
-                preview = self._preview(connection, selection)
-                if preview.status in (OcrImportStatus.DUPLICATE, OcrImportStatus.CONFLICT):
-                    raise ValidationError(
-                        "Повторная или противоречивая строка OCR. Обновите предпросмотр."
-                    )
-                if (
-                    preview.status == OcrImportStatus.POSSIBLE
-                    and not selection.acknowledged_duplicate
-                    and selection.existing_operation_id is None
-                ):
-                    raise ValidationError(
-                        "Возможный повтор требует явного выбора связи или отдельной операции."
-                    )
-                identifier, group_id = str(uuid4()), str(uuid4())
-                connection.execute(
-                    text(
-                        "INSERT INTO change_groups(id,book_id,created_at) VALUES "
-                        "(:id,:book,:created)"
-                    ),
-                    {"id": group_id, "book": self._book_id, "created": utc_now()},
-                )
-                linked = selection.existing_operation_id is not None
-                if linked:
-                    operation = self._ledger._revision(
-                        connection, selection.expected_revision_id or ""
-                    )
-                    current = connection.execute(
-                        text(
-                            "SELECT accepted_revision_id FROM entities WHERE id=:id AND "
-                            "book_id=:book"
-                        ),
-                        {"id": selection.existing_operation_id, "book": self._book_id},
-                    ).scalar_one_or_none()
-                    if (
-                        operation.id != selection.existing_operation_id
-                        or operation.revision_id != current
-                        or operation.is_deleted
-                        or operation.draft != selection.draft
-                        or all(op.revision_id != operation.revision_id for op in preview.candidates)
-                    ):
-                        raise ValidationError(
-                            "Операция для связи изменилась или не соответствует движению OCR."
-                        )
-                else:
-                    operation = self._ledger._save_in_transaction(
-                        connection,
-                        selection.draft,
-                        command_id=str(uuid5(UUID(command_id), "ocr-operation-v1")),
-                        group_id=group_id,
-                    )
-                connection.execute(
-                    text(
-                        "INSERT INTO "
-                        "command_receipts(id,command_hash,entity_id,revision_id) "
-                        "VALUES (:id,:hash,:entity,:revision)"
-                    ),
-                    {
-                        "id": command_id,
-                        "hash": digest,
-                        "entity": operation.id,
-                        "revision": operation.revision_id,
-                    },
-                )
-                data = selection.evidence.data
-                connection.execute(
-                    text("""INSERT INTO ocr_records
-                    (id,book_id,account_id,bank,file_sha256,image_sha256,document_sha256,
-                    source_key,evidence_hash,evidence_json,operation_id,revision_id,group_id,
-                    command_id,command_hash,linked,acknowledged_duplicate,created_at)
-                    VALUES (:id,:book,:account,:bank,:file,:image,:document,:key,:evidence_hash,
-                    :evidence,:operation,:revision,:group,:command,:digest,:linked,:ack,:created)"""),
-                    {
-                        "id": identifier,
-                        "book": self._book_id,
-                        "account": selection.account_id,
-                        "bank": data["bank"],
-                        "file": data["file_sha256"],
-                        "image": data["image_sha256"],
-                        "document": data["document_sha256"],
-                        "key": selection.evidence.source_key,
-                        "evidence_hash": selection.evidence.content_hash,
-                        "evidence": selection.evidence.payload,
-                        "operation": operation.id,
-                        "revision": operation.revision_id,
-                        "group": group_id,
-                        "command": command_id,
-                        "digest": digest,
-                        "linked": int(linked),
-                        "ack": int(selection.acknowledged_duplicate),
-                        "created": utc_now(),
-                    },
-                )
-                return self._result(connection, identifier)
+                return self._confirm_in_transaction(connection, selection, command_id)
         except IntegrityError:
             raise ValidationError(
                 "Источник OCR уже записан или его связи недопустимы. Обновите просмотр."
@@ -265,6 +282,134 @@ class SqlOcrRepository:
             raise VaultError(
                 "Не удалось завершить подтверждение OCR. Изменения отменены."
             ) from None
+
+    def _preview_many(
+        self, connection: Connection, selections: tuple[OcrSelection, ...]
+    ) -> tuple[OcrImportPreview, ...]:
+        if not isinstance(selections, tuple) or not 1 <= len(selections) <= 100:
+            raise ValidationError("Выберите от 1 до 100 строк OCR.")
+        results = []
+        sources: dict[str, tuple[str, str, set[int]]] = {}
+        movements: set[tuple[str, object, int]] = set()
+        for value in selections:
+            self._request(value)
+            preview = self._preview(connection, value)
+            data = value.evidence.data
+            image = data["image_sha256"]
+            refs = set(data["fields"]["amount"]["words"])
+            known = sources.get(image)
+            if known is not None and (
+                known[:2] != (data["document_sha256"], data["bank"]) or known[2].intersection(refs)
+            ):
+                preview = OcrImportPreview(
+                    value,
+                    OcrImportStatus.CONFLICT,
+                    message="Пересечение или разный контекст строк выбранного списка.",
+                )
+            if known is None:
+                sources[image] = (data["document_sha256"], data["bank"], refs)
+            else:
+                known[2].update(refs)
+            movement = (
+                value.account_id,
+                value.draft.occurred_on,
+                account_movement(value.draft, value.account_id),
+            )
+            if preview.status == OcrImportStatus.NEW and movement in movements:
+                preview = OcrImportPreview(
+                    value,
+                    OcrImportStatus.POSSIBLE,
+                    message="Другая выбранная строка имеет ту же дату и движение. "
+                    "Выберите отдельную запись.",
+                )
+            movements.add(movement)
+            results.append(preview)
+        return tuple(results)
+
+    def preview_many(self, selections: tuple[OcrSelection, ...]) -> tuple[OcrImportPreview, ...]:
+        if not self.supports_batches:
+            raise ValidationError(
+                "Пакетный OCR требует книгу новой схемы. Восстановите копию в новую папку."
+            )
+        with self._mutex, self._engine.connect() as connection:
+            return self._preview_many(connection, selections)
+
+    def confirm_many(
+        self, selections: tuple[OcrSelection, ...], command_id: str
+    ) -> tuple[OcrImportResult, ...]:
+        if not self.supports_batches:
+            raise ValidationError("Пакетный OCR недоступен в этой схеме книги.")
+        require_identifier(command_id)
+        if not isinstance(selections, tuple) or not 1 <= len(selections) <= 100:
+            raise ValidationError("Выберите от 1 до 100 строк OCR.")
+        digest = digest_json([self._request(v) for v in selections])
+        try:
+            with self._mutex, self._engine.begin() as connection:
+                old = connection.execute(
+                    text("SELECT request_hash FROM ocr_batches WHERE id=:id AND book_id=:book"),
+                    {"id": command_id, "book": self._book_id},
+                ).scalar_one_or_none()
+                if old is not None:
+                    if old != digest:
+                        raise ValidationError(
+                            "Идентификатор пакета уже использован для другого списка."
+                        )
+                    return tuple(
+                        self._result(connection, row[0])
+                        for row in connection.execute(
+                            text(
+                                "SELECT audit_id FROM ocr_batch_items WHERE "
+                                "batch_id=:id ORDER BY position"
+                            ),
+                            {"id": command_id},
+                        )
+                    )
+                if connection.execute(
+                    text("SELECT 1 FROM command_receipts WHERE id=:id"), {"id": command_id}
+                ).first():
+                    raise ValidationError("Идентификатор пакета уже использован другой командой.")
+                previews = self._preview_many(connection, selections)
+                if any(
+                    p.status in (OcrImportStatus.DUPLICATE, OcrImportStatus.CONFLICT)
+                    for p in previews
+                ):
+                    raise ValidationError(
+                        "В выбранном списке есть повторные или противоречивые строки."
+                    )
+                if any(
+                    p.status == OcrImportStatus.POSSIBLE
+                    and not p.selection.acknowledged_duplicate
+                    and p.selection.existing_operation_id is None
+                    for p in previews
+                ):
+                    raise ValidationError(
+                        "Для возможных повторов выберите связь или отдельную запись."
+                    )
+                connection.execute(
+                    text(
+                        """INSERT INTO ocr_batches(id,book_id,request_hash,created_at)
+                        VALUES (:id,:book,:hash,:at)"""
+                    ),
+                    {"id": command_id, "book": self._book_id, "hash": digest, "at": utc_now()},
+                )
+                results = []
+                for index, value in enumerate(selections):
+                    result = self._confirm_in_transaction(
+                        connection, value, str(uuid5(UUID(command_id), f"ocr-row/{index}"))
+                    )
+                    connection.execute(
+                        text(
+                            """INSERT INTO ocr_batch_items(batch_id,position,audit_id)
+                            VALUES (:id,:position,:audit)"""
+                        ),
+                        {"id": command_id, "position": index, "audit": result.audit_id},
+                    )
+                    results.append(result)
+                return tuple(results)
+        except IntegrityError:
+            raise ValidationError("Пакет OCR не записан: повтор или недопустимая связь.") from None
+        except DatabaseError:
+            raise VaultError("Пакет OCR не записан. Изменения всех строк отменены.") from None
 
     def check_integrity(self) -> None:
         with self._mutex, self._engine.connect() as connection:
@@ -349,5 +494,40 @@ class SqlOcrRepository:
                         ).scalar_one()
                         if group != row["group_id"]:
                             raise VaultError("Неверная атомарная группа OCR.")
+                if self.supports_batches:
+                    for batch in connection.execute(
+                        text("SELECT * FROM ocr_batches WHERE book_id=:book"),
+                        {"book": self._book_id},
+                    ).mappings():
+                        items = list(
+                            connection.execute(
+                                text("""SELECT i.position,r.* FROM ocr_batch_items i
+                            JOIN ocr_records r ON r.id=i.audit_id
+                            WHERE i.batch_id=:id ORDER BY i.position"""),
+                                {"id": batch["id"]},
+                            ).mappings()
+                        )
+                        if not 1 <= len(items) <= 100 or [r["position"] for r in items] != list(
+                            range(len(items))
+                        ):
+                            raise VaultError("Неполная квитанция пакета OCR.")
+                        hashes = []
+                        for index, row in enumerate(items):
+                            if row["book_id"] != self._book_id or row["command_id"] != str(
+                                uuid5(UUID(batch["id"]), f"ocr-row/{index}")
+                            ):
+                                raise VaultError("Неверная связь пакетной команды OCR.")
+                            operation = self._ledger._revision(connection, row["revision_id"])
+                            value = OcrSelection(
+                                OcrEvidence(row["evidence_json"]),
+                                row["account_id"],
+                                operation.draft,
+                                bool(row["acknowledged_duplicate"]),
+                                operation.id if row["linked"] else None,
+                                operation.revision_id if row["linked"] else None,
+                            )
+                            hashes.append(self._request(value))
+                        if digest_json(hashes) != batch["request_hash"]:
+                            raise VaultError("Состав пакета OCR не совпадает с квитанцией.")
             except (ValidationError, ValueError, TypeError, KeyError, AttributeError, IndexError):
                 raise VaultError("Проверка истории OCR не пройдена.") from None

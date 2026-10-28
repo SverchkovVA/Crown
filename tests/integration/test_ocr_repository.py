@@ -11,6 +11,7 @@ from sqlalchemy.exc import DatabaseError
 
 from personal_finance.application.vault import create_vault
 from personal_finance.domain.errors import ValidationError, VaultError
+from personal_finance.domain.imports import digest_json
 from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.domain.ocr_cards import CardCorrections, CashDirection, review_card
@@ -84,7 +85,18 @@ def selection(accounts, *, source=None, direction=CashDirection.OUT, account=Non
     ]
     draft = draft or OperationDraft(kind, DAY, account, Money(MINOR), category)
     return OcrSelection(
-        make_ocr_evidence("3" * 64, "Т-Банк", checked(source, direction=direction)), account, draft
+        make_ocr_evidence(
+            digest_json(
+                [
+                    "synthetic-file",
+                    checked(source, direction=direction).source.document.image_sha256,
+                ]
+            ),
+            "Т-Банк",
+            checked(source, direction=direction),
+        ),
+        account,
+        draft,
     )
 
 
@@ -455,7 +467,7 @@ def test_backup_restore_keeps_audit_dedup_and_receipts_under_new_replica(
     command = str(uuid4())
     result = session.ocr_importing.confirm(value, command_id=command)
     backup = create_backup(session, tmp_path / "ocr.pfbackup", BACKUP_PASSWORD)
-    assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0010"
+    assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0011"
     restored, _ = restore_backup(
         backup, tmp_path / "restored-ocr.pfvault", BACKUP_PASSWORD, PASSWORD
     )

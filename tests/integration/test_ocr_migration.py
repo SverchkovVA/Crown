@@ -17,6 +17,7 @@ from personal_finance.infrastructure.backup.container import (
     restore_backup,
     verify_backup,
 )
+from personal_finance.infrastructure.persistence import migration_runner
 from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
     upgrade_restored_schema,
@@ -26,6 +27,7 @@ from tests.conftest import BACKUP_PASSWORD, PASSWORD
 
 @pytest.fixture
 def old9(tmp_path, monkeypatch):
+    monkeypatch.setattr(migration_runner, "SCHEMA_HEAD", "0010")
     with monkeypatch.context() as patch:
         patch.setattr(
             vault_module,

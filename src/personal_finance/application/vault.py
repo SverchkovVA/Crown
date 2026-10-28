@@ -41,6 +41,7 @@ from personal_finance.infrastructure.persistence.migration_runner import (
     supported_schema,
 )
 from personal_finance.infrastructure.persistence.ocr_repository import SqlOcrRepository
+from personal_finance.infrastructure.persistence.ocr_settings_repository import SqlOcrSettings
 from personal_finance.infrastructure.persistence.organization_repository import (
     SqlOrganizationRepository,
 )
@@ -117,15 +118,15 @@ class VaultSession:
                     self.replica_id,
                     self.mutex,
                     supports_splits=self.schema_revision
-                    in ("0004", "0005", "0006", "0007", "0008", "0009", "0010"),
+                    in ("0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011"),
                     supports_refunds=self.schema_revision
-                    in ("0005", "0006", "0007", "0008", "0009", "0010"),
+                    in ("0005", "0006", "0007", "0008", "0009", "0010", "0011"),
                     supports_periods=self.schema_revision
-                    in ("0006", "0007", "0008", "0009", "0010"),
-                    supports_tags=self.schema_revision in ("0007", "0008", "0009", "0010"),
+                    in ("0006", "0007", "0008", "0009", "0010", "0011"),
+                    supports_tags=self.schema_revision in ("0007", "0008", "0009", "0010", "0011"),
                 )
                 if self.schema_revision
-                in ("0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010")
+                in ("0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011")
                 else None
             )
             self.ledger = Ledger(ledger_repository) if ledger_repository is not None else None
@@ -142,20 +143,20 @@ class VaultSession:
             )
             self.importing = (
                 Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
-                if self.schema_revision in ("0008", "0009", "0010")
+                if self.schema_revision in ("0008", "0009", "0010", "0011")
                 and ledger_repository is not None
                 else None
             )
             self.periods = (
                 Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision in ("0006", "0007", "0008", "0009", "0010")
+                if self.schema_revision in ("0006", "0007", "0008", "0009", "0010", "0011")
                 else None
             )
             self.organization = (
                 Organization(
                     SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision in ("0007", "0008", "0009", "0010")
+                if self.schema_revision in ("0007", "0008", "0009", "0010", "0011")
                 else None
             )
             self.classification = (
@@ -164,12 +165,26 @@ class VaultSession:
                     self.mutex,
                     self.ensure_open,
                 )
-                if self.schema_revision in ("0009", "0010")
+                if self.schema_revision in ("0009", "0010", "0011")
+                else None
+            )
+            ocr_repository = (
+                SqlOcrRepository(
+                    self.engine,
+                    book_id,
+                    self.mutex,
+                    ledger_repository,
+                    supports_batches=self.schema_revision == "0011",
+                )
+                if self.schema_revision in ("0010", "0011") and ledger_repository is not None
                 else None
             )
             self.ocr_importing = (
-                OcrImporting(SqlOcrRepository(self.engine, book_id, self.mutex, ledger_repository))
-                if self.schema_revision == "0010" and ledger_repository is not None
+                OcrImporting(ocr_repository) if ocr_repository is not None else None
+            )
+            self.ocr_settings = (
+                SqlOcrSettings(self.engine, book_id, self.mutex, ocr_repository)
+                if self.schema_revision == "0011" and ocr_repository is not None
                 else None
             )
         except Exception:
@@ -214,6 +229,8 @@ class VaultSession:
                 self.importing.check_integrity()
             if self.ocr_importing is not None:
                 self.ocr_importing.check_integrity()
+            if self.ocr_settings is not None:
+                self.ocr_settings.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:
