@@ -10,6 +10,8 @@ from personal_finance.domain.ocr import OcrBox, OcrDocument, OcrEngineInfo, OcrW
 from personal_finance.infrastructure.ocr.images import decode_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 from personal_finance.infrastructure.ocr.t_bank_history import TBankHistoryAdapter
+from personal_finance.infrastructure.ocr.vtb import VtbCardAdapter
+from personal_finance.infrastructure.ocr.vtb_history import VtbHistoryAdapter
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
 
@@ -35,6 +37,39 @@ def check_packaged_ocr_preview() -> None:
                 OcrWord("-1,23 RUB", OcrBox(200, 60, 100, 20), Decimal(95), (1, 1, 3), 1),
             ),
         )
+        vtb_document = OcrDocument(
+            document.image_sha256,
+            document.width,
+            document.height,
+            document.engine,
+            (
+                OcrWord("Детали операции", OcrBox(10, 5, 160, 15), Decimal(95), (1, 1, 1), 1),
+                OcrWord(
+                    "Дата и время: 27.10.2026", OcrBox(10, 25, 160, 15), Decimal(95), (1, 1, 2), 1
+                ),
+                OcrWord("-1,23 RUB", OcrBox(200, 60, 100, 20), Decimal(95), (1, 1, 3), 1),
+            ),
+        )
+        vtb_card = VtbCardAdapter().parse(vtb_document)
+        vtb_history_document = OcrDocument(
+            document.image_sha256,
+            document.width,
+            document.height,
+            document.engine,
+            (
+                OcrWord("История операций", OcrBox(10, 5, 160, 15), Decimal(95), (1, 1, 1), 1),
+                OcrWord("27.10.2026", OcrBox(10, 25, 160, 15), Decimal(95), (1, 1, 2), 1),
+                OcrWord("Магазин", OcrBox(10, 60, 100, 20), Decimal(95), (1, 1, 3), 1),
+                OcrWord("-1,23 RUB", OcrBox(200, 60, 100, 20), Decimal(95), (1, 1, 3), 2),
+            ),
+        )
+        vtb_history = VtbHistoryAdapter().parse(vtb_history_document)
+        if (
+            vtb_card.amount.value != 123
+            or vtb_card.occurred_on.value is None
+            or len(vtb_history.cards) != 1
+        ):
+            raise RuntimeError("Разбор проверочного формата ВТБ недоступен.")
         single = OcrPreviewDialog(OcrCardPreview(loaded, TBankCardAdapter().parse(document)))
         history = OcrHistoryDialog(OcrHistoryPreview(loaded, TBankHistoryAdapter().parse(document)))
         try:

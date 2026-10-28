@@ -25,7 +25,7 @@ class OcrHistoryDialog(QDialog):
         super().__init__(parent)
         self.preview = preview
         self.reviews: dict[int, ReviewedOcrCard] = {}
-        self.setWindowTitle("История Т-Банка: проверка строк")
+        self.setWindowTitle(f"История · {preview.bank_name}: проверка строк")
         self.resize(1180, 720)
         self.setMinimumSize(920, 580)
         layout = QVBoxLayout(self)
@@ -119,7 +119,10 @@ class OcrHistoryDialog(QDialog):
         if self.preview.history.blocked_reason or not 0 <= index < len(self.preview.history.cards):
             return
         dialog = OcrPreviewDialog(
-            OcrCardPreview(self.preview.source, self.preview.history.cards[index]), self
+            OcrCardPreview(
+                self.preview.source, self.preview.history.cards[index], self.preview.bank_name
+            ),
+            self,
         )
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted and dialog.reviewed is not None:

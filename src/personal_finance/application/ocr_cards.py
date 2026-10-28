@@ -11,6 +11,11 @@ from personal_finance.domain.ocr import LoadedOcrImage, OcrDocument
 from personal_finance.domain.ocr_cards import OcrCardDraft, OcrHistoryDraft
 
 
+def require_bank_name(value: str) -> None:
+    if value not in ("Т-Банк", "ВТБ"):
+        raise ValidationError("Неизвестный профиль OCR-банка.")
+
+
 class CardAdapter(Protocol):
     def parse(self, document: OcrDocument) -> OcrCardDraft: ...
 
@@ -19,8 +24,10 @@ class CardAdapter(Protocol):
 class OcrCardPreview:
     source: LoadedOcrImage
     card: OcrCardDraft
+    bank_name: str = "Т-Банк"
 
     def __post_init__(self) -> None:
+        require_bank_name(self.bank_name)
         if self.card.document.image_sha256 != self.source.image.sha256 or (
             self.card.document.width,
             self.card.document.height,
@@ -36,8 +43,10 @@ class HistoryAdapter(Protocol):
 class OcrHistoryPreview:
     source: LoadedOcrImage
     history: OcrHistoryDraft
+    bank_name: str = "Т-Банк"
 
     def __post_init__(self) -> None:
+        require_bank_name(self.bank_name)
         if self.source.image.sha256 != self.history.document.image_sha256 or (
             self.source.image.width,
             self.source.image.height,
@@ -53,7 +62,10 @@ class CardRecognition:
         adapter: CardAdapter,
         *,
         history_adapter: HistoryAdapter | None = None,
+        bank_name: str = "Т-Банк",
     ) -> None:
+        require_bank_name(bank_name)
+        self.bank_name = bank_name
         self._ocr, self._loader, self._adapter = ocr, loader, adapter
         self._history_adapter = history_adapter
 
@@ -63,7 +75,7 @@ class CardRecognition:
         card = self._adapter.parse(document)
         if card.document != document:
             raise ValidationError("Адаптер вернул поля другого OCR-документа.")
-        return OcrCardPreview(source, card)
+        return OcrCardPreview(source, card, self.bank_name)
 
     @property
     def supports_history(self) -> bool:
@@ -77,4 +89,4 @@ class CardRecognition:
         history = self._history_adapter.parse(document)
         if history.document != document:
             raise ValidationError("Адаптер вернул другую историю.")
-        return OcrHistoryPreview(source, history)
+        return OcrHistoryPreview(source, history, self.bank_name)

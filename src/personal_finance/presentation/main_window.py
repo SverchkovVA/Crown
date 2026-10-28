@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from functools import partial
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -182,15 +183,14 @@ def accept_named_form(dialog: QDialog, field: QLineEdit) -> None:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, *, ocr_recognition: CardRecognition | None = None) -> None:
+    def __init__(self, *, ocr_recognitions: tuple[CardRecognition, ...] = ()) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
         self.resize(1160, 760)
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
-        self._ocr_recognition = ocr_recognition
-        self._ocr_action: QAction | None = None
-        self._ocr_history_action: QAction | None = None
+        self._ocr_recognitions = ocr_recognitions
+        self._ocr_actions: list[QAction] = []
         self.session: VaultSession | None = None
         self._account_records: list[Account] = []
         self._journal_operations: list[Operation] = []
@@ -212,35 +212,44 @@ class MainWindow(QMainWindow):
         self.root_stack.addWidget(self._welcome())
         self.root_stack.addWidget(self._workspace())
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
-        if self._ocr_recognition is not None:
-            self._ocr_action = self.menuBar().addAction("Проверить изображение операции")
-            self._ocr_action.triggered.connect(self.review_ocr)
-            if self._ocr_recognition.supports_history:
-                self._ocr_history_action = self.menuBar().addAction("Проверить историю Т-Банка")
-                self._ocr_history_action.triggered.connect(self.review_ocr_history)
+        if self._ocr_recognitions:
+            menu = self.menuBar().addMenu("Распознавание")
+            for service in self._ocr_recognitions:
+                bank = menu.addMenu(service.bank_name)
+                for title, history in (("Карточка операции", False), ("История операций", True)):
+                    if history and not service.supports_history:
+                        continue
+                    action = bank.addAction(title)
+                    action.triggered.connect(
+                        partial(self.review_ocr, service=service, history=history)
+                    )
+                    self._ocr_actions.append(action)
 
-    def review_ocr_history(self) -> None:
-        self._start_ocr(history=True)
-
-    def review_ocr(self) -> None:
-        self._start_ocr()
-
-    def _start_ocr(self, *, history: bool = False) -> None:
-        if self._busy or self._ocr_recognition is None:
+    def review_ocr(
+        self,
+        checked: bool = False,
+        *,
+        service: CardRecognition | None = None,
+        history: bool = False,
+    ) -> None:
+        if self._busy or not self._ocr_recognitions:
             return
+        service = service or self._ocr_recognitions[0]
+        if service not in self._ocr_recognitions:
+            return
+        title = "История операций" if history else "Карточка одной операции"
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "История Т-Банка" if history else "Карточка одной операции Т-Банка",
+            f"{title} · {service.bank_name}",
             "",
             "Изображения (*.png *.jpg *.jpeg)",
         )
         if not path:
             return
-        service = self._ocr_recognition
         self._job(
             lambda: service.history(Path(path)) if history else service.preview(Path(path)),
             self._show_ocr_preview,
-            "Локальное распознавание карточки…",
+            f"Локальное распознавание · {service.bank_name}…",
             defer_success=True,
         )
 
@@ -1245,10 +1254,8 @@ class MainWindow(QMainWindow):
             return
         self._busy = True
         self.root_stack.setEnabled(False)
-        if self._ocr_action is not None:
-            self._ocr_action.setEnabled(False)
-        if self._ocr_history_action is not None:
-            self._ocr_history_action.setEnabled(False)
+        for ocr_action in self._ocr_actions:
+            ocr_action.setEnabled(False)
         self.statusBar().showMessage(message)
         job = Job(action, self)
         self._jobs.add(job)
@@ -1298,10 +1305,8 @@ class MainWindow(QMainWindow):
         signals.deleteLater()
         self._busy = False
         self.root_stack.setEnabled(True)
-        if self._ocr_action is not None:
-            self._ocr_action.setEnabled(True)
-        if self._ocr_history_action is not None:
-            self._ocr_history_action.setEnabled(True)
+        for ocr_action in self._ocr_actions:
+            ocr_action.setEnabled(True)
         state = "Книга открыта" if self.session else "Книга закрыта"
         self.statusBar().showMessage(f"Работает без интернета · {state}")
         if has_result and callback is not None:
@@ -1588,8 +1593,7 @@ class MainWindow(QMainWindow):
             "Исходная книга сохранится."
         )
         self.feature_note.setText(
-            "Доступны ручные операции и остатки. "
-            "OCR, импорт, аналитика и планирование ещё не включены."
+            "Доступны ручные операции и остатки."
             if ledger is not None
             else "Эта книга открыта со справочниками. "
             "Для финансовых операций восстановите её копию в новую папку."

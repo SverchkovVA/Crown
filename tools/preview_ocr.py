@@ -15,6 +15,8 @@ from personal_finance.infrastructure.ocr.images import load_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 from personal_finance.infrastructure.ocr.t_bank_history import TBankHistoryAdapter
 from personal_finance.infrastructure.ocr.tesseract import TesseractEngine, TesseractRuntime
+from personal_finance.infrastructure.ocr.vtb import VtbCardAdapter
+from personal_finance.infrastructure.ocr.vtb_history import VtbHistoryAdapter
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -45,12 +47,19 @@ def main() -> int:
     ):
         return 1
     app.installTranslator(translator)
+    ocr = Ocr(TesseractEngine(runtime))
     window = MainWindow(
-        ocr_recognition=CardRecognition(
-            Ocr(TesseractEngine(runtime)),
-            load_ocr_image,
-            TBankCardAdapter(),
-            history_adapter=TBankHistoryAdapter(),
+        ocr_recognitions=(
+            CardRecognition(
+                ocr, load_ocr_image, TBankCardAdapter(), history_adapter=TBankHistoryAdapter()
+            ),
+            CardRecognition(
+                ocr,
+                load_ocr_image,
+                VtbCardAdapter(),
+                history_adapter=VtbHistoryAdapter(),
+                bank_name="ВТБ",
+            ),
         )
     )
     window.show()

@@ -71,7 +71,7 @@ def test_history_menu_uses_worker_and_cleans_job_before_showing(qtbot, qapp, tmp
     service = CardRecognition(
         Ocr(Engine()), load_ocr_image, TBankCardAdapter(), history_adapter=TBankHistoryAdapter()
     )
-    window = MainWindow(ocr_recognition=service)
+    window = MainWindow(ocr_recognitions=(service,))
     qtbot.addWidget(window)
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(path), ""))
 
@@ -82,6 +82,6 @@ def test_history_menu_uses_worker_and_cleans_job_before_showing(qtbot, qapp, tmp
         return QDialog.DialogCode.Rejected
 
     monkeypatch.setattr(OcrHistoryDialog, "exec", show)
-    window._ocr_history_action.trigger()
+    window._ocr_actions[1].trigger()
     qtbot.waitUntil(lambda: bool(seen), timeout=5000)
-    assert seen == [2] and window.session is None and window._ocr_history_action.isEnabled()
+    assert seen == [2] and window.session is None and window._ocr_actions[1].isEnabled()

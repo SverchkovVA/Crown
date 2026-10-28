@@ -149,7 +149,7 @@ def test_main_window_ocr_runs_in_worker_and_review_runs_after_job_cleanup(
             return TBankCardAdapter().parse(doc)
 
     service = CardRecognition(Ocr(Engine()), load_ocr_image, Adapter())
-    window = MainWindow(ocr_recognition=service)
+    window = MainWindow(ocr_recognitions=(service,))
     qtbot.addWidget(window)
     if with_book:
         window.activate_session(session)
@@ -170,17 +170,17 @@ def test_main_window_ocr_runs_in_worker_and_review_runs_after_job_cleanup(
     assert observed[0].amount.minor == 123456
     assert (session.ledger.operations(include_deleted=True), session.ledger.balances()) == before
     assert (window.session is session) == with_book
-    assert window._ocr_action.isEnabled()
+    assert all(a.isEnabled() for a in window._ocr_actions)
     assert path.read_bytes() == loaded.image.png
 
 
 def test_cancel_before_loading_and_normal_launch_have_no_ocr_service(qtbot, monkeypatch):
     window = MainWindow()
     qtbot.addWidget(window)
-    assert window._ocr_action is None
+    assert not window._ocr_actions
     window.review_ocr()
     assert not window._jobs
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: ("", ""))
-    window._ocr_recognition = object()
+    window._ocr_recognitions = (CardRecognition(Ocr(object()), load_ocr_image, TBankCardAdapter()),)
     window.review_ocr()
     assert not window._jobs

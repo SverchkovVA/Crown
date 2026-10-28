@@ -5,7 +5,8 @@ from dataclasses import replace
 
 from personal_finance.domain.ocr import OcrDocument
 from personal_finance.domain.ocr_cards import OcrField, OcrHistoryDraft, OcrIssue
-from personal_finance.infrastructure.ocr.t_bank import _DATE, _NUMBER, TBankCardAdapter
+from personal_finance.infrastructure.ocr.rub_fields import _DATE, _DATE_HINT, _NUMBER
+from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 
 _AMOUNT = re.compile(
     rf"(?<![0-9A-Za-zА-Яа-я+\-−—–.,])(?P<value>[+\-−—–]?\s*{_NUMBER}\s*(?:RUB|₽|руб\.?|[РP]))(?![A-Za-zА-Яа-я])",
@@ -37,6 +38,8 @@ class TBankHistoryAdapter:
                 header = (text, indices)
                 header_count += 1
                 continue
+            if _DATE_HINT.match(text):
+                header = None
             offsets = []
             position = 0
             for word, index in zip(words, indices, strict=True):

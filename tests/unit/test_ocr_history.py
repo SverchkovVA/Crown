@@ -126,3 +126,17 @@ def test_history_has_a_hard_limit_instead_of_silent_truncation(count):
         if count == 100
         else (not result.cards and result.blocked_reason)
     )
+
+
+def test_unknown_next_date_header_does_not_reuse_old_tbank_date():
+    from decimal import Decimal
+
+    from personal_finance.domain.ocr import OcrBox, OcrWord
+
+    doc = history_document(values=("-1 RUB",))
+    extra = (
+        OcrWord("28 окт. 2026", OcrBox(20, 400, 400, 20), Decimal(95), (1, 1, 90), 1),
+        OcrWord("-2 RUB", OcrBox(700, 450, 300, 20), Decimal(95), (1, 1, 91), 1),
+    )
+    result = TBankHistoryAdapter().parse(replace(doc, words=(*doc.words, *extra)))
+    assert len(result.cards) == 1 and result.unassigned_fragments == 1

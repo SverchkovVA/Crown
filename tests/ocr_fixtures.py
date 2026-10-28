@@ -77,3 +77,41 @@ def history_document(
                 OcrWord(text, OcrBox(left, top, 80, 35), Decimal(95), (1, 1, line), number)
             )
     return OcrDocument(image_sha256 or image().sha256, 1080, 1400, ENGINE, tuple(words))
+
+
+VTB_CARD = ("Детали операции", "-1 234,56 RUB", "Дата и время", "27.10.2026 14:35")
+
+
+def vtb_history_document(
+    *,
+    header="27 октября 2026",
+    values=("-1 234,56 RUB", "+50,00 Р"),
+    summary=True,
+    heading=True,
+    amount_left=700,
+    bottom=False,
+):
+    lines = []
+    if heading:
+        lines.append((5, [("История операций", 20, 400)]))
+    date_tokens = [(header, 20, 220)]
+    if summary:
+        date_tokens.append(("-9 876,54 RUB", 280, 250))
+    lines.append((50, date_tokens))
+    for index, text in enumerate(values):
+        top = 1390 if bottom else 100 + index * 12
+        lines.append(
+            (
+                top,
+                [
+                    ("Вымышленный магазин", 20, 300),
+                    (text, amount_left, min(350, 1070 - amount_left)),
+                ],
+            )
+        )
+    words = tuple(
+        OcrWord(text, OcrBox(left, top, width, 10), Decimal(95), (1, 1, number), word)
+        for number, (top, tokens) in enumerate(lines, 1)
+        for word, (text, left, width) in enumerate(tokens, 1)
+    )
+    return OcrDocument(image().sha256, 1080, 1400, ENGINE, words)
