@@ -21,7 +21,7 @@ from personal_finance.presentation.main_window import MainWindow
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Локальная проверка OCR без записи в книгу")
+    parser = argparse.ArgumentParser(description="Опытная локальная проверка и подтверждение OCR")
     parser.add_argument(
         "--runtime", type=Path, required=True, help="Каталог проверенного OCR-кандидата"
     )

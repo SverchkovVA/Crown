@@ -69,6 +69,9 @@ class OperationDialog(QDialog):
         existing: Operation | None = None,
         initial_draft: OperationDraft | None = None,
         preview_mode: bool = False,
+        require_kind_choice: bool = False,
+        preview_title: str | None = None,
+        preview_message: str | None = None,
         kind: OperationKind = OperationKind.EXPENSE,
         account_id: str | None = None,
         allow_splits: bool = True,
@@ -83,7 +86,7 @@ class OperationDialog(QDialog):
             raise ValidationError("Укажите один начальный снимок операции.")
         initial = existing.draft if existing is not None else initial_draft
         self.setWindowTitle(
-            "Настроить строку импорта"
+            (preview_title or "Настроить строку импорта")
             if preview_mode
             else "Исправить операцию"
             if existing
@@ -104,7 +107,11 @@ class OperationDialog(QDialog):
         }
         layout = QVBoxLayout(self)
         introduction = QLabel(
-            "Это предпросмотр. Изменения попадут в книгу только после подтверждения всего импорта."
+            (
+                preview_message
+                or "Это предпросмотр. Изменения попадут в книгу только после "
+                "подтверждения всего импорта."
+            )
             if preview_mode
             else "Исправление создаст новую версию. Предыдущая версия останется в истории."
             if existing
@@ -241,13 +248,32 @@ class OperationDialog(QDialog):
                 self.purchase.setCurrentIndex(1)
         elif account_id is not None:
             self.account.setCurrentIndex(self.account.findData(account_id))
+        if require_kind_choice and initial is None:
+            self.kind.insertItem(0, "Выберите вид операции", None)
+            self.kind.setCurrentIndex(0)
         screen = self.screen()
         available_height = screen.availableGeometry().height() if screen is not None else 900
         preferred = max(420, min(820, self.form_host.sizeHint().height() + 140))
         self.resize(650, min(preferred, max(360, available_height - 80)))
 
     def _update_fields(self) -> None:
-        kind = OperationKind(self.kind.currentData())
+        raw_kind = self.kind.currentData()
+        if raw_kind is None:
+            for widget in (
+                self.category,
+                self.split,
+                self.parts,
+                self.destination,
+                self.fee,
+                self.fee_category,
+                self.purchase,
+                self.refund_hint,
+            ):
+                self.form.setRowVisible(widget, False)
+            self.account_label.setText("Счёт")
+            self.amount.setPlaceholderText("Укажите проверенную сумму")
+            return
+        kind = OperationKind(raw_kind)
         transfer = kind == OperationKind.TRANSFER
         self.account_label.setText("Счёт получения" if kind == OperationKind.REFUND else "Счёт")
         self.form.setRowVisible(
@@ -342,6 +368,10 @@ class OperationDialog(QDialog):
     def _validate(self) -> None:
         self.result_draft = None
         try:
+            if self.kind.currentData() is None:
+                raise FinanceError(
+                    "Явно выберите вид операции: доход, расход, перевод или возврат."
+                )
             kind = OperationKind(self.kind.currentData())
             candidate = self._refund_candidates.get(self.purchase.currentData())
             if kind == OperationKind.REFUND and (not self._allow_refunds or candidate is None):

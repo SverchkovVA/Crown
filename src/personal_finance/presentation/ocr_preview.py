@@ -1,4 +1,4 @@
-"""Проверка полей рядом с изображением; запись в книгу ещё не подключена."""
+"""Проверка полей рядом с изображением и отдельный запрос финансовой подготовки."""
 
 from decimal import Decimal
 
@@ -95,10 +95,17 @@ class SourceImageView(QGraphicsView):
 
 
 class OcrPreviewDialog(QDialog):
-    def __init__(self, preview: OcrCardPreview, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        preview: OcrCardPreview,
+        parent: QWidget | None = None,
+        *,
+        allow_financial_prepare: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.preview = preview
         self.reviewed: ReviewedOcrCard | None = None
+        self.financial_requested = False
         self.checks: dict[str, QCheckBox] = {}
         self.evidence_buttons: dict[str, QPushButton] = {}
         self.setWindowTitle(f"Проверка карточки · {preview.bank_name}")
@@ -107,8 +114,12 @@ class OcrPreviewDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             plain(
-                "Сверьте поля с изображением. Результат проверки останется в памяти; "
-                "запись операции в книгу ещё не подключена."
+                "Сверьте поля с изображением. «Завершить проверку» оставляет результат в памяти. "
+                + (
+                    "Для записи отдельно подготовьте и подтвердите операцию."
+                    if allow_financial_prepare
+                    else "Для финансового подтверждения откройте книгу текущей схемы."
+                )
             )
         )
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -139,6 +150,13 @@ class OcrPreviewDialog(QDialog):
             "Четыре обязательных поля нужно подтвердить вручную."
         )
         form.addRow(self.notice)
+        if allow_financial_prepare and not preview.card.amount.word_indices:
+            form.addRow(
+                plain(
+                    "Финансовая подготовка недоступна: OCR не выделил область исходной суммы. "
+                    "Проверку полей можно завершить без записи в книгу."
+                )
+            )
         card = preview.card
         self.amount = QLineEdit()
         self.amount.setMaxLength(80)
@@ -218,6 +236,12 @@ class OcrPreviewDialog(QDialog):
         box.button(QDialogButtonBox.StandardButton.Cancel).setText("Закрыть")
         self.finish = box.addButton("Завершить проверку", QDialogButtonBox.ButtonRole.AcceptRole)
         self.finish.clicked.connect(self._validate)
+        self.prepare_button: QPushButton | None = None
+        if allow_financial_prepare:
+            self.prepare_button = box.addButton(
+                "Подготовить операцию", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            self.prepare_button.clicked.connect(self._request_financial)
         box.rejected.connect(self.reject)
         layout.addWidget(box)
         self._update()
@@ -229,14 +253,25 @@ class OcrPreviewDialog(QDialog):
         return "Источник: " + status + score
 
     def _update(self) -> None:
-        self.finish.setEnabled(
+        ready = (
             not self.preview.card.blocked_reason
             and self.single.isChecked()
             and all(check.isChecked() for check in self.checks.values())
         )
+        self.finish.setEnabled(ready)
+        if self.prepare_button is not None:
+            self.prepare_button.setEnabled(ready and bool(self.preview.card.amount.word_indices))
 
-    def _validate(self) -> None:
+    def _request_financial(self) -> None:
+        if self.prepare_button is None or not self.prepare_button.isEnabled():
+            return
+        self._validate(financial=True)
+
+    def _validate(self, *, financial: bool = False) -> None:
         self.reviewed = None
+        self.financial_requested = False
+        if financial and (self.prepare_button is None or not self.prepare_button.isEnabled()):
+            return
         raw_direction = self.direction.currentData()
         direction = CashDirection(raw_direction) if raw_direction in ("in", "out") else None
         try:
@@ -258,4 +293,5 @@ class OcrPreviewDialog(QDialog):
         except ValidationError as error:
             QMessageBox.warning(self, "Проверьте поля", str(error))
             return
+        self.financial_requested = financial
         self.accept()

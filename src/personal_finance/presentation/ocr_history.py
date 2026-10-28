@@ -21,10 +21,17 @@ from personal_finance.presentation.tables import replace_table
 
 
 class OcrHistoryDialog(QDialog):
-    def __init__(self, preview: OcrHistoryPreview, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        preview: OcrHistoryPreview,
+        parent: QWidget | None = None,
+        *,
+        allow_financial_prepare: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.preview = preview
         self.reviews: dict[int, ReviewedOcrCard] = {}
+        self.selected_for_financial: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
         self.setWindowTitle(f"История · {preview.bank_name}: проверка строк")
         self.resize(1180, 720)
         self.setMinimumSize(920, 580)
@@ -33,7 +40,13 @@ class OcrHistoryDialog(QDialog):
             f"Предложено строк: {len(preview.history.cards)}. "
             f"Денежных фрагментов вне строк: {preview.history.unassigned_fragments}. "
             "Проверьте источник и каждую выбранную строку. "
-            "Проверки хранятся до закрытия окна; запись в книгу ещё не подключена."
+            "Проверки хранятся до закрытия окна. "
+            + (
+                "Подготовка одной выбранной строки закрывает это окно; "
+                "остальные проверки исчезнут. Запись потребует отдельного подтверждения."
+                if allow_financial_prepare
+                else "Для финансового подтверждения откройте книгу текущей схемы."
+            )
         )
         layout.addWidget(plain(notice))
         split = QSplitter(Qt.Orientation.Horizontal)
@@ -58,6 +71,11 @@ class OcrHistoryDialog(QDialog):
         self.review_button = QPushButton("Проверить выбранную строку")
         self.review_button.clicked.connect(self.review_selected)
         right.addWidget(self.review_button)
+        self.prepare_button: QPushButton | None = None
+        if allow_financial_prepare:
+            self.prepare_button = QPushButton("Подготовить выбранную операцию")
+            self.prepare_button.clicked.connect(self.prepare_selected)
+            right.addWidget(self.prepare_button)
         tools = QHBoxLayout()
         for title, action in (
             ("Вписать", self.image.fit_image),
@@ -130,11 +148,39 @@ class OcrHistoryDialog(QDialog):
             self.selection_note.setText(
                 f"Выбрана строка {index + 1} из {len(self.preview.history.cards)}"
             )
-            self.image.show_evidence(self.preview.history.cards[index].amount.word_indices)
+            indices = self.preview.history.cards[index].amount.word_indices
+            if self.prepare_button is not None and not indices:
+                self.selection_note.setText(
+                    self.selection_note.text()
+                    + ". Финансовая подготовка недоступна: не выделена область исходной суммы."
+                )
+            self.image.show_evidence(indices)
         else:
             self.selection_note.setText("Строка не выбрана")
             self.image.show_evidence(())
         self.review_button.setEnabled(index >= 0 and not self.preview.history.blocked_reason)
+        if self.prepare_button is not None:
+            self.prepare_button.setEnabled(
+                index in self.reviews
+                and not self.preview.history.blocked_reason
+                and bool(self.preview.history.cards[index].amount.word_indices)
+            )
+
+    def prepare_selected(self) -> None:
+        index = self._selected_index()
+        if (
+            self.prepare_button is None
+            or not self.prepare_button.isEnabled()
+            or index not in self.reviews
+        ):
+            return
+        self.selected_for_financial = (
+            OcrCardPreview(
+                self.preview.source, self.preview.history.cards[index], self.preview.bank_name
+            ),
+            self.reviews[index],
+        )
+        self.accept()
 
     def review_selected(self) -> None:
         index = self._selected_index()

@@ -61,6 +61,8 @@ from personal_finance.domain.models import (
     CategoryKind,
     validate_name,
 )
+from personal_finance.domain.ocr_cards import ReviewedOcrCard
+from personal_finance.domain.ocr_imports import OcrImportPreview, OcrImportResult
 from personal_finance.domain.organization import SavedFilter, Tag
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
@@ -100,6 +102,7 @@ from personal_finance.presentation.ledger_dialogs import (
     category_title,
     format_money,
 )
+from personal_finance.presentation.ocr_confirmation import OcrConfirmationDialog, OcrOperationDialog
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
 from personal_finance.presentation.organization import (
@@ -254,18 +257,99 @@ class MainWindow(QMainWindow):
         )
 
     def _show_ocr_preview(self, preview: OcrCardPreview | OcrHistoryPreview) -> None:
+        session = self.session
+        allow = session is not None and session.ocr_importing is not None
         dialog = (
-            OcrHistoryDialog(preview, self)
+            OcrHistoryDialog(preview, self, allow_financial_prepare=allow)
             if isinstance(preview, OcrHistoryPreview)
-            else OcrPreviewDialog(preview, self)
+            else OcrPreviewDialog(preview, self, allow_financial_prepare=allow)
         )
+        requested: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted:
-                self.statusBar().showMessage(
-                    "Поля проверены · Запись операции в книгу ещё не подключена"
-                )
+                if isinstance(dialog, OcrHistoryDialog):
+                    requested = dialog.selected_for_financial
+                elif dialog.financial_requested and dialog.reviewed is not None:
+                    requested = (dialog.preview, dialog.reviewed)
+                if requested is None:
+                    self.statusBar().showMessage(
+                        "Поля OCR проверены · Операция в книгу не записана"
+                    )
         finally:
             dialog.deleteLater()
+        if requested is not None and session is not None and self.session is session:
+            self._prepare_ocr_operation(session, *requested)
+
+    def _prepare_ocr_operation(
+        self, session: VaultSession, preview: OcrCardPreview, reviewed: ReviewedOcrCard
+    ) -> None:
+        if self.session is not session or session.ocr_importing is None or session.ledger is None:
+            return
+        if not any(account.currency == "RUB" for account in self._account_records):
+            QMessageBox.information(
+                self, "Сначала добавьте счёт", "Создайте счёт RUB для операции OCR."
+            )
+            return
+        dialog = OcrOperationDialog(
+            preview,
+            reviewed,
+            self._account_records,
+            session.catalog.categories(),
+            session.catalog.institutions(),
+            self,
+            allow_splits=session.ledger.supports_splits,
+            allow_refunds=session.ledger.supports_refunds,
+            refund_candidates=self._refund_candidates,
+            tags=self._tag_records,
+            allow_tags=session.ledger.supports_tags,
+        )
+        selection = None
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                selection = dialog.result_selection
+        finally:
+            dialog.deleteLater()
+        if selection is None or self.session is not session:
+            return
+        service = session.ocr_importing
+        self._job(
+            lambda: service.preview(selection),
+            lambda prepared: self._show_ocr_confirmation(session, prepared),
+            "Проверка повторов и финансового смысла OCR…",
+            defer_success=True,
+        )
+
+    def _show_ocr_confirmation(self, session: VaultSession, prepared: OcrImportPreview) -> None:
+        if self.session is not session or session.ocr_importing is None:
+            return
+        dialog = OcrConfirmationDialog(
+            prepared, self._account_records, session.catalog.categories(), self._tag_records, self
+        )
+        selection = None
+        try:
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                selection = dialog.result_selection
+        finally:
+            dialog.deleteLater()
+        if selection is None or self.session is not session:
+            return
+        service, command_id = session.ocr_importing, str(uuid4())
+        self._job(
+            lambda: service.confirm(selection, command_id=command_id),
+            lambda result: self._ocr_saved(session, result),
+            "Подтверждение операции и происхождения OCR…",
+            defer_success=True,
+        )
+
+    def _ocr_saved(self, session: VaultSession, result: OcrImportResult) -> None:
+        if self.session is not session:
+            return
+        self.refresh()
+        self.statusBar().showMessage(
+            "Источник OCR связан с операцией · Новые движения не создавались"
+            if result.linked
+            else "Операция OCR и её происхождение сохранены"
+        )
 
     def _welcome(self) -> QWidget:
         page = QWidget()
