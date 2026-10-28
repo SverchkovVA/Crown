@@ -194,7 +194,7 @@ def test_fee_label_without_amount_also_blocks_history():
     assert VtbHistoryAdapter().parse(replace(doc, words=(*doc.words, extra))).blocked_reason
 
 
-@pytest.mark.parametrize("summary", ["-2 ООО Р", "−2 000 P", "2 000Р", "2026 Р"])
+@pytest.mark.parametrize("summary", ["-7 ООО Р", "−7 000 P", "7 000Р", "2026 Р"])
 def test_unreadable_header_total_keeps_partial_date_without_inventing_year_or_operation(summary):
     doc = history(header="28 октября " + summary, values=("-17 RUB",), summary=False)
     result = VtbHistoryAdapter().parse(doc)
@@ -206,9 +206,9 @@ def test_unreadable_header_total_keeps_partial_date_without_inventing_year_or_op
 
 
 def test_equal_transfers_under_two_partial_headers_are_separate_proposals():
-    doc = history(header="28 октября -2 ООО Р", values=("-17 RUB",), summary=False)
+    doc = history(header="28 октября -7 ООО Р", values=("-17 RUB",), summary=False)
     extra = (
-        OcrWord("26 октября -2 ООО Р", OcrBox(20, 300, 400, 20), Decimal(95), (1, 1, 90), 1),
+        OcrWord("26 октября -7 ООО Р", OcrBox(20, 300, 400, 20), Decimal(95), (1, 1, 90), 1),
         OcrWord("Вымышленный перевод", OcrBox(20, 350, 300, 20), Decimal(95), (1, 1, 91), 1),
         OcrWord("-17 RUB", OcrBox(700, 350, 300, 20), Decimal(95), (1, 1, 91), 2),
     )
@@ -221,6 +221,6 @@ def test_equal_transfers_under_two_partial_headers_are_separate_proposals():
 
 def test_bad_amount_letters_are_never_converted_by_header_recovery():
     result = VtbHistoryAdapter().parse(
-        history(header="28 октября -2 ООО Р", values=("-О,50 RUB",), summary=False)
+        history(header="28 октября -7 ООО Р", values=("-О,50 RUB",), summary=False)
     )
     assert not result.cards
