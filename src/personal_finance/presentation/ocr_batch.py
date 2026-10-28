@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from html import escape
 from typing import Any
 
-from PySide6.QtCore import QEvent, QObject, Qt, QThreadPool, Slot
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QThreadPool, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -27,6 +27,11 @@ from PySide6.QtWidgets import (
 from personal_finance.application.ocr_cards import OcrCardPreview, OcrHistoryPreview
 from personal_finance.application.ocr_importing import OcrImporting
 from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
+from personal_finance.domain.classification import (
+    ClassificationInput,
+    ClassificationSnapshot,
+    ClassificationStatus,
+)
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import Account, Category, CategoryKind
@@ -60,6 +65,8 @@ class BatchRow:
     description: str
     local_time: str
     saved: bool = False
+    manual_category: bool = False
+    category_conflict: bool = False
 
 
 class BatchDecisionDialog(QDialog):
@@ -163,10 +170,12 @@ class OcrBatchDialog(QDialog):
         *,
         on_saved: Callable[[tuple[OcrImportResult, ...]], None] = lambda _: None,
         on_busy: Callable[[bool], None] = lambda _: None,
+        classification: ClassificationSnapshot | None = None,
     ) -> None:
         super().__init__(parent)
         self.preview, self.importing, self.preferences = preview, importing, preferences
         self.accounts, self.categories = accounts, categories
+        self._classification = classification
         self._on_saved, self._on_busy = on_saved, on_busy
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
@@ -200,12 +209,24 @@ class OcrBatchDialog(QDialog):
         body = QVBoxLayout(self.content)
         common = QHBoxLayout()
         self.common_account = QComboBox()
+        self.common_account.setAccessibleName("Счёт для незаполненных строк OCR")
         self.common_account.addItem("Выберите счёт для списка", None)
         for account in accounts:
             self.common_account.addItem(account.name, account.id)
         common.addWidget(plain("Счёт для незаполненных строк"))
         common.addWidget(self.common_account, 1)
         body.addLayout(common)
+        self.use_rules: QCheckBox | None = None
+        if classification is not None:
+            self.use_rules = QCheckBox("Предлагать категории по правилам книги")
+            self.use_rules.setChecked(True)
+            self.use_rules.setToolTip(
+                "Ручной выбор главнее. При конфликте правил выберите категорию; "
+                "подсказки не изменяют уже записанные операции. "
+                "Используются правила на момент открытия списка."
+            )
+            self.use_rules.toggled.connect(self._rules_changed)
+            body.addWidget(self.use_rules)
         self.selection_note = plain("Выберите строку для просмотра источника")
         body.addWidget(self.selection_note)
         details = QPushButton("Изменить поля выбранной строки")
@@ -310,8 +331,10 @@ class OcrBatchDialog(QDialog):
             kind.currentIndexChanged.connect(lambda _, i=index: self._kind_changed(i))
             for field in (occurred, amount):
                 field.textChanged.connect(self._edited)
-            for combo in (account_combo, category, other):
-                combo.currentIndexChanged.connect(self._edited)
+            account_combo.currentIndexChanged.connect(lambda _, i=index: self._account_changed(i))
+            category.currentIndexChanged.connect(lambda _, i=index: self._category_chosen(i))
+            category.activated.connect(lambda _, i=index: self._category_chosen(i))
+            other.currentIndexChanged.connect(self._edited)
             include.toggled.connect(self._edited)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -343,31 +366,97 @@ class OcrBatchDialog(QDialog):
         row = self.rows[index]
         kind = row.kind.currentData()
         selected = row.category.currentData()
-        row.category.clear()
-        if kind in (OperationKind.EXPENSE, OperationKind.INCOME):
-            desired = CategoryKind.EXPENSE if kind == OperationKind.EXPENSE else CategoryKind.INCOME
-            for category in self.categories:
-                if category.kind == desired:
-                    row.category.addItem(category.name, category.id)
-            target = row.category.findData(selected)
-            if target >= 0:
-                row.category.setCurrentIndex(target)
-            else:
-                other = next(
-                    (
-                        c.id
-                        for c in self.categories
-                        if c.kind == desired and c.name.startswith("Другие")
-                    ),
-                    None,
+        with QSignalBlocker(row.category):
+            row.category.clear()
+            if kind in (OperationKind.EXPENSE, OperationKind.INCOME):
+                desired = (
+                    CategoryKind.EXPENSE if kind == OperationKind.EXPENSE else CategoryKind.INCOME
                 )
-                if other:
-                    row.category.setCurrentIndex(row.category.findData(other))
+                for category in self.categories:
+                    if category.kind == desired:
+                        row.category.addItem(category.name, category.id)
+                target = row.category.findData(selected)
+                if target >= 0:
+                    row.category.setCurrentIndex(target)
+                else:
+                    row.manual_category = False
+        self._apply_category_rule(index)
         row.category.setEnabled(kind in (OperationKind.INCOME, OperationKind.EXPENSE))
         row.other.setEnabled(kind == OperationKind.TRANSFER)
         if kind == "exclude":
             row.include.setChecked(False)
             row.state.setText("Исключено: не меняет остатки и доходы")
+        self._edited()
+
+    def _default_category(self, row: BatchRow) -> str | None:
+        return next(
+            (
+                c.id
+                for c in self.categories
+                if c.name.startswith("Другие") and row.category.findData(c.id) >= 0
+            ),
+            row.category.itemData(0) if row.category.count() else None,
+        )
+
+    def _apply_category_rule(self, index: int) -> None:
+        row = self.rows[index]
+        if row.saved:
+            return
+        row.category_conflict = False
+        if row.kind.currentData() not in (OperationKind.INCOME, OperationKind.EXPENSE):
+            return
+        if row.manual_category and row.category.currentData() is not None:
+            row.state.setText("Категория выбрана вручную")
+            return
+        identifier = self._default_category(row)
+        state = "Предложение"
+        if (
+            self._classification is not None
+            and self.use_rules is not None
+            and self.use_rules.isChecked()
+            and row.account.currentData() is not None
+        ):
+            decision = self._classification.suggest(
+                ClassificationInput(
+                    OperationKind(row.kind.currentData()),
+                    row.account.currentData(),
+                    row.description,
+                )
+            )
+            if decision.status == ClassificationStatus.SUGGESTED:
+                identifier = decision.category_id
+                names = {r.id: r.name for r in self._classification.rules}
+                state = "По правилу: " + ", ".join(names[v] for v in decision.rule_ids[:3])
+                if len(decision.rule_ids) > 3:
+                    state += f" и ещё {len(decision.rule_ids) - 3}"
+            elif decision.status == ClassificationStatus.CONFLICT:
+                identifier = None
+                row.category_conflict = True
+                state = "Конфликт правил: выберите категорию вручную"
+            else:
+                state = "Нет совпадения: общая категория"
+        with QSignalBlocker(row.category):
+            row.category.setCurrentIndex(row.category.findData(identifier))
+        if (
+            not self.preview.history.cards[index].blocked_reason
+            and len(self.preferences.matching_parties(row.description)) <= 1
+        ):
+            row.state.setText(state)
+
+    def _category_chosen(self, index: int) -> None:
+        row = self.rows[index]
+        row.manual_category = row.category.currentData() is not None
+        row.category_conflict = False
+        self._apply_category_rule(index)
+        self._edited()
+
+    def _account_changed(self, index: int) -> None:
+        self._apply_category_rule(index)
+        self._edited()
+
+    def _rules_changed(self) -> None:
+        for index in range(len(self.rows)):
+            self._apply_category_rule(index)
         self._edited()
 
     def _common_changed(self) -> None:
@@ -447,6 +536,7 @@ class OcrBatchDialog(QDialog):
                 row.local_time = value.local_time.strftime("%H:%M") if value.local_time else ""
                 row.description = value.description
                 row.state.setText("Поля изменены")
+                self._apply_category_rule(index)
                 self._edited()
                 self._show_source()
         finally:
@@ -454,6 +544,8 @@ class OcrBatchDialog(QDialog):
 
     def _selection(self, index: int) -> OcrSelection:
         row, card = self.rows[index], self.preview.history.cards[index]
+        if row.category_conflict:
+            raise ValidationError("Конфликт правил: выберите категорию этой строки вручную.")
         raw = row.amount.text().strip()
         if not raw.startswith(("+", "-", "−")):
             raise ValidationError("Укажите сумму со знаком: + для поступления, − для списания.")
@@ -514,7 +606,7 @@ class OcrBatchDialog(QDialog):
             self.notice.setText("Сверьте выбранные поля либо отключите флажки в настройках.")
             return
         values = []
-        failed = False
+        failures = []
         for index, row in enumerate(self.rows):
             if row.saved or not row.include.isChecked():
                 continue
@@ -523,11 +615,10 @@ class OcrBatchDialog(QDialog):
                 row.state.setText("Подготовлено")
             except FinanceError as error:
                 row.state.setText(str(error))
-                failed = True
-        if failed or not values:
-            self.notice.setText(
-                "Исправьте отмеченные строки. Ничего не записано; правки сохранены в этом окне."
-            )
+                failures.append(f"Строка {index + 1}: {error}")
+        if failures or not values:
+            reason = failures[0] if failures else "Не выбраны готовые строки."
+            self.notice.setText(reason + " Ничего не записано; правки сохранены в этом окне.")
             return
         selections = tuple(values)
         self._start(lambda: self.importing.preview_many(selections), self._prepared)

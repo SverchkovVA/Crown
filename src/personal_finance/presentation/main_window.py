@@ -392,6 +392,9 @@ class MainWindow(QMainWindow):
                 self,
                 on_saved=lambda _: self.refresh() if self.session is session else None,
                 on_busy=self._ocr_batch_busy,
+                classification=session.classification.snapshot()
+                if session.classification is not None
+                else None,
             )
             try:
                 batch.exec()
