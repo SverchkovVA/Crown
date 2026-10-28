@@ -9,10 +9,11 @@ from personal_finance.application.ocr import Ocr
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ocr import LoadedOcrImage, OcrDocument
 from personal_finance.domain.ocr_cards import OcrCardDraft, OcrHistoryDraft
+from personal_finance.domain.ocr_profiles import PROFILE_PREFIXES
 
 
 def require_bank_name(value: str) -> None:
-    if value not in ("Т-Банк", "ВТБ"):
+    if value not in PROFILE_PREFIXES:
         raise ValidationError("Неизвестный профиль OCR-банка.")
 
 
@@ -64,16 +65,40 @@ class CardRecognition:
         history_adapter: HistoryAdapter | None = None,
         bank_name: str = "Т-Банк",
         fallback_ocr: Ocr | None = None,
+        auto_history_hint: Callable[[OcrDocument], bool] | None = None,
     ) -> None:
         require_bank_name(bank_name)
         self.bank_name = bank_name
         self._ocr, self._loader, self._adapter = ocr, loader, adapter
         self._history_adapter = history_adapter
         self._fallback_ocr = fallback_ocr
+        self._auto_history_hint = auto_history_hint
 
     def preview(self, path: Path) -> OcrCardPreview:
         source = self._loader(path)
         document = self._ocr.recognize(source.image)
+        return self._card_preview(source, document)
+
+    def analyze(self, path: Path) -> OcrCardPreview | OcrHistoryPreview:
+        source = self._loader(path)
+        document = self._ocr.recognize(source.image)
+        if self._history_adapter is not None:
+            history = self._history_adapter.parse(document)
+            if history.document != document:
+                raise ValidationError("Адаптер вернул другую историю.")
+            if (
+                not history.blocked_reason
+                and history.cards
+                and (
+                    len(history.cards) > 1
+                    or self._auto_history_hint is not None
+                    and self._auto_history_hint(document)
+                )
+            ):
+                return OcrHistoryPreview(source, history, self.bank_name)
+        return self._card_preview(source, document)
+
+    def _card_preview(self, source: LoadedOcrImage, document: OcrDocument) -> OcrCardPreview:
         card = self._adapter.parse(document)
         if card.document != document:
             raise ValidationError("Адаптер вернул поля другого OCR-документа.")

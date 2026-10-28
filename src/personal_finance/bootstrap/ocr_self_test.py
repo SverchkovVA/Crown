@@ -7,11 +7,15 @@ from PySide6.QtGui import QImage, QImageWriter
 
 from personal_finance.application.ocr_cards import OcrCardPreview, OcrHistoryPreview
 from personal_finance.domain.ocr import OcrBox, OcrDocument, OcrEngineInfo, OcrWord
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
+from personal_finance.domain.ocr_settings import OcrPreferences
+from personal_finance.infrastructure.ocr.generic import GenericHistoryAdapter
 from personal_finance.infrastructure.ocr.images import decode_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 from personal_finance.infrastructure.ocr.t_bank_history import TBankHistoryAdapter
 from personal_finance.infrastructure.ocr.vtb import VtbCardAdapter
 from personal_finance.infrastructure.ocr.vtb_history import VtbHistoryAdapter
+from personal_finance.presentation.ocr_batch import OcrBatchDialog
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
 
@@ -64,6 +68,26 @@ def check_packaged_ocr_preview() -> None:
             ),
         )
         vtb_history = VtbHistoryAdapter().parse(vtb_history_document)
+        generic = GenericHistoryAdapter().parse(vtb_history_document)
+        generic_dialog = OcrBatchDialog(
+            OcrHistoryPreview(loaded, generic, UNIVERSAL_PROFILE),
+            None,
+            [],
+            [],
+            OcrPreferences(confirm_fields=False, review_before_save=False),
+        )
+        try:
+            generic_dialog.prepare()
+            if (
+                len(generic_dialog.reviewed_cards) != 1
+                or generic_dialog.saved_count != 0
+                or generic_dialog._job is not None
+            ):
+                raise RuntimeError("Универсальный предпросмотр без записи недоступен.")
+        finally:
+            generic_dialog.close()
+            generic_dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(generic_dialog, QEvent.Type.DeferredDelete)
         if (
             vtb_card.amount.value != 123
             or vtb_card.occurred_on.value is None

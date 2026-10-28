@@ -202,6 +202,21 @@ def suggest_occurred_on(card: OcrCardDraft, *, reference_year: int) -> OcrField[
     ):
         return original
     text = " ".join(card.document.words[i].text for i in original.word_indices).strip()
+    if card.adapter.startswith("generic-"):
+        from personal_finance.infrastructure.ocr.generic_dates import date_spans, parse_date
+
+        try:
+            parts = parse_date(text)
+            if parts is None:
+                spans = date_spans(text)
+                parts = parse_date(spans[0][2]) if len(spans) == 1 else None
+            if parts is None:
+                return original
+            proposed = parts.calendar(reference_year)
+            issues = tuple(i for i in original.issues if i != OcrIssue.MISSING)
+            return OcrField(proposed, original.word_indices, issues)
+        except ValueError:
+            return OcrField(None, original.word_indices, (*original.issues, OcrIssue.INVALID))
     text = _WEEKDAY_PREFIX.sub("", _DATE_LABEL.sub("", text))
     match = card_date_match(text)
     if match is not None:

@@ -11,6 +11,8 @@ from PySide6.QtWidgets import QApplication
 from personal_finance.application.ocr import Ocr
 from personal_finance.application.ocr_cards import CardRecognition
 from personal_finance.domain.ocr import OcrEngineInfo
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
+from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, GenericHistoryAdapter
 from personal_finance.infrastructure.ocr.images import load_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 from personal_finance.infrastructure.ocr.t_bank_history import TBankHistoryAdapter
@@ -51,6 +53,15 @@ def main() -> int:
     fallback = Ocr(TesseractEngine(runtime, page_segmentation=11))
     window = MainWindow(
         ocr_recognitions=(
+            CardRecognition(
+                ocr,
+                load_ocr_image,
+                GenericCardAdapter(),
+                history_adapter=GenericHistoryAdapter(),
+                bank_name=UNIVERSAL_PROFILE,
+                fallback_ocr=fallback,
+                auto_history_hint=GenericHistoryAdapter.has_heading,
+            ),
             CardRecognition(
                 ocr,
                 load_ocr_image,

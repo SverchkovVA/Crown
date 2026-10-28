@@ -194,6 +194,8 @@ class OcrPreviewDialog(QDialog):
         self.currency = QComboBox()
         self.currency.addItem("Не определена", "")
         self.currency.addItem("RUB — российский рубль", "RUB")
+        if suggestions.currency and self.currency.findData(suggestions.currency) < 0:
+            self.currency.addItem(suggestions.currency + " — из источника", suggestions.currency)
         self.currency.setCurrentIndex(max(0, self.currency.findData(suggestions.currency)))
         self.direction = QComboBox()
         self.direction.addItem("Не определено", None)

@@ -64,6 +64,7 @@ from personal_finance.domain.models import (
 )
 from personal_finance.domain.ocr_cards import ReviewedOcrCard
 from personal_finance.domain.ocr_imports import OcrImportPreview, OcrImportResult, OcrImportStatus
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.organization import SavedFilter, Tag
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
@@ -295,6 +296,12 @@ class MainWindow(QMainWindow):
         if self._ocr_recognitions:
             menu = self.menuBar().addMenu("Распознавание")
             for service in self._ocr_recognitions:
+                if service.bank_name == UNIVERSAL_PROFILE:
+                    automatic = menu.addAction("Распознать изображение…")
+                    automatic.triggered.connect(
+                        partial(self.review_ocr, service=service, auto_detect=True)
+                    )
+                    self._ocr_actions.append(automatic)
                 bank = menu.addMenu(service.bank_name)
                 for title, history in (("Карточка операции", False), ("История операций", True)):
                     if history and not service.supports_history:
@@ -352,13 +359,20 @@ class MainWindow(QMainWindow):
         *,
         service: CardRecognition | None = None,
         history: bool = False,
+        auto_detect: bool = False,
     ) -> None:
         if self._busy or not self._ocr_recognitions:
             return
         service = service or self._ocr_recognitions[0]
         if service not in self._ocr_recognitions:
             return
-        title = "История операций" if history else "Карточка одной операции"
+        title = (
+            "Распознать изображение"
+            if auto_detect
+            else "История операций"
+            if history
+            else "Карточка одной операции"
+        )
         path, _ = QFileDialog.getOpenFileName(
             self,
             f"{title} · {service.bank_name}",
@@ -368,7 +382,13 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self._job(
-            lambda: service.history(Path(path)) if history else service.preview(Path(path)),
+            lambda: (
+                service.analyze(Path(path))
+                if auto_detect
+                else service.history(Path(path))
+                if history
+                else service.preview(Path(path))
+            ),
             self._show_ocr_preview,
             f"Локальное распознавание · {service.bank_name}…",
             defer_success=True,
@@ -376,7 +396,15 @@ class MainWindow(QMainWindow):
 
     def _show_ocr_preview(self, preview: OcrCardPreview | OcrHistoryPreview) -> None:
         session = self.session
-        allow = session is not None and session.ocr_importing is not None
+        universal = preview.bank_name == UNIVERSAL_PROFILE
+        allow = session is not None and session.ocr_importing is not None and not universal
+        if isinstance(preview, OcrHistoryPreview) and universal:
+            batch = OcrBatchDialog(preview, None, [], [], self._ocr_preferences, self)
+            try:
+                batch.exec()
+            finally:
+                batch.deleteLater()
+            return
         if (
             isinstance(preview, OcrHistoryPreview)
             and session is not None

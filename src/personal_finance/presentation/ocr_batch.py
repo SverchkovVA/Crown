@@ -35,7 +35,12 @@ from personal_finance.domain.classification import (
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import Account, Category, CategoryKind
-from personal_finance.domain.ocr_cards import CardCorrections, CashDirection, review_card
+from personal_finance.domain.ocr_cards import (
+    CardCorrections,
+    CashDirection,
+    ReviewedOcrCard,
+    review_card,
+)
 from personal_finance.domain.ocr_imports import (
     OcrImportPreview,
     OcrImportResult,
@@ -162,7 +167,7 @@ class OcrBatchDialog(QDialog):
     def __init__(
         self,
         preview: OcrHistoryPreview,
-        importing: OcrImporting,
+        importing: OcrImporting | None,
         accounts: list[Account],
         categories: list[Category],
         preferences: OcrPreferences,
@@ -175,6 +180,7 @@ class OcrBatchDialog(QDialog):
         super().__init__(parent)
         self.preview, self.importing, self.preferences = preview, importing, preferences
         self.accounts, self.categories = accounts, categories
+        classification = classification if importing is not None else None
         self._classification = classification
         self._on_saved, self._on_busy = on_saved, on_busy
         self._pool = QThreadPool(self)
@@ -184,7 +190,11 @@ class OcrBatchDialog(QDialog):
         self._error = ""
         self._callback: Callable[[Any], None] = lambda _: None
         self.saved_count = 0
-        self.setWindowTitle(f"{preview.bank_name} · Операции из изображения")
+        self.reviewed_cards: tuple[ReviewedOcrCard, ...] = ()
+        self.setWindowTitle(
+            f"{preview.bank_name} · Операции из изображения"
+            + (" · Без записи" if importing is None else "")
+        )
         self.resize(1380, 800)
         self.setMinimumSize(900, 540)
         screen = self.screen()
@@ -204,18 +214,46 @@ class OcrBatchDialog(QDialog):
             "Правки остаются в этом окне после отмены или ошибки. "
             "Перевод между своими счетами не является доходом."
         )
+        if importing is None:
+            self.notice.setText(
+                f"Найдено строк: {len(preview.history.cards)}. Проверьте даты, суммы и знаки. "
+                f"Неизвестная валюта: {preferences.default_currency}; "
+                f"год без указания: {preferences.year}. "
+                "Предпросмотр без записи в книгу. Правки остаются в этом окне."
+            )
+        if preview.history.unassigned_fragments:
+            self.notice.setText(
+                self.notice.text()
+                + f" Денежных фрагментов вне строк: {preview.history.unassigned_fragments}. "
+                "Сверьте источник."
+            )
         layout.addWidget(self.notice)
         self.content = QWidget()
         body = QVBoxLayout(self.content)
         common = QHBoxLayout()
-        self.common_account = QComboBox()
+        self.common_account = QComboBox(self)
         self.common_account.setAccessibleName("Счёт для незаполненных строк OCR")
         self.common_account.addItem("Выберите счёт для списка", None)
         for account in accounts:
             self.common_account.addItem(account.name, account.id)
-        common.addWidget(plain("Счёт для незаполненных строк"))
-        common.addWidget(self.common_account, 1)
+        if importing is not None:
+            common.addWidget(plain("Счёт для незаполненных строк"))
+            common.addWidget(self.common_account, 1)
+        else:
+            self.common_account.hide()
         body.addLayout(common)
+        flow_row = QHBoxLayout()
+        flow_row.addWidget(plain("Для сумм без знака"))
+        self.unknown_flow = QComboBox()
+        self.unknown_flow.setAccessibleName("Направление сумм без знака")
+        self.unknown_flow.addItem("Не определено — выбрать вручную", None)
+        self.unknown_flow.addItem("Списание", CashDirection.OUT)
+        self.unknown_flow.addItem("Поступление", CashDirection.IN)
+        self.unknown_flow.setToolTip(
+            "Изменяются только ещё не подписанные суммы. Знаки из источника сохраняются."
+        )
+        flow_row.addWidget(self.unknown_flow, 1)
+        body.addLayout(flow_row)
         self.use_rules: QCheckBox | None = None
         if classification is not None:
             self.use_rules = QCheckBox("Предлагать категории по правилам книги")
@@ -240,7 +278,7 @@ class OcrBatchDialog(QDialog):
             [
                 "Включить",
                 "Дата",
-                "Сумма, RUB",
+                "Сумма",
                 "Счёт",
                 "Вид",
                 "Категория",
@@ -248,6 +286,9 @@ class OcrBatchDialog(QDialog):
                 "Состояние",
             ]
         )
+        if importing is None:
+            for column in (3, 4, 5, 6):
+                self.table.hideColumn(column)
         self.table.verticalHeader().setDefaultSectionSize(48)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
@@ -272,6 +313,10 @@ class OcrBatchDialog(QDialog):
                     else ""
                 )
                 + corrections.amount
+            )
+            amount.setToolTip(
+                "Валюта: "
+                + (card.currency.value or self.preferences.default_currency + " по настройке")
             )
             account_combo = QComboBox()
             other = QComboBox()
@@ -317,7 +362,11 @@ class OcrBatchDialog(QDialog):
                 corrections.local_time,
             )
             self.rows.append(row)
-            matches = preferences.matching_parties(corrections.description)
+            matches = (
+                preferences.matching_parties(corrections.description)
+                if importing is not None
+                else ()
+            )
             if len(matches) == 1:
                 party = matches[0]
                 kind.setCurrentIndex(3 if party.exclude else 2)
@@ -328,7 +377,7 @@ class OcrBatchDialog(QDialog):
                 include.setChecked(False)
                 state.setText("Несколько правил имени: выберите действие")
             self._kind_changed(index)
-            kind.currentIndexChanged.connect(lambda _, i=index: self._kind_changed(i))
+            kind.currentIndexChanged.connect(lambda _, i=index: self._kind_chosen(i))
             for field in (occurred, amount):
                 field.textChanged.connect(self._edited)
             account_combo.currentIndexChanged.connect(lambda _, i=index: self._account_changed(i))
@@ -358,9 +407,41 @@ class OcrBatchDialog(QDialog):
         tools.addWidget(self.close_button)
         layout.addLayout(tools)
         self.common_account.currentIndexChanged.connect(self._common_changed)
+        self.unknown_flow.currentIndexChanged.connect(self._set_unknown_flow)
         if self.rows:
             self.table.selectRow(0)
         self._update_button()
+
+    def _kind_chosen(self, index: int) -> None:
+        row = self.rows[index]
+        raw = row.amount.text().strip()
+        kind = row.kind.currentData()
+        if (
+            raw
+            and not raw.startswith(("+", "-", "−"))
+            and kind in (OperationKind.INCOME, OperationKind.EXPENSE)
+        ):
+            row.amount.setText(("+" if kind == OperationKind.INCOME else "−") + raw)
+        self._kind_changed(index)
+
+    def _set_unknown_flow(self) -> None:
+        choice = self.unknown_flow.currentData()
+        if choice is None:
+            return
+        for index, row in enumerate(self.rows):
+            raw = row.amount.text().strip()
+            if (
+                row.saved
+                or not raw
+                or raw.startswith(("+", "-", "−"))
+                or self.preview.history.cards[index].blocked_reason
+            ):
+                continue
+            row.amount.setText(("+" if choice == CashDirection.IN else "−") + raw)
+            if row.kind.currentData() in (OperationKind.INCOME, OperationKind.EXPENSE):
+                kind = OperationKind.INCOME if choice == CashDirection.IN else OperationKind.EXPENSE
+                row.kind.setCurrentIndex(row.kind.findData(kind))
+        self._edited()
 
     def _kind_changed(self, index: int) -> None:
         row = self.rows[index]
@@ -467,14 +548,20 @@ class OcrBatchDialog(QDialog):
                     row.account.setCurrentIndex(row.account.findData(identifier))
 
     def _edited(self) -> None:
+        self.reviewed_cards = ()
         if hasattr(self, "checked") and self.checked is not None:
             self.checked.setChecked(False)
         if hasattr(self, "save"):
             self._update_button()
+            self._show_source()
 
     def _update_button(self) -> None:
         selected = sum(row.include.isChecked() and not row.saved for row in self.rows)
-        self.save.setText(f"Добавить выбранные ({selected})")
+        self.save.setText(
+            f"Проверить выбранные ({selected})"
+            if self.importing is None
+            else f"Добавить выбранные ({selected})"
+        )
         self.save.setEnabled(
             self._job is None
             and selected > 0
@@ -487,7 +574,10 @@ class OcrBatchDialog(QDialog):
         if 0 <= index < len(self.rows):
             self.image.show_evidence(self.preview.history.cards[index].amount.word_indices)
             self.selection_note.setText(
-                f"Выбрана строка {index + 1} из {len(self.rows)} · " + self.rows[index].description
+                f"Выбрана строка {index + 1} из {len(self.rows)} · "
+                + self.rows[index].description
+                + "\n"
+                + self.rows[index].state.text()
             )
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
@@ -542,7 +632,7 @@ class OcrBatchDialog(QDialog):
         finally:
             dialog.deleteLater()
 
-    def _selection(self, index: int) -> OcrSelection:
+    def _review(self, index: int) -> ReviewedOcrCard:
         row, card = self.rows[index], self.preview.history.cards[index]
         if row.category_conflict:
             raise ValidationError("Конфликт правил: выберите категорию этой строки вручную.")
@@ -550,7 +640,7 @@ class OcrBatchDialog(QDialog):
         if not raw.startswith(("+", "-", "−")):
             raise ValidationError("Укажите сумму со знаком: + для поступления, − для списания.")
         direction = CashDirection.IN if raw[0] == "+" else CashDirection.OUT
-        reviewed = review_card(
+        return review_card(
             card,
             CardCorrections(
                 raw[1:].strip(),
@@ -563,6 +653,11 @@ class OcrBatchDialog(QDialog):
             confirmed_fields=frozenset({"amount", "currency", "direction", "occurred_on"}),
             single_completed_operation=True,
         )
+
+    def _selection(self, index: int) -> OcrSelection:
+        row, card = self.rows[index], self.preview.history.cards[index]
+        reviewed = self._review(index)
+        direction = reviewed.direction
         account = row.account.currentData()
         if account is None:
             raise ValidationError("Выберите счёт этой строки или общий счёт списка.")
@@ -605,6 +700,27 @@ class OcrBatchDialog(QDialog):
         if self.checked is not None and not self.checked.isChecked():
             self.notice.setText("Сверьте выбранные поля либо отключите флажки в настройках.")
             return
+        if self.importing is None:
+            checked = []
+            for index, row in enumerate(self.rows):
+                if not row.include.isChecked():
+                    continue
+                try:
+                    checked.append(self._review(index))
+                    row.state.setText("Поля проверены · без записи")
+                except FinanceError as error:
+                    row.state.setText(str(error))
+                    self.notice.setText(
+                        f"Строка {index + 1}: {error} "
+                        "Ничего не записано; правки остаются в этом окне."
+                    )
+                    return
+            self.reviewed_cards = tuple(checked)
+            self.notice.setText(
+                f"Проверены поля строк: {len(checked)}. "
+                "Результат в памяти; в книгу ничего не записано."
+            )
+            return
         values = []
         failures = []
         for index, row in enumerate(self.rows):
@@ -621,9 +737,13 @@ class OcrBatchDialog(QDialog):
             self.notice.setText(reason + " Ничего не записано; правки сохранены в этом окне.")
             return
         selections = tuple(values)
-        self._start(lambda: self.importing.preview_many(selections), self._prepared)
+        importing = self.importing
+        self._start(lambda: importing.preview_many(selections), self._prepared)
 
     def _prepared(self, previews: tuple[OcrImportPreview, ...]) -> None:
+        importing = self.importing
+        if importing is None:
+            raise ValidationError("Запись в книгу в режиме предпросмотра недоступна.")
         if not self.preferences.review_before_save:
             blocked = {
                 p.selection.evidence.source_key: p.message
@@ -659,7 +779,7 @@ class OcrBatchDialog(QDialog):
         else:
             selections = tuple(p.selection for p in previews)
         self._start(
-            lambda: self.importing.confirm_many(selections),
+            lambda: importing.confirm_many(selections),
             lambda result: self._saved(result, selections),
         )
 
