@@ -48,6 +48,14 @@ _MONTHS = {
 }
 
 
+_NAVIGATION_DATE = re.compile(r"^(?:[<‹›←]|[‘’']?>)\s*")
+
+
+def card_date_match(text: str) -> re.Match[str] | None:
+    """Дата целиком, иногда после распознанного значка навигации карточки."""
+    return _DATE.fullmatch(_NAVIGATION_DATE.sub("", text, count=1))
+
+
 def parse_rub_fields(
     document: OcrDocument, rows: list[tuple[str, tuple[int, ...]]], *, adapter_id: str
 ) -> OcrCardDraft:
@@ -77,7 +85,7 @@ def parse_rub_fields(
         match = _MONEY.fullmatch(text)
         if match and (match["currency"] or match["sign"] or text.casefold().startswith("сумма:")):
             money.append((match, words))
-        match = _DATE.fullmatch(text)
+        match = card_date_match(text)
         if match:
             dates.append((match, words))
         if text.casefold().startswith(("описание:", "получатель:", "отправитель:")):
@@ -195,7 +203,7 @@ def suggest_occurred_on(card: OcrCardDraft, *, reference_year: int) -> OcrField[
         return original
     text = " ".join(card.document.words[i].text for i in original.word_indices).strip()
     text = _WEEKDAY_PREFIX.sub("", _DATE_LABEL.sub("", text))
-    match = _DATE.fullmatch(text)
+    match = card_date_match(text)
     if match is not None:
         if match["year"] or match["text_year"]:
             return original
