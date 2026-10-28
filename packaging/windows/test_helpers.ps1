@@ -85,5 +85,12 @@ try {
     Write-Host 'PowerShell: аргументы, кодировка, потоки, код ошибки, тайм-аут и синтаксис проверены.'
 } finally {
     # Удаляются только собственные одноразовые данные с новым случайным именем.
-    Remove-Item -LiteralPath $testRoot -Recurse -Force
+    $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
+    $expectedParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/')
+    if ([System.IO.Path]::GetDirectoryName($resolvedTestRoot) -cne $expectedParent -or
+        [System.IO.Path]::GetFileName($resolvedTestRoot) -notlike 'pf-helper-test-*' -or
+        ((Get-Item -LiteralPath $resolvedTestRoot -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw 'Отказ от удаления каталога за пределами собственных временных данных.'
+    }
+    Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force
 }
