@@ -16,6 +16,7 @@ from uuid import uuid4
 from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtWidgets import QApplication
 
+from personal_finance.application.analytics import Analytics
 from personal_finance.application.importing import Importing
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
@@ -23,6 +24,7 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
     check_audited_ocr_link,
     check_ocr_workflow,
 )
+from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -38,6 +40,7 @@ from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
+from personal_finance.presentation.analytics import IncomeExpenseDialog
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -422,6 +425,39 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Сверка изменила данные или дала неверную разницу.")
+                with _step(report, "report_income_expense_read_only"):
+                    before_report = ledger.operations(include_deleted=True)
+                    expected_report = Analytics(ledger, source.mutex, source.ensure_open).report(
+                        ReportPeriod(today, today)
+                    )
+                    if (
+                        expected_report.operation_count != 4
+                        or len(expected_report.totals) != 1
+                        or expected_report.totals[0].income_minor != 0
+                        or expected_report.totals[0].expense_minor != 2223
+                    ):
+                        raise RuntimeError(
+                            "Отчёт неверно учёл возврат, комиссию или начальный остаток."
+                        )
+                    report_dialog = IncomeExpenseDialog(
+                        expected_report, source.catalog.categories()
+                    )
+                    try:
+                        if (
+                            report_dialog.summary_table.model().data(
+                                report_dialog.summary_table.model().index(0, 2)
+                            )
+                            != "22,23"
+                        ):
+                            raise RuntimeError("Точная сумма отчёта недоступна в интерфейсе.")
+                    finally:
+                        report_dialog.deleteLater()
+                        QCoreApplication.sendPostedEvents(report_dialog, QEvent.Type.DeferredDelete)
+                    if (
+                        ledger.operations(include_deleted=True) != before_report
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Отчёт изменил финансовые данные.")
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
                     source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
@@ -525,6 +561,14 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         ):
                             raise RuntimeError("Настройки или пакет OCR не восстановлены.")
                         restored.check_integrity()
+                    if (
+                        restored.ledger is None
+                        or Analytics(restored.ledger, restored.mutex, restored.ensure_open).report(
+                            ReportPeriod(today, today)
+                        )
+                        != expected_report
+                    ):
+                        raise RuntimeError("Отчёт после восстановления отличается от исходного.")
                     with _step(report, "check_financial_history"):
                         if (
                             restored.ledger is None

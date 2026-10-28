@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance import __version__
+from personal_finance.application.analytics import Analytics
 from personal_finance.application.classification import (
     PreparedImportCategories,
     prepare_import_categories,
@@ -51,6 +52,7 @@ from personal_finance.application.ocr_cards import (
 )
 from personal_finance.application.ocr_review import OcrReviewDefaults
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
+from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
@@ -59,6 +61,7 @@ from personal_finance.domain.models import (
     ACCOUNT_LABELS,
     Account,
     AccountKind,
+    Category,
     CategoryKind,
     validate_name,
 )
@@ -76,6 +79,7 @@ from personal_finance.infrastructure.backup.container import (
     verify_backup,
 )
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
+from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -313,6 +317,55 @@ class MainWindow(QMainWindow):
                     self._ocr_actions.append(action)
         settings_menu = self.menuBar().addMenu("Настройки")
         settings_menu.addAction("Распознавание и свои переводы", self.configure_ocr)
+        reports_menu = self.menuBar().addMenu("Отчёты")
+        self.report_action = reports_menu.addAction("Доходы и расходы…", self.request_analytics)
+        self.report_action.setEnabled(False)
+
+    def _update_report_action(self) -> None:
+        self.report_action.setEnabled(
+            not self._busy and self.session is not None and self.session.ledger is not None
+        )
+
+    def request_analytics(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        dialog = ReportPeriodDialog(self)
+        try:
+            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_period is None:
+                return
+            period = dialog.result_period
+        finally:
+            dialog.deleteLater()
+        self.build_analytics(period)
+
+    def build_analytics(self, period: ReportPeriod) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
+
+        def build() -> tuple[IncomeExpenseReport, list[Category]]:
+            with session.mutex:
+                return analytics.report(period), session.catalog.categories()
+
+        self._job(
+            build,
+            lambda data: self._show_analytics(session, data),
+            "Расчёт доходов и расходов…",
+            defer_success=True,
+        )
+
+    def _show_analytics(
+        self, session: VaultSession, result: tuple[IncomeExpenseReport, list[Category]]
+    ) -> None:
+        if self.session is not session:
+            return
+        dialog = IncomeExpenseDialog(result[0], result[1], self)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     def _review_defaults(self) -> OcrReviewDefaults:
         value = self._ocr_preferences
@@ -349,6 +402,7 @@ class MainWindow(QMainWindow):
 
     def _ocr_batch_busy(self, busy: bool) -> None:
         self._busy = busy
+        self._update_report_action()
         self.root_stack.setEnabled(not busy)
         for action in self._ocr_actions:
             action.setEnabled(not busy)
@@ -1520,6 +1574,7 @@ class MainWindow(QMainWindow):
         if self._busy:
             return
         self._busy = True
+        self._update_report_action()
         self.root_stack.setEnabled(False)
         for ocr_action in self._ocr_actions:
             ocr_action.setEnabled(False)
@@ -1571,6 +1626,7 @@ class MainWindow(QMainWindow):
         signals.finished.disconnect(self._job_finished)
         signals.deleteLater()
         self._busy = False
+        self._update_report_action()
         self.root_stack.setEnabled(True)
         for ocr_action in self._ocr_actions:
             ocr_action.setEnabled(True)
@@ -1583,6 +1639,7 @@ class MainWindow(QMainWindow):
         if self.session and self.session is not session:
             self.session.close()
         self.session = session
+        self._update_report_action()
         stored = session.ocr_settings.load()[0] if session.ocr_settings is not None else None
         self._ocr_preferences = stored or self._local_ocr_preferences.load()
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
@@ -1643,6 +1700,7 @@ class MainWindow(QMainWindow):
         if self.session:
             self.session.close()
             self.session = None
+        self._update_report_action()
         self._ocr_preferences = self._local_ocr_preferences.load()
         self.account_model = replace_table(self.account_table, ACCOUNT_HEADERS, [])
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
