@@ -75,7 +75,6 @@ def check_packaged_ocr_preview() -> None:
         try:
             for check in single.checks.values():
                 check.setChecked(True)
-            single.single.setChecked(True)
             single._validate()
             if (
                 single.reviewed is None

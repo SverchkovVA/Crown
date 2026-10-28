@@ -31,7 +31,6 @@ def test_history_review_is_separate_for_each_row_and_cancel_keeps_it_unreviewed(
     def check(child):
         for flag in child.checks.values():
             flag.setChecked(True)
-        child.single.setChecked(True)
         child._validate()
         return QDialog.DialogCode.Accepted
 

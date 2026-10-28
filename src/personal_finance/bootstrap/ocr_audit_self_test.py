@@ -1,6 +1,8 @@
 """Финансовый OCR-контракт на вымышленных словах без настоящего движка."""
 
+from dataclasses import replace
 from decimal import Decimal
+from pathlib import Path
 
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.imports import account_movement
@@ -8,9 +10,11 @@ from personal_finance.domain.ledger import Operation
 from personal_finance.domain.ocr import OcrBox, OcrDocument, OcrEngineInfo, OcrWord
 from personal_finance.domain.ocr_cards import CardCorrections, CashDirection, review_card
 from personal_finance.domain.ocr_imports import (
+    OcrEvidence,
     OcrImportResult,
     OcrImportStatus,
     OcrSelection,
+    canonical,
     make_ocr_evidence,
 )
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
@@ -85,3 +89,48 @@ def check_audited_ocr_link(
         raise RuntimeError("OCR-связь изменила финансовые операции или не защищена от повтора.")
     session.check_integrity()
     return selection, result
+
+
+def check_ocr_workflow(
+    session: VaultSession, selection: OcrSelection, command_id: str
+) -> tuple[OcrSelection, tuple[OcrImportResult, ...]]:
+    from PySide6.QtGui import QImageReader
+
+    from personal_finance.domain.ocr_settings import OcrPreferences, TransferParty
+    from personal_finance.presentation import main_window
+
+    service, settings = session.ocr_importing, session.ocr_settings
+    if service is None or not service.supports_batches or settings is None:
+        raise RuntimeError("Настройки и пакетный OCR недоступны в новой книге.")
+    preferences = OcrPreferences(
+        confirm_fields=False,
+        review_before_save=False,
+        transfer_parties=(TransferParty("Вымышленный отправитель", selection.account_id),),
+    )
+    settings.save(preferences, None)
+    if settings.load()[0] != preferences:
+        raise RuntimeError("Параметры OCR не сохранились.")
+    payload = selection.evidence.data
+    payload["image_sha256"] = "7" * 64
+    payload["file_sha256"] = "8" * 64
+    batch_selection = replace(selection, evidence=OcrEvidence(canonical(payload)))
+    before = session.ledger.operations() if session.ledger is not None else []
+    result = service.confirm_many((batch_selection,), command_id=command_id)
+    if service.confirm_many((batch_selection,), command_id=command_id) != result:
+        raise RuntimeError("Не сохранился повтор пакетной команды OCR.")
+    if session.ledger is None or session.ledger.operations() != before:
+        raise RuntimeError("Связь пакета изменила финансовые факты.")
+    folder = Path(main_window.__file__).with_name("icons")
+    for name in (
+        "check.svg",
+        "check-disabled.svg",
+        "radio.svg",
+        "radio-disabled.svg",
+        "chevron-down.svg",
+        "chevron-up.svg",
+        "chevron-disabled.svg",
+    ):
+        if not (folder / name).is_file() or QImageReader(str(folder / name)).read().isNull():
+            raise RuntimeError("В сборке отсутствует индикатор интерфейса.")
+    session.check_integrity()
+    return batch_selection, result

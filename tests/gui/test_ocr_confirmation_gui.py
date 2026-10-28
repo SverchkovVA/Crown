@@ -224,14 +224,12 @@ def test_regular_review_never_requests_financial_write(qtbot):
     qtbot.addWidget(dialog)
     for check in dialog.checks.values():
         check.setChecked(True)
-    dialog.single.setChecked(True)
     dialog.finish.click()
     assert dialog.reviewed is not None and not dialog.financial_requested
     another = OcrPreviewDialog(value, allow_financial_prepare=True)
     qtbot.addWidget(another)
     for check in another.checks.values():
         check.setChecked(True)
-    another.single.setChecked(True)
     another.prepare_button.click()
     assert another.reviewed is not None and another.financial_requested
 
@@ -313,7 +311,6 @@ def test_full_ui_chain_keeps_preview_readonly_and_confirms_in_worker(
     def review(dialog):
         for check in dialog.checks.values():
             check.setChecked(True)
-        dialog.single.setChecked(True)
         dialog._request_financial()
         return dialog.result()
 
@@ -359,7 +356,6 @@ def test_missing_amount_evidence_allows_review_but_blocks_financial_prepare(qtbo
     qtbot.addWidget(dialog)
     for check in dialog.checks.values():
         check.setChecked(True)
-    dialog.single.setChecked(True)
     assert dialog.finish.isEnabled() and not dialog.prepare_button.isEnabled()
     dialog._request_financial()
     assert dialog.reviewed is None and not dialog.financial_requested

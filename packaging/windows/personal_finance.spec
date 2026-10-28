@@ -5,6 +5,8 @@ root = Path(SPECPATH).parents[1]
 source = root / "src"
 migrations = source / "personal_finance" / "infrastructure" / "persistence" / "migrations"
 datas = [(str(path), str(path.parent.relative_to(source))) for path in migrations.rglob("*.py")]
+icons = source / "personal_finance" / "presentation" / "icons"
+datas += [(str(path), str(path.parent.relative_to(source))) for path in icons.glob("*.svg")]
 datas += [(str(root / "THIRD_PARTY_NOTICES.md"), ".")]
 legal = root / "docs" / "legal"
 if legal.is_dir():

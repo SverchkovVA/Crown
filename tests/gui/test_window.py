@@ -7,7 +7,9 @@ from personal_finance.presentation.main_window import MainWindow
 
 def test_real_session_displayed_and_cleared_on_lock(qtbot, session) -> None:
     session.catalog.add_account(
-        "Проверочная карта", AccountKind.DEBIT, session.catalog.institutions()[0].id
+        "Проверочная карта",
+        AccountKind.DEBIT,
+        session.catalog.add_institution("Вымышленный банк").id,
     )
     window = MainWindow()
     qtbot.addWidget(window)

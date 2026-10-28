@@ -191,7 +191,7 @@ def test_gui_refund_action_changes_balance_and_clears_cache(
     qtbot.addWidget(window)
     window.activate_session(session)
     window.balance_date.setDate(QDate(2026, 10, 28))
-    window.navigation.setCurrentRow(2)
+    window.navigation.setCurrentRow(0)
     window.show()
     window.operation_table.selectRow(0)
     assert window.refund_button.isEnabled()

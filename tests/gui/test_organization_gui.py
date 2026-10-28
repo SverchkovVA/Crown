@@ -117,7 +117,7 @@ def test_filter_changes_journal_but_not_balances_and_save_apply_update_works(
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.navigation.setCurrentRow(2)
+    window.navigation.setCurrentRow(0)
     window.show()
     window._set_query(OperationQuery(tag_ids=(tag.id,)))
     assert window.operation_model.rowCount() == 1
@@ -154,7 +154,7 @@ def test_tag_page_archives_and_restores_in_worker(qtbot, session, monkeypatch):
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.navigation.setCurrentRow(6)
+    window.navigation.setCurrentRow(2)
     window.show()
     window.organization_page.tag_table.selectRow(0)
     monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)

@@ -192,8 +192,11 @@ class OcrConfirmationDialog(QDialog):
         categories: list[Category],
         tags: list[Tag],
         parent: QWidget | None = None,
+        *,
+        require_agreement: bool = True,
     ) -> None:
         super().__init__(parent)
+        self.require_agreement = require_agreement
         self.preview = preview
         self.result_selection: OcrSelection | None = None
         self._accounts, self._categories, self._tags = accounts, categories, tags
@@ -259,6 +262,7 @@ class OcrConfirmationDialog(QDialog):
         layout.addWidget(scroll, 1)
         self.verified = QCheckBox("Я проверил вид операции, счета, категории и сумму")
         layout.addWidget(self.verified)
+        self.verified.setVisible(require_agreement)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
         self.confirm = buttons.addButton("Добавить в книгу", QDialogButtonBox.ButtonRole.ActionRole)
@@ -321,13 +325,13 @@ class OcrConfirmationDialog(QDialog):
         except ValidationError:
             ready = False
         else:
-            ready = self.verified.isChecked()
+            ready = not self.require_agreement or self.verified.isChecked()
         self.confirm.setEnabled(ready)
 
     def _validate(self) -> None:
         self.result_selection = None
         try:
-            if not self.verified.isChecked():
+            if self.require_agreement and not self.verified.isChecked():
                 raise ValidationError("Подтвердите проверку финансовой операции.")
             self.result_selection = self._choice()
         except FinanceError as error:

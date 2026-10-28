@@ -20,6 +20,7 @@ def source_fingerprint(root: Path) -> str:
     }
     for folder, pattern in [
         ("src", "*.py"),
+        ("src", "*.svg"),
         ("tests", "*.py"),
         ("tools", "*.py"),
         ("packaging", "*.ps1"),

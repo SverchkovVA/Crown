@@ -49,6 +49,7 @@ from personal_finance.application.ocr_cards import (
     OcrCardPreview,
     OcrHistoryPreview,
 )
+from personal_finance.application.ocr_review import OcrReviewDefaults
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
@@ -62,7 +63,7 @@ from personal_finance.domain.models import (
     validate_name,
 )
 from personal_finance.domain.ocr_cards import ReviewedOcrCard
-from personal_finance.domain.ocr_imports import OcrImportPreview, OcrImportResult
+from personal_finance.domain.ocr_imports import OcrImportPreview, OcrImportResult, OcrImportStatus
 from personal_finance.domain.organization import SavedFilter, Tag
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
@@ -73,6 +74,7 @@ from personal_finance.infrastructure.backup.container import (
     restore_backup,
     verify_backup,
 )
+from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -102,9 +104,11 @@ from personal_finance.presentation.ledger_dialogs import (
     category_title,
     format_money,
 )
+from personal_finance.presentation.ocr_batch import OcrBatchDialog
 from personal_finance.presentation.ocr_confirmation import OcrConfirmationDialog, OcrOperationDialog
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
+from personal_finance.presentation.ocr_settings import OcrSettingsDialog
 from personal_finance.presentation.organization import (
     DefinitionHistoryDialog,
     OrganizationPage,
@@ -123,40 +127,111 @@ from personal_finance.presentation.reconciliation import (
 from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
 
 STYLE = """
-QMainWindow, QDialog { background: #f5f7f9; color: #172b35; }
-QWidget { font-family: 'Segoe UI', 'DejaVu Sans'; font-size: 14px; color: #172b35; }
+QMainWindow, QDialog, QWidget {
+    background-color: #f5f7f9; color: #172b35;
+    font-family: 'Segoe UI', 'DejaVu Sans'; font-size: 14px;
+}
+QLabel { background: transparent; }
 QLabel#heading { font-size: 29px; font-weight: 600; }
-QLabel#muted { color: #617580; }
+QLabel#muted { color: #4e626e; }
 QLabel#brand { font-size: 23px; font-weight: 600; color: #12634b; }
 QLabel#number { font-size: 28px; font-weight: 600; color: #12634b; }
-QFrame#card { background: white; border: 1px solid #dce5e8; border-radius: 12px; }
+QLabel#emptyState { background: #e8f0f4; color: #263f4c; padding: 12px;
+                   border: 1px solid #a9bdc8; border-radius: 6px; }
+QLabel#feedbackError { background: #fff0ed; color: #9c291e; padding: 8px;
+                      border: 1px solid #b23a2c; border-radius: 4px; }
+QFrame#card { background: white; border: 1px solid #a9bdc8; border-radius: 12px; }
 QFrame#sidebar { background: #eaf0ed; border: 0; }
-QPushButton { background: white; border: 1px solid #c8d6d8; border-radius: 7px;
-              padding: 10px 16px; }
-QPushButton:hover { background: #e8f3ef; border-color: #91b7a8; }
-QPushButton:disabled { color: #92a19f; background: #eef1ef; }
+QPushButton { background: white; color: #172b35; border: 1px solid #728b97;
+              border-radius: 7px; padding: 9px 14px; }
+QPushButton:hover { background: #e2f0e9; border-color: #17694f; }
+QPushButton:pressed { background: #c7dfd2; border-color: #104c3a; }
+QPushButton:focus { border: 2px solid #155c9b; padding: 8px 13px; }
+QPushButton:default { border: 2px solid #17694f; padding: 8px 13px; }
+QPushButton:disabled { color: #52636d; background: #e4e9ec; border-color: #a7b5bd; }
 QPushButton#primary { background: #17694f; color: white; border: 1px solid #17694f; }
 QPushButton#primary:hover { background: #11533e; }
-QPushButton#primary:disabled { background: #8aa99d; border-color: #8aa99d; }
-QListWidget { border: 0; background: transparent; outline: 0; }
-QListWidget::item { padding: 13px; margin: 3px 0; border-radius: 7px; }
-QListWidget::item:selected { background: #d2e6db; color: #104b38; }
-QLineEdit, QComboBox, QPlainTextEdit, QDateEdit { background: white; border: 1px solid #c8d6d8;
-                                    border-radius: 5px; padding: 8px; }
-QTableView, QTableWidget, QTreeWidget { background: white; alternate-background-color: #f5f8f6;
-                          selection-background-color: #d2e6db; selection-color: #104b38;
-                          border: 1px solid #dce5e8;
-                          border-radius: 8px; gridline-color: #edf1f2; }
-QTableCornerButton::section { background: #edf3f1; border: 0; }
-QHeaderView::section { background: #edf3f1; border: 0; padding: 12px; font-weight: 600; }
-QScrollArea#operationScroll, QScrollArea#ocrScroll { background: #f5f7f9; border: 0; }
-QWidget#operationBody, QWidget#ocrBody { background: #f5f7f9; }
-QTabWidget::pane { border: 1px solid #dce5e8; background: #f5f7f9; }
-QTabBar::tab { background: #edf3f1; color: #172b35; border: 1px solid #dce5e8;
+QPushButton#primary:pressed { background: #0b402f; }
+QPushButton#primary:focus { border: 2px solid #f5c842; padding: 8px 13px; }
+QPushButton#primary:disabled { background: #d5dde2; color: #52636d; border-color: #a7b5bd; }
+QListWidget { border: 0; background: transparent; color: #172b35; }
+QListWidget::item { padding: 12px; margin: 3px 0; border: 1px solid transparent;
+                    border-radius: 7px; }
+QListWidget::item:hover { background: #e2f0e9; }
+QListWidget::item:selected, QListWidget::item:selected:!active {
+    background: #17694f; color: white; border-color: #104c3a;
+}
+QListWidget::item:focus { border: 2px solid #155c9b; padding: 11px; }
+QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QAbstractSpinBox {
+    background: white; color: #172b35; border: 1px solid #728b97;
+    border-radius: 5px; padding: 7px; selection-background-color: #17694f;
+    selection-color: white; placeholder-text-color: #52636d;
+}
+QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus,
+QAbstractSpinBox:focus { border: 2px solid #155c9b; padding: 6px; }
+QLineEdit:disabled, QComboBox:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
+QAbstractSpinBox:disabled { background: #e4e9ec; color: #52636d; border-color: #a7b5bd; }
+QComboBox::drop-down { background: #edf3f1; border-left: 1px solid #a9bdc8; width: 24px; }
+QComboBox::down-arrow { image: url("@ICONS@/chevron-down.svg"); width: 16px; height: 12px; }
+QComboBox::down-arrow:disabled { image: url("@ICONS@/chevron-disabled.svg"); }
+QSpinBox::up-arrow { image: url("@ICONS@/chevron-up.svg"); width: 16px; height: 12px; }
+QSpinBox::down-arrow { image: url("@ICONS@/chevron-down.svg"); width: 16px; height: 12px; }
+QComboBox QAbstractItemView { background: white; color: #172b35;
+    selection-background-color: #17694f; selection-color: white; border: 1px solid #728b97; }
+QCheckBox, QRadioButton { background: transparent; color: #172b35; spacing: 8px; padding: 3px; }
+QCheckBox:disabled, QRadioButton:disabled { color: #52636d; }
+QCheckBox:focus, QRadioButton:focus { background: #e3edf7; border-radius: 3px;
+    border: 2px solid #155c9b; padding: 1px; }
+QCheckBox::indicator, QRadioButton::indicator { width: 18px; height: 18px;
+    background: white; border: 2px solid #526b79; }
+QCheckBox::indicator { border-radius: 3px; }
+QRadioButton::indicator { border-radius: 11px; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #17694f; }
+QCheckBox::indicator:checked { background: #17694f; border-color: #17694f;
+    image: url("@ICONS@/check.svg"); }
+QCheckBox::indicator:indeterminate { background: #17694f; border: 5px solid #526b79; }
+QRadioButton::indicator:checked { image: url("@ICONS@/radio.svg"); border-color: #17694f; }
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background: #e4e9ec; border-color: #9aaab4; }
+QCheckBox::indicator:checked:disabled { image: url("@ICONS@/check-disabled.svg"); }
+QRadioButton::indicator:checked:disabled { image: url("@ICONS@/radio-disabled.svg"); }
+QTableView, QTableWidget, QTreeWidget, QTreeView {
+    background: white; color: #172b35; alternate-background-color: #edf3f1;
+    selection-background-color: #17694f; selection-color: white;
+    border: 1px solid #a9bdc8; border-radius: 6px; gridline-color: #d5dfe5;
+}
+QTableView::item:selected, QTableView::item:selected:!active,
+QTreeView::item:selected, QTreeView::item:selected:!active {
+    background: #17694f; color: white;
+}
+QTableView::item:focus, QTreeView::item:focus { border: 2px solid #155c9b; }
+QListWidget::item:selected:focus, QTableView::item:selected:focus,
+QTreeView::item:selected:focus { border: 2px solid #f5c842; }
+QTableCornerButton::section, QHeaderView::section {
+    background: #e6eeeb; color: #172b35; border: 0; padding: 10px; font-weight: 600;
+}
+QScrollArea { background: #f5f7f9; border: 0; }
+QScrollArea#operationScroll, QScrollArea#ocrScroll, QWidget#operationBody, QWidget#ocrBody {
+    background: #f5f7f9;
+}
+QScrollBar:vertical { background: #e1e8ed; width: 14px; margin: 1px; }
+QScrollBar:horizontal { background: #e1e8ed; height: 14px; margin: 1px; }
+QScrollBar::handle:vertical { background: #607d8b; min-height: 28px; border-radius: 5px; }
+QScrollBar::handle:horizontal { background: #607d8b; min-width: 28px; border-radius: 5px; }
+QScrollBar::handle:hover { background: #305f75; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: #e1e8ed; }
+QTabWidget::pane { border: 1px solid #a9bdc8; background: #f5f7f9; }
+QTabBar::tab { background: #e6eeeb; color: #172b35; border: 1px solid #a9bdc8;
                padding: 8px 12px; }
-QTabBar::tab:selected { background: white; }
-QStatusBar { background: #eaf0ed; }
-"""
+QTabBar::tab:selected { background: #17694f; color: white; }
+QTabBar::tab:disabled { background: #e4e9ec; color: #52636d; }
+QMenuBar, QMenu { background: white; color: #172b35; }
+QMenuBar::item:selected, QMenu::item:selected { background: #17694f; color: white; }
+QMenu::item:disabled { color: #52636d; }
+QToolTip { background: #172b35; color: white; border: 1px solid #526b79; padding: 6px; }
+QStatusBar { background: #eaf0ed; color: #172b35; }
+""".replace("@ICONS@", Path(__file__).with_name("icons").as_posix())
 
 
 def label(text: str, name: str = "") -> QLabel:
@@ -192,6 +267,8 @@ class MainWindow(QMainWindow):
         self.resize(1160, 760)
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
+        self._local_ocr_preferences = LocalOcrPreferences()
+        self._ocr_preferences = self._local_ocr_preferences.load()
         self._ocr_recognitions = ocr_recognitions
         self._ocr_actions: list[QAction] = []
         self.session: VaultSession | None = None
@@ -227,6 +304,47 @@ class MainWindow(QMainWindow):
                         partial(self.review_ocr, service=service, history=history)
                     )
                     self._ocr_actions.append(action)
+        settings_menu = self.menuBar().addMenu("Настройки")
+        settings_menu.addAction("Распознавание и свои переводы", self.configure_ocr)
+
+    def _review_defaults(self) -> OcrReviewDefaults:
+        value = self._ocr_preferences
+        return OcrReviewDefaults(value.default_currency, value.year, value.confirm_fields)
+
+    def configure_ocr(self) -> None:
+        if self._busy:
+            return
+        session = self.session
+        service = session.ocr_settings if session is not None else None
+        revision = None
+        if service is not None:
+            _, revision = service.load()
+        dialog = OcrSettingsDialog(
+            self._ocr_preferences, self._account_records, self, allow_parties=service is not None
+        )
+        try:
+            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_preferences is None:
+                return
+            value = dialog.result_preferences
+        finally:
+            dialog.deleteLater()
+
+        def applied(_: object = None) -> None:
+            if self.session is session:
+                self._ocr_preferences = value
+                self._local_ocr_preferences.save(value)
+                self.statusBar().showMessage("Настройки распознавания сохранены")
+
+        if service is None:
+            applied()
+        else:
+            self._job(lambda: service.save(value, revision), applied, "Сохранение настроек OCR…")
+
+    def _ocr_batch_busy(self, busy: bool) -> None:
+        self._busy = busy
+        self.root_stack.setEnabled(not busy)
+        for action in self._ocr_actions:
+            action.setEnabled(not busy)
 
     def review_ocr(
         self,
@@ -259,10 +377,41 @@ class MainWindow(QMainWindow):
     def _show_ocr_preview(self, preview: OcrCardPreview | OcrHistoryPreview) -> None:
         session = self.session
         allow = session is not None and session.ocr_importing is not None
+        if (
+            isinstance(preview, OcrHistoryPreview)
+            and session is not None
+            and session.ocr_importing is not None
+            and session.ocr_importing.supports_batches
+        ):
+            batch = OcrBatchDialog(
+                preview,
+                session.ocr_importing,
+                self._account_records,
+                session.catalog.categories(),
+                self._ocr_preferences,
+                self,
+                on_saved=lambda _: self.refresh() if self.session is session else None,
+                on_busy=self._ocr_batch_busy,
+            )
+            try:
+                batch.exec()
+            finally:
+                batch.deleteLater()
+            return
         dialog = (
-            OcrHistoryDialog(preview, self, allow_financial_prepare=allow)
+            OcrHistoryDialog(
+                preview,
+                self,
+                allow_financial_prepare=allow,
+                review_defaults=self._review_defaults(),
+            )
             if isinstance(preview, OcrHistoryPreview)
-            else OcrPreviewDialog(preview, self, allow_financial_prepare=allow)
+            else OcrPreviewDialog(
+                preview,
+                self,
+                allow_financial_prepare=allow,
+                review_defaults=self._review_defaults(),
+            )
         )
         requested: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
         try:
@@ -303,6 +452,25 @@ class MainWindow(QMainWindow):
             tags=self._tag_records,
             allow_tags=session.ledger.supports_tags,
         )
+        if not self._ocr_preferences.review_before_save:
+            buttons = dialog.findChild(QDialogButtonBox)
+            if buttons is not None:
+                buttons.button(QDialogButtonBox.StandardButton.Save).setText("Добавить операцию")
+        parties = self._ocr_preferences.matching_parties(reviewed.description)
+        if len(parties) == 1 and parties[0].exclude:
+            QMessageBox.information(
+                self,
+                "Исключённый отправитель",
+                "По настройке эта строка не импортируется и не меняет остатки.",
+            )
+            dialog.deleteLater()
+            return
+        if len(parties) == 1:
+            dialog.kind.setCurrentIndex(dialog.kind.findData(OperationKind.TRANSFER.value))
+            other = parties[0].account_id
+            if other is not None:
+                target = dialog.account if reviewed.direction.value == "in" else dialog.destination
+                target.setCurrentIndex(target.findData(other))
         selection = None
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -322,8 +490,29 @@ class MainWindow(QMainWindow):
     def _show_ocr_confirmation(self, session: VaultSession, prepared: OcrImportPreview) -> None:
         if self.session is not session or session.ocr_importing is None:
             return
+        if not self._ocr_preferences.review_before_save and prepared.status in (
+            OcrImportStatus.DUPLICATE,
+            OcrImportStatus.CONFLICT,
+        ):
+            self.statusBar().showMessage(prepared.message + " · Новых движений нет")
+            return
+        if not self._ocr_preferences.review_before_save and prepared.status == OcrImportStatus.NEW:
+            service = session.ocr_importing
+            command_id = str(uuid4())
+            self._job(
+                lambda: service.confirm(prepared.selection, command_id=command_id),
+                lambda result: self._ocr_saved(session, result),
+                "Добавление операции OCR…",
+                defer_success=True,
+            )
+            return
         dialog = OcrConfirmationDialog(
-            prepared, self._account_records, session.catalog.categories(), self._tag_records, self
+            prepared,
+            self._account_records,
+            session.catalog.categories(),
+            self._tag_records,
+            self,
+            require_agreement=self._ocr_preferences.review_before_save,
         )
         selection = None
         try:
@@ -400,14 +589,13 @@ class MainWindow(QMainWindow):
         self.navigation = QListWidget()
         self.navigation.addItems(
             [
-                "Обзор",
-                "Счета",
                 "Операции",
-                "Категории",
-                "Защита и копии",
-                "Периоды",
+                "Счета",
                 "Теги и фильтры",
+                "Категории",
+                "Периоды",
                 "Правила категорий",
+                "Защита и копии",
             ]
         )
         side.addWidget(self.navigation, 1)
@@ -421,16 +609,14 @@ class MainWindow(QMainWindow):
         top.addWidget(button("Закрыть книгу", self.lock_book))
         content.addLayout(top)
         self.pages = QStackedWidget()
-        self.pages.addWidget(self._overview())
-        self.pages.addWidget(self._accounts())
-        self.pages.addWidget(self._journal())
-        self.pages.addWidget(self._categories())
-        self.pages.addWidget(self._security())
+        journal_page = self._journal()
+        accounts_page = self._accounts()
+        categories_page = self._categories()
+        security_page = self._security()
         self.period_page = PeriodPage()
         self.period_page.closeRequested.connect(self.close_period)
         self.period_page.reopenRequested.connect(self.reopen_period)
         self.period_page.historyRequested.connect(self.period_history)
-        self.pages.addWidget(self.period_page)
         self.organization_page = OrganizationPage()
         self.organization_page.changedArchive.connect(self.refresh)
         self.organization_page.addTagRequested.connect(lambda: self.definition_action("tag", "add"))
@@ -458,66 +644,26 @@ class MainWindow(QMainWindow):
         self.organization_page.filterHistoryRequested.connect(
             lambda: self.definition_action("saved_filter", "history")
         )
-        self.pages.addWidget(self.organization_page)
         self.rule_page = CategoryRulePage()
         self.rule_page.changedFilter.connect(self.refresh)
         self.rule_page.addRequested.connect(lambda: self.rule_action("add"))
         self.rule_page.editRequested.connect(lambda: self.rule_action("edit"))
         self.rule_page.toggleRequested.connect(lambda: self.rule_action("toggle"))
         self.rule_page.historyRequested.connect(lambda: self.rule_action("history"))
-        self.pages.addWidget(self.rule_page)
+        for section in (
+            journal_page,
+            accounts_page,
+            self.organization_page,
+            categories_page,
+            self.period_page,
+            self.rule_page,
+            security_page,
+        ):
+            self.pages.addWidget(section)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
         layout.addLayout(content, 1)
-        return page
-
-    def _overview(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 20, 0, 0)
-        layout.addWidget(label("Начните со счетов и категорий", "muted"))
-        cards = QHBoxLayout()
-        self.account_count = label("0", "number")
-        self.category_count = label("0", "number")
-        for title, value in [
-            ("Счета", self.account_count),
-            ("Категории", self.category_count),
-            ("Основная валюта", label("RUB", "number")),
-        ]:
-            card = QFrame()
-            card.setObjectName("card")
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(22, 20, 22, 20)
-            card_layout.addWidget(label(title, "muted"))
-            card_layout.addWidget(value)
-            cards.addWidget(card)
-        layout.addSpacing(16)
-        layout.addLayout(cards)
-        layout.addSpacing(24)
-        card = QFrame()
-        card.setObjectName("card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 24, 24, 24)
-        card_layout.addWidget(label("Сохранность данных", "brand"))
-        card_layout.addWidget(
-            label(
-                "Книга защищена парольной фразой. Резервную копию можно проверить "
-                "и восстановить в отдельную папку."
-            )
-        )
-        self.backup_overview = label(self.last_backup, "muted")
-        card_layout.addWidget(self.backup_overview)
-        actions = QHBoxLayout()
-        actions.addWidget(button("Создать копию", self.backup_book, primary=True))
-        actions.addWidget(button("Проверить книгу", self.check_book))
-        actions.addStretch()
-        card_layout.addLayout(actions)
-        layout.addWidget(card)
-        layout.addSpacing(16)
-        self.feature_note = label("", "muted")
-        layout.addWidget(self.feature_note)
-        layout.addStretch()
         return page
 
     def _accounts(self) -> QWidget:
@@ -553,6 +699,10 @@ class MainWindow(QMainWindow):
         self.account_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.account_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.account_table.setAlternatingRowColors(True)
+        self.account_empty = label(
+            "Счетов пока нет. Нажмите «Добавить счёт», чтобы начать.", "emptyState"
+        )
+        layout.addWidget(self.account_empty)
         layout.addWidget(self.account_table, 1)
         return page
 
@@ -633,6 +783,8 @@ class MainWindow(QMainWindow):
             self.operation_table.setColumnWidth(column, width)
         self.operation_table.selectionModel().selectionChanged.connect(self._update_journal_actions)
         self.operation_table.doubleClicked.connect(self.edit_operation)
+        self.journal_empty = label("Операций пока нет.", "emptyState")
+        layout.addWidget(self.journal_empty)
         layout.addWidget(self.operation_table, 1)
         return page
 
@@ -935,7 +1087,7 @@ class MainWindow(QMainWindow):
 
     def _import_complete(self, result: ImportResult) -> None:
         self.refresh()
-        self.navigation.setCurrentRow(2)
+        self.navigation.setCurrentRow(0)
         QMessageBox.information(
             self,
             "Импорт подтверждён",
@@ -1400,6 +1552,8 @@ class MainWindow(QMainWindow):
         if self.session and self.session is not session:
             self.session.close()
         self.session = session
+        stored = session.ocr_settings.load()[0] if session.ocr_settings is not None else None
+        self._ocr_preferences = stored or self._local_ocr_preferences.load()
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.book_title.setText(session.name)
         self.refresh()
@@ -1458,6 +1612,7 @@ class MainWindow(QMainWindow):
         if self.session:
             self.session.close()
             self.session = None
+        self._ocr_preferences = self._local_ocr_preferences.load()
         self.account_model = replace_table(self.account_table, ACCOUNT_HEADERS, [])
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
         self._journal_operations = []
@@ -1488,10 +1643,7 @@ class MainWindow(QMainWindow):
         self._update_journal_actions()
         self.category_tree.clear()
         self.book_title.clear()
-        self.account_count.setText("0")
-        self.category_count.setText("0")
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
-        self.backup_overview.setText(self.last_backup)
         self.backup_status.setText(self.last_backup)
         self.root_stack.setCurrentIndex(0)
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
@@ -1516,6 +1668,7 @@ class MainWindow(QMainWindow):
                 balance.account_id: format_money(balance.amount, include_currency=False)
                 for balance in ledger.balances(date(qdate.year(), qdate.month(), qdate.day()))
             }
+        self.account_empty.setVisible(not accounts)
         self.balance_notice.setText(
             "Остаток включает начальную позицию и принятые операции по выбранную дату включительно."
             if ledger is not None
@@ -1662,6 +1815,17 @@ class MainWindow(QMainWindow):
             journal_rows,
             selection_changed=self._update_journal_actions,
         )
+        self.journal_empty.setVisible(not journal_rows)
+        self.journal_empty.setText(
+            "Эта книга открыта со справочниками. Для операций создайте копию и восстановите "
+            "её в новую папку через «Защита и копии». Исходная книга сохранится."
+            if ledger is None
+            else "Сначала добавьте счёт в разделе «Счета». Затем можно внести первую операцию."
+            if not accounts
+            else "По выбранному фильтру операций нет. Измените или сбросьте фильтр."
+            if self._active_query != OperationQuery()
+            else "Операций пока нет. Добавьте операцию вручную или выберите импорт CSV/OFX."
+        )
         self.journal_notice.setText(
             (
                 "Переводы исключены из доходов и расходов; комиссия — расход. "
@@ -1676,16 +1840,7 @@ class MainWindow(QMainWindow):
             else "Для журнала создайте резервную копию и восстановите её в новую папку. "
             "Исходная книга сохранится."
         )
-        self.feature_note.setText(
-            "Доступны ручные операции и остатки."
-            if ledger is not None
-            else "Эта книга открыта со справочниками. "
-            "Для финансовых операций восстановите её копию в новую папку."
-        )
         self._update_journal_actions()
-        self.account_count.setText(str(len(accounts)))
-        self.category_count.setText(str(len(categories)))
-        self.backup_overview.setText(self.last_backup)
         self.backup_status.setText(self.last_backup)
 
     def add_bank(self) -> None:

@@ -19,7 +19,10 @@ from PySide6.QtWidgets import QApplication
 from personal_finance.application.importing import Importing
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
-from personal_finance.bootstrap.ocr_audit_self_test import check_audited_ocr_link
+from personal_finance.bootstrap.ocr_audit_self_test import (
+    check_audited_ocr_link,
+    check_ocr_workflow,
+)
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -129,7 +132,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     reserve = source.catalog.add_account(
                         "Резерв",
                         AccountKind.SAVINGS,
-                        source.catalog.institutions()[0].id,
+                        source.catalog.add_institution("Вымышленный банк самопроверки").id,
                     )
                     organization = source.organization
                     if organization is None:
@@ -380,6 +383,14 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     ocr_selection, ocr_result = check_audited_ocr_link(
                         source, corrected_spending, account.id, ocr_command
                     )
+                with _step(report, "persist_ocr_workflow"):
+                    batch_command = str(uuid4())
+                    batch_selection, batch_result = check_ocr_workflow(
+                        source, ocr_selection, batch_command
+                    )
+                    expected_ocr_settings = (
+                        source.ocr_settings.load()[0] if source.ocr_settings is not None else None
+                    )
                 with _step(report, "protect_closed_period"):
                     periods = source.periods
                     if periods is None:
@@ -503,6 +514,16 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             != ocr_result
                         ):
                             raise RuntimeError("Аудит OCR или защита повторов не восстановлены.")
+                        if (
+                            restored.ocr_settings is None
+                            or restored.ocr_settings.load()[0] != expected_ocr_settings
+                            or restored.ocr_importing is None
+                            or restored.ocr_importing.confirm_many(
+                                (batch_selection,), command_id=batch_command
+                            )
+                            != batch_result
+                        ):
+                            raise RuntimeError("Настройки или пакет OCR не восстановлены.")
                         restored.check_integrity()
                     with _step(report, "check_financial_history"):
                         if (

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
 
 from personal_finance.application.ocr import Ocr
 from personal_finance.application.ocr_cards import CardRecognition, OcrCardPreview
+from personal_finance.application.ocr_review import OcrReviewDefaults
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ocr import LoadedOcrImage, OcrImage
 from personal_finance.domain.ocr_cards import CashDirection
@@ -34,7 +35,6 @@ def preview(lines=LINES):
 def confirmed(dialog):
     for check in dialog.checks.values():
         check.setChecked(True)
-    dialog.single.setChecked(True)
 
 
 def test_all_required_fields_start_unconfirmed_and_source_is_available(qtbot):
@@ -47,11 +47,15 @@ def test_all_required_fields_start_unconfirmed_and_source_is_available(qtbot):
     assert all(b.isEnabled() for b in dialog.evidence_buttons.values())
 
 
-def test_unknown_currency_sign_and_year_remain_blank_until_manual_review(qtbot):
-    dialog = OcrPreviewDialog(preview((*LINES[:2], "1234,56 Р", "27 октября", *LINES[4:])))
+def test_unknown_currency_and_year_are_visible_suggestions_without_changing_source(qtbot):
+    dialog = OcrPreviewDialog(
+        preview((*LINES[:2], "1234,56 Р", "27 октября", *LINES[4:])),
+        review_defaults=OcrReviewDefaults(reference_year=2026),
+    )
     qtbot.addWidget(dialog)
-    assert dialog.currency.currentData() == "" and dialog.direction.currentData() is None
-    assert dialog.occurred_on.text() == "" and dialog.local_time.text() == ""
+    assert dialog.currency.currentData() == "RUB" and dialog.direction.currentData() is None
+    assert dialog.occurred_on.text() == "27.10.2026" and dialog.local_time.text() == ""
+    assert "RUB" in dialog.defaults_note.text() and "2026" in dialog.defaults_note.text()
     dialog.currency.setCurrentIndex(1)
     dialog.direction.setCurrentIndex(2)
     dialog.occurred_on.setText("27.10.2026")

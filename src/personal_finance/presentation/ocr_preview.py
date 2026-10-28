@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.application.ocr_cards import OcrCardPreview
+from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ocr import OcrDocument, OcrImage
 from personal_finance.domain.ocr_cards import (
@@ -94,6 +95,19 @@ class SourceImageView(QGraphicsView):
         self.centerOn(self.outline)
 
 
+class OptionalMaskedEdit(QLineEdit):
+    """Маска вставляет разделители; пустое поле не превращается в дату или время."""
+
+    def __init__(self, mask: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setInputMask(mask)
+        self.setClearButtonEnabled(True)
+
+    def text(self) -> str:
+        value = super().text()
+        return value if any(character.isdigit() for character in value) else ""
+
+
 class OcrPreviewDialog(QDialog):
     def __init__(
         self,
@@ -101,9 +115,12 @@ class OcrPreviewDialog(QDialog):
         parent: QWidget | None = None,
         *,
         allow_financial_prepare: bool = False,
+        review_defaults: OcrReviewDefaults | None = None,
     ) -> None:
         super().__init__(parent)
         self.preview = preview
+        self.review_defaults = review_defaults or OcrReviewDefaults.for_today()
+        suggestions = suggest_corrections(preview.card, self.review_defaults)
         self.reviewed: ReviewedOcrCard | None = None
         self.financial_requested = False
         self.checks: dict[str, QCheckBox] = {}
@@ -122,6 +139,12 @@ class OcrPreviewDialog(QDialog):
                 )
             )
         )
+        self.defaults_note = plain(
+            f"Валюта и год по настройке: {self.review_defaults.currency}, "
+            f"{self.review_defaults.reference_year}. Сверьте предложения с изображением. "
+            "Исходные данные OCR сохраняются без изменений."
+        )
+        layout.addWidget(self.defaults_note)
         split = QSplitter(Qt.Orientation.Horizontal)
         image_panel = QWidget()
         image_layout = QVBoxLayout(image_panel)
@@ -147,7 +170,12 @@ class OcrPreviewDialog(QDialog):
         self.notice = plain(
             preview.card.blocked_reason
             or "Оценка слов не гарантирует правильность суммы или даты. "
-            "Четыре обязательных поля нужно подтвердить вручную."
+            + (
+                "Четыре обязательных поля нужно подтвердить вручную."
+                if self.review_defaults.confirm_fields
+                else "Флажки проверки полей отключены в настройках. "
+                "Проверьте значения перед продолжением."
+            )
         )
         form.addRow(self.notice)
         if allow_financial_prepare and not preview.card.amount.word_indices:
@@ -166,26 +194,26 @@ class OcrPreviewDialog(QDialog):
         self.currency = QComboBox()
         self.currency.addItem("Не определена", "")
         self.currency.addItem("RUB — российский рубль", "RUB")
-        if card.currency.value == "RUB":
-            self.currency.setCurrentIndex(1)
+        self.currency.setCurrentIndex(max(0, self.currency.findData(suggestions.currency)))
         self.direction = QComboBox()
         self.direction.addItem("Не определено", None)
         for direction, text in DIRECTION_LABELS.items():
             self.direction.addItem(text, direction)
-        if card.direction.value is not None:
-            self.direction.setCurrentIndex(self.direction.findData(card.direction.value))
-        self.occurred_on = QLineEdit()
-        self.occurred_on.setMaxLength(10)
+        if suggestions.direction is not None:
+            self.direction.setCurrentIndex(self.direction.findData(suggestions.direction))
+        self.occurred_on = OptionalMaskedEdit("00.00.0000;_")
         self.occurred_on.setPlaceholderText("ДД.ММ.ГГГГ")
-        if card.occurred_on.value is not None:
-            value = card.occurred_on.value
-            self.occurred_on.setText(f"{value.day:02d}.{value.month:02d}.{value.year:04d}")
-        self.local_time = QLineEdit()
-        self.local_time.setMaxLength(5)
+        self.occurred_on.setToolTip(
+            "Введите 8 цифр даты: точки появятся сами. Неизвестную дату оставьте пустой."
+        )
+        self.occurred_on.setText(suggestions.occurred_on)
+        self.local_time = OptionalMaskedEdit("00:00;_")
         self.local_time.setPlaceholderText("ЧЧ:ММ или пусто")
-        if card.local_time.value is not None:
-            self.local_time.setText(card.local_time.value.strftime("%H:%M"))
-        self.description = QLineEdit(card.description.value or "")
+        self.local_time.setToolTip(
+            "Введите 4 цифры времени: двоеточие появится само. Время можно оставить пустым."
+        )
+        self.local_time.setText(suggestions.local_time)
+        self.description = QLineEdit(suggestions.description)
         self.description.setMaxLength(500)
         for name, title in (
             ("amount", "Сумма без знака"),
@@ -211,27 +239,30 @@ class OcrPreviewDialog(QDialog):
             )
             self.evidence_buttons[name] = show
             row.addWidget(show)
-            if name in ("amount", "currency", "direction", "occurred_on"):
+            if self.review_defaults.confirm_fields and name in (
+                "amount",
+                "currency",
+                "direction",
+                "occurred_on",
+            ):
                 check = QCheckBox("Проверено")
                 self.checks[name] = check
                 row.addWidget(check)
-                signal = (
-                    editor.textChanged
-                    if isinstance(editor, QLineEdit)
-                    else editor.currentIndexChanged
-                )
-                signal.connect(lambda *args, check=check: check.setChecked(False))
                 check.toggled.connect(self._update)
+            signal = (
+                editor.textChanged if isinstance(editor, QLineEdit) else editor.currentIndexChanged
+            )
+            signal.connect(lambda *args, name=name: self._edited(name))
             column.addLayout(row)
             column.addWidget(plain(self._source_status(field)))
             form.addRow(title, panel)
-        self.single = QCheckBox("Это одна проведённая операция")
-        self.single.toggled.connect(self._update)
         scroll.setWidget(body)
         split.addWidget(scroll)
         split.setSizes([590, 530])
         layout.addWidget(split, 1)
-        layout.addWidget(self.single)
+        self.validation_note = plain("")
+        self.validation_note.setAccessibleName("Состояние проверки OCR")
+        layout.addWidget(self.validation_note)
         box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         box.button(QDialogButtonBox.StandardButton.Cancel).setText("Закрыть")
         self.finish = box.addButton("Завершить проверку", QDialogButtonBox.ButtonRole.AcceptRole)
@@ -252,12 +283,61 @@ class OcrPreviewDialog(QDialog):
         status = "; ".join(ISSUE_LABELS[i] for i in field.issues) or "Предложение OCR"
         return "Источник: " + status + score
 
-    def _update(self) -> None:
-        ready = (
-            not self.preview.card.blocked_reason
-            and self.single.isChecked()
-            and all(check.isChecked() for check in self.checks.values())
+    def _edited(self, name: str) -> None:
+        self.reviewed = None
+        self.financial_requested = False
+        if name in self.checks:
+            self.checks[name].setChecked(False)
+        self._update()
+
+    def _checked_fields(self) -> frozenset[str]:
+        return (
+            frozenset(name for name, check in self.checks.items() if check.isChecked())
+            if self.review_defaults.confirm_fields
+            else frozenset({"amount", "currency", "direction", "occurred_on"})
         )
+
+    def _review_fields(self) -> ReviewedOcrCard:
+        raw_direction = self.direction.currentData()
+        direction = CashDirection(raw_direction) if raw_direction in ("in", "out") else None
+        return review_card(
+            self.preview.card,
+            CardCorrections(
+                self.amount.text(),
+                self.currency.currentData(),
+                direction,
+                self.occurred_on.text(),
+                self.local_time.text(),
+                self.description.text(),
+            ),
+            confirmed_fields=self._checked_fields(),
+            single_completed_operation=True,
+        )
+
+    def _feedback(self, text: str, *, error: bool = False) -> None:
+        name = "feedbackError" if error else "muted"
+        if self.validation_note.objectName() != name:
+            self.validation_note.setObjectName(name)
+            self.validation_note.style().unpolish(self.validation_note)
+            self.validation_note.style().polish(self.validation_note)
+        self.validation_note.setText(text)
+
+    def _update(self) -> None:
+        ready = False
+        if self.preview.card.blocked_reason:
+            self._feedback(self.preview.card.blocked_reason, error=True)
+        elif self.review_defaults.confirm_fields and len(self._checked_fields()) != 4:
+            self._feedback(
+                "Для продолжения отметьте четыре поля. После правки поля его нужно проверить снова."
+            )
+        else:
+            try:
+                self._review_fields()
+            except ValidationError as error:
+                self._feedback(str(error), error=True)
+            else:
+                ready = True
+                self._feedback("Поля готовы. Продолжение сохраняет только результат этой проверки.")
         self.finish.setEnabled(ready)
         if self.prepare_button is not None:
             self.prepare_button.setEnabled(ready and bool(self.preview.card.amount.word_indices))
@@ -272,25 +352,10 @@ class OcrPreviewDialog(QDialog):
         self.financial_requested = False
         if financial and (self.prepare_button is None or not self.prepare_button.isEnabled()):
             return
-        raw_direction = self.direction.currentData()
-        direction = CashDirection(raw_direction) if raw_direction in ("in", "out") else None
         try:
-            self.reviewed = review_card(
-                self.preview.card,
-                CardCorrections(
-                    self.amount.text(),
-                    self.currency.currentData(),
-                    direction,
-                    self.occurred_on.text(),
-                    self.local_time.text(),
-                    self.description.text(),
-                ),
-                confirmed_fields=frozenset(
-                    name for name, check in self.checks.items() if check.isChecked()
-                ),
-                single_completed_operation=self.single.isChecked(),
-            )
+            self.reviewed = self._review_fields()
         except ValidationError as error:
+            self._feedback(str(error), error=True)
             QMessageBox.warning(self, "Проверьте поля", str(error))
             return
         self.financial_requested = financial

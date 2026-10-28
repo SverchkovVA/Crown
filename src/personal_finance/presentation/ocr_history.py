@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.application.ocr_cards import OcrCardPreview, OcrHistoryPreview
+from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
 from personal_finance.domain.ocr_cards import CashDirection, ReviewedOcrCard
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog, SourceImageView, plain
 from personal_finance.presentation.tables import replace_table
@@ -27,8 +28,10 @@ class OcrHistoryDialog(QDialog):
         parent: QWidget | None = None,
         *,
         allow_financial_prepare: bool = False,
+        review_defaults: OcrReviewDefaults | None = None,
     ) -> None:
         super().__init__(parent)
+        self.review_defaults = review_defaults or OcrReviewDefaults.for_today()
         self.preview = preview
         self.reviews: dict[int, ReviewedOcrCard] = {}
         self.selected_for_financial: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
@@ -43,7 +46,8 @@ class OcrHistoryDialog(QDialog):
             "Проверки хранятся до закрытия окна. "
             + (
                 "Подготовка одной выбранной строки закрывает это окно; "
-                "остальные проверки исчезнут. Запись потребует отдельного подтверждения."
+                "остальные проверки исчезнут. Для пакетного списка восстановите копию "
+                "в новую папку текущей версии. Запись зависит от настроек подтверждения."
                 if allow_financial_prepare
                 else "Для финансового подтверждения откройте книгу текущей схемы."
             )
@@ -99,6 +103,7 @@ class OcrHistoryDialog(QDialog):
     def _refresh(self) -> None:
         rows = []
         for index, original in enumerate(self.preview.history.cards):
+            suggested = suggest_corrections(original, self.review_defaults)
             reviewed = self.reviews.get(index)
             minor = reviewed.amount.minor if reviewed else original.amount.value
             occurred = reviewed.occurred_on if reviewed else original.occurred_on.value
@@ -106,7 +111,9 @@ class OcrHistoryDialog(QDialog):
             rows.append(
                 [
                     str(index + 1),
-                    occurred.isoformat() if occurred else "Уточните дату/год",
+                    occurred.strftime("%d.%m.%Y")
+                    if occurred
+                    else suggested.occurred_on or "Уточните дату",
                     (
                         (
                             "−"
@@ -116,7 +123,11 @@ class OcrHistoryDialog(QDialog):
                             else "?"
                         )
                         + f"{minor // 100},{minor % 100:02d} "
-                        + ("RUB" if reviewed else original.currency.value or "?")
+                        + (
+                            "RUB"
+                            if reviewed
+                            else original.currency.value or self.review_defaults.currency
+                        )
                     )
                     if minor is not None
                     else "Не определена",
@@ -191,7 +202,20 @@ class OcrHistoryDialog(QDialog):
                 self.preview.source, self.preview.history.cards[index], self.preview.bank_name
             ),
             self,
+            review_defaults=self.review_defaults,
         )
+        previous = self.reviews.get(index)
+        if previous is not None:
+            dialog.amount.setText(
+                f"{previous.amount.minor // 100},{previous.amount.minor % 100:02d}"
+            )
+            dialog.currency.setCurrentIndex(dialog.currency.findData(previous.amount.currency.code))
+            dialog.direction.setCurrentIndex(dialog.direction.findData(previous.direction))
+            dialog.occurred_on.setText(previous.occurred_on.strftime("%d.%m.%Y"))
+            dialog.local_time.setText(
+                previous.local_time.strftime("%H:%M") if previous.local_time else ""
+            )
+            dialog.description.setText(previous.description)
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted and dialog.reviewed is not None:
                 self.reviews[index] = dialog.reviewed
