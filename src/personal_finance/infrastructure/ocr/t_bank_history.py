@@ -8,8 +8,11 @@ from personal_finance.domain.ocr_cards import OcrField, OcrHistoryDraft, OcrIssu
 from personal_finance.infrastructure.ocr.rub_fields import _DATE, _DATE_HINT, _NUMBER
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 
+_CURRENCY = r"(?:RUB|₽|руб\.?|[РP])"
 _AMOUNT = re.compile(
-    rf"(?<![0-9A-Za-zА-Яа-я+\-−—–.,])(?P<value>[+\-−—–]?\s*{_NUMBER}\s*(?:RUB|₽|руб\.?|[РP]))(?![A-Za-zА-Яа-я])",
+    rf"(?<![0-9A-Za-zА-Яа-я+\-−—–.,])"
+    rf"(?P<value>[+\-−—–]?\s*{_NUMBER}\s*{_CURRENCY}|[+\-−—–]\s*{_NUMBER}(?=\s*$))"
+    r"(?![0-9A-Za-zА-Яа-я.,])",
     re.I,
 )
 

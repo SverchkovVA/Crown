@@ -48,10 +48,15 @@ def main() -> int:
         return 1
     app.installTranslator(translator)
     ocr = Ocr(TesseractEngine(runtime))
+    fallback = Ocr(TesseractEngine(runtime, page_segmentation=11))
     window = MainWindow(
         ocr_recognitions=(
             CardRecognition(
-                ocr, load_ocr_image, TBankCardAdapter(), history_adapter=TBankHistoryAdapter()
+                ocr,
+                load_ocr_image,
+                TBankCardAdapter(),
+                history_adapter=TBankHistoryAdapter(),
+                fallback_ocr=fallback,
             ),
             CardRecognition(
                 ocr,
@@ -59,6 +64,7 @@ def main() -> int:
                 VtbCardAdapter(),
                 history_adapter=VtbHistoryAdapter(),
                 bank_name="ВТБ",
+                fallback_ocr=fallback,
             ),
         )
     )

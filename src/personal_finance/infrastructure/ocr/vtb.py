@@ -1,11 +1,12 @@
 """Опытная карточка ВТБ «Детали операции» с подписанной датой."""
 
+import re
 from dataclasses import replace
 
 from personal_finance.domain.ocr import OcrDocument
 from personal_finance.domain.ocr_cards import OcrCardDraft, OcrField, OcrIssue
 from personal_finance.infrastructure.ocr.rows import document_rows
-from personal_finance.infrastructure.ocr.rub_fields import _DATE, _MONEY, parse_rub_fields
+from personal_finance.infrastructure.ocr.rub_fields import _DATE, _MONEY, _NUMBER, parse_rub_fields
 
 
 class VtbCardAdapter:
@@ -21,6 +22,16 @@ class VtbCardAdapter:
                 continue
             label, separator, value = text.partition(":")
             name = label.casefold().strip()
+            date_prefix = re.match(
+                r"^(дата и время(?: операции)?|дата операции|дата перевода|"
+                r"дата проведения|дата)\s*:?\s*(.*)$",
+                text,
+                re.I,
+            )
+            if date_prefix is not None:
+                name = "дата и время"
+                value = date_prefix[2].strip()
+                separator = ":" if value else ""
             if name in ("дата и время", "дата операции", "сумма", "сумма операции"):
                 bound = None
                 if separator and value.strip():
@@ -44,7 +55,8 @@ class VtbCardAdapter:
                         labelled_amounts.append((value, origin))
                     selected.append((value, origin))
             elif not _DATE.fullmatch(text):
-                selected.append((text, evidence))
+                inline = _inline_amount(document, text, evidence)
+                selected.extend(inline if inline is not None else [(text, evidence)])
         result = parse_rub_fields(document, selected, adapter_id="vtb-card-v1")
         if len(labelled_amounts) == 1:
             result = _repeated_summary(document, selected, labelled_amounts[0], result)
@@ -90,6 +102,11 @@ def _repeated_summary(
         first.currency.value is None
         and (monetary[0][1]["currency"] or "").casefold()
         != (monetary[1][1]["currency"] or "").casefold()
+        and {
+            (monetary[0][1]["currency"] or "").casefold(),
+            (monetary[1][1]["currency"] or "").casefold(),
+        }
+        != {"р", "p"}
     ):
         return original
     directions = {c.direction.value for c in candidates if c.direction.value is not None}
@@ -111,3 +128,48 @@ def _repeated_summary(
         currency=OcrField(single.currency.value, evidence, (*single.currency.issues, *issues)),
         direction=flow,
     )
+
+
+_CARD_MONEY_TAIL = re.compile(
+    rf"(?<![0-9A-Za-zА-Яа-я+\-−—–.,])"
+    rf"(?P<money>[+\-−—–]?\s*{_NUMBER}\s*(?:RUB|₽|руб\.?|[РP])|"
+    rf"[+\-−—–]\s*{_NUMBER})$",
+    re.I,
+)
+
+
+def _inline_amount(
+    document: OcrDocument, text: str, evidence: tuple[int, ...]
+) -> list[tuple[str, tuple[int, ...]]] | None:
+    """Разделить текст и единственную сумму справа, не обрезая плохую группировку."""
+    if _MONEY.fullmatch(text):
+        return None
+    match = _CARD_MONEY_TAIL.search(text)
+    if match is None:
+        return None
+    prefix = text[: match.start()].strip()
+    parsed = _MONEY.fullmatch(match["money"])
+    if re.match(r"(?:комиссия|сч[её]т|карта|номер|телефон|id)\b", prefix, re.I):
+        return None
+    if (
+        not prefix
+        or parsed is None
+        or (not parsed["currency"] and not re.search(r"[,.][0-9]{1,2}$", parsed["amount"]))
+    ):
+        return None
+    if re.search(r"(?:^|\s)[+\-−—–]?[0-9][0-9,.]*$|[+\-−—–]$", prefix) or re.search(
+        r"[+\-−—–]\s*[0-9]|[0-9]\s*(?:RUB|₽|руб\.?|[РP])(?:\s|$)", prefix, re.I
+    ):
+        return None
+    before, money = [], []
+    position = 0
+    for index in evidence:
+        end = position + len(document.words[index].text)
+        if end > match.start():
+            money.append(index)
+        else:
+            before.append(index)
+        position = end + 1
+    if not money or min(document.words[i].box.left for i in money) < document.width // 2:
+        return None
+    return [(prefix, tuple(before)), (match["money"], tuple(money))]

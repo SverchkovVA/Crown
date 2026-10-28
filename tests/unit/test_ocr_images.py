@@ -107,3 +107,25 @@ def test_jpeg_exif_rotation_is_applied_before_ocr():
     rotated = jpeg[:2] + b"\xff\xe1" + struct.pack(">H", len(exif) + 2) + exif + jpeg[2:]
     result = decode_ocr_image(rotated)
     assert (result.image.width, result.image.height) == (20, 30)
+
+
+def test_normalized_dpi_does_not_depend_on_application_or_source_resolution():
+    from PySide6.QtCore import QBuffer, QIODevice
+    from PySide6.QtGui import QImage, QImageWriter
+
+    from personal_finance.infrastructure.ocr.images import decode_ocr_image
+
+    hashes = []
+    for dpi in (3780, 3937, 11811):
+        source = QImage(64, 64, QImage.Format.Format_RGB32)
+        source.fill("white")
+        source.setDotsPerMeterX(dpi)
+        source.setDotsPerMeterY(dpi)
+        buffer = QBuffer()
+        assert buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        assert QImageWriter(buffer, b"PNG").write(source)
+        result = decode_ocr_image(buffer.data().data()).image
+        normalized = QImage.fromData(result.png)
+        assert normalized.dotsPerMeterX() == normalized.dotsPerMeterY() == 3937
+        hashes.append(result.sha256)
+    assert len(set(hashes)) == 1

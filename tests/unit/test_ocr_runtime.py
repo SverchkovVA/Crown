@@ -71,7 +71,10 @@ def test_manifest_requires_model_hash_agreement_and_unique_names(tmp_path):
         )
 
 
-def test_engine_uses_explicit_verified_paths_and_private_minimal_environment(tmp_path, monkeypatch):
+@pytest.mark.parametrize("mode", [6, 11])
+def test_engine_uses_explicit_verified_paths_and_private_minimal_environment(
+    tmp_path, monkeypatch, mode
+):
     import struct
 
     from personal_finance.domain.ocr import OcrImage
@@ -100,9 +103,23 @@ def test_engine_uses_explicit_verified_paths_and_private_minimal_environment(tmp
         )
 
     monkeypatch.setattr(tesseract, "run_ocr_process", process)
-    result = tesseract.TesseractEngine(value).recognize(image)
-    assert result.engine == value.engine and result.words == ()
+    result = tesseract.TesseractEngine(value, page_segmentation=mode).recognize(image)
+    expected_info = (
+        value.engine
+        if mode == 6
+        else replace(value.engine, version=value.engine.version + ";psm=11")
+    )
+    assert result.engine == expected_info and result.words == ()
+    assert calls[0][calls[0].index("--psm") + 1] == str(mode)
     (tmp_path / "engine.dll").write_bytes(b"changed")
     with pytest.raises(OcrProcessError):
         tesseract.TesseractEngine(value).recognize(image)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("mode", [True, 0, 3, 7, 12, "11"])
+def test_segmentation_mode_is_explicit_and_bounded(mode, tmp_path):
+    from personal_finance.infrastructure.ocr.tesseract import TesseractEngine
+
+    with pytest.raises(ValidationError):
+        TesseractEngine(runtime(tmp_path), page_segmentation=mode)

@@ -41,6 +41,10 @@ def decode_ocr_image(contents: bytes) -> LoadedOcrImage:
         require_dimensions(decoded.width(), decoded.height())
         # Удаляем EXIF/текстовые поля и переводим прозрачность на белый фон.
         normalized = QImage(decoded.size(), QImage.Format.Format_RGB32)
+        # Qt defaults differ with/without QGuiApplication (96/100 DPI).
+        # Keep OCR input and its hash independent of display scale and process state.
+        normalized.setDotsPerMeterX(3937)
+        normalized.setDotsPerMeterY(3937)
         normalized.fill("white")
         painter = QPainter(normalized)
         try:

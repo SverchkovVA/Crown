@@ -63,11 +63,13 @@ class CardRecognition:
         *,
         history_adapter: HistoryAdapter | None = None,
         bank_name: str = "Т-Банк",
+        fallback_ocr: Ocr | None = None,
     ) -> None:
         require_bank_name(bank_name)
         self.bank_name = bank_name
         self._ocr, self._loader, self._adapter = ocr, loader, adapter
         self._history_adapter = history_adapter
+        self._fallback_ocr = fallback_ocr
 
     def preview(self, path: Path) -> OcrCardPreview:
         source = self._loader(path)
@@ -75,6 +77,28 @@ class CardRecognition:
         card = self._adapter.parse(document)
         if card.document != document:
             raise ValidationError("Адаптер вернул поля другого OCR-документа.")
+        if (
+            not card.blocked_reason
+            and self._fallback_ocr is not None
+            and (card.amount.value is None or not card.occurred_on.word_indices)
+        ):
+            alternate_document = self._fallback_ocr.recognize(source.image)
+            alternate = self._adapter.parse(alternate_document)
+            if alternate.document != alternate_document:
+                raise ValidationError("Адаптер вернул поля другого OCR-документа.")
+            known = ("amount", "currency", "direction", "occurred_on")
+            contradictory = any(
+                getattr(card, name).value is not None
+                and getattr(card, name).value != getattr(alternate, name).value
+                for name in known
+            )
+            if (
+                not alternate.blocked_reason
+                and not contradictory
+                and alternate.amount.value is not None
+                and alternate.occurred_on.word_indices
+            ):
+                card = alternate
         return OcrCardPreview(source, card, self.bank_name)
 
     @property

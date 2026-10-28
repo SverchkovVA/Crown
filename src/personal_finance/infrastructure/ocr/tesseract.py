@@ -3,7 +3,7 @@
 import hashlib
 import os
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 from personal_finance.domain.errors import ValidationError
@@ -89,9 +89,14 @@ class TesseractRuntime:
 
 
 class TesseractEngine:
-    def __init__(self, runtime: TesseractRuntime, *, timeout_seconds: int = 30) -> None:
+    def __init__(
+        self, runtime: TesseractRuntime, *, timeout_seconds: int = 30, page_segmentation: int = 6
+    ) -> None:
         if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
             raise ValidationError("Время OCR должно быть целым от 1 до 120 секунд.")
+        if type(page_segmentation) is not int or page_segmentation not in (6, 11):
+            raise ValidationError("Поддерживаются режимы сегментации OCR 6 и 11.")
+        self._page_segmentation = page_segmentation
         self._runtime = runtime
         self._timeout = timeout_seconds
 
@@ -117,7 +122,7 @@ class TesseractEngine:
                 "--oem",
                 "1",
                 "--psm",
-                "6",
+                str(self._page_segmentation),
                 "-c",
                 "tessedit_create_tsv=1",
             ),
@@ -126,4 +131,7 @@ class TesseractEngine:
             environment=environment,
             timeout_seconds=self._timeout,
         )
-        return parse_tesseract_tsv(contents, image, self._runtime.engine)
+        info = self._runtime.engine
+        if self._page_segmentation != 6:
+            info = replace(info, version=info.version + ";psm=11")
+        return parse_tesseract_tsv(contents, image, info)

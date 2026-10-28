@@ -8,7 +8,7 @@ from personal_finance.domain.models import Money
 from personal_finance.domain.ocr import OcrDocument
 from personal_finance.domain.ocr_cards import CashDirection, OcrCardDraft, OcrField, OcrIssue
 
-_NUMBER = r"(?:[0-9]+|[0-9]{1,3}(?:[ \u00a0\u202f][0-9]{3})+)(?:[,.][0-9]{2})?"
+_NUMBER = r"(?:[0-9]+|[0-9]{1,3}(?:[ \u00a0\u202f][0-9]{3})+)(?:[,.][0-9]{1,2})?"
 _MONEY = re.compile(
     rf"(?:Сумма\s*:\s*)?(?P<sign>[+\-−—–]?)\s*(?P<amount>{_NUMBER})"
     r"\s*(?P<currency>RUB|₽|руб\.?|[РP])?",
@@ -162,3 +162,52 @@ def parse_rub_fields(
         description,
         blocked,
     )
+
+
+_DATE_LABEL = re.compile(r"^дата(?:\s+и\s+время|\s+операции)?\s*:?\s*", re.I)
+_WEEKDAY_PREFIX = re.compile(
+    r"^(?:пн|вт|ср|чт|пт|сб|вс|понедельник|вторник|среда|четверг|пятница|суббота|"
+    r"воскресенье|сегодня|вчера),?\s+",
+    re.I,
+)
+_PARTIAL_DATE = re.compile(r"(?P<day>[0-9]{1,2})\s+(?P<month>" + "|".join(_MONTHS) + r")\b", re.I)
+# Хвост заголовка дня отличаем от года, но не превращаем буквы в сумму.
+_HEADER_TOTAL_HINT = re.compile(
+    r"[+\-−—–]?\s*[0-9ОOоo][0-9ОOоo \u00a0\u202f,.]*(?:RUB|₽|руб\.?|[РP])?",
+    re.I,
+)
+
+
+def suggest_occurred_on(card: OcrCardDraft, *, reference_year: int) -> OcrField[date]:
+    """Предложить год только явному дню/месяцу; исходное поле не изменяется."""
+    if (
+        not isinstance(card, OcrCardDraft)
+        or type(reference_year) is not int
+        or not 1 <= reference_year <= 9999
+    ):
+        raise ValidationError("Для предложения даты нужен год от 1 до 9999.")
+    original = card.occurred_on
+    if (
+        original.value is not None
+        or not original.word_indices
+        or any(issue in original.issues for issue in (OcrIssue.AMBIGUOUS, OcrIssue.INVALID))
+    ):
+        return original
+    text = " ".join(card.document.words[i].text for i in original.word_indices).strip()
+    text = _WEEKDAY_PREFIX.sub("", _DATE_LABEL.sub("", text))
+    match = _DATE.fullmatch(text)
+    if match is not None:
+        if match["year"] or match["text_year"]:
+            return original
+        day, month = int(match["day"]), _MONTHS[match["month_name"].casefold()]
+    else:
+        partial = _PARTIAL_DATE.match(text)
+        if partial is None or not _HEADER_TOTAL_HINT.fullmatch(text[partial.end() :].strip()):
+            return original
+        day, month = int(partial["day"]), _MONTHS[partial["month"].casefold()]
+    issues = tuple(issue for issue in original.issues if issue != OcrIssue.MISSING)
+    try:
+        proposed = date(reference_year, month, day)
+    except ValueError:
+        return OcrField(None, original.word_indices, (*issues, OcrIssue.INVALID))
+    return OcrField(proposed, original.word_indices, issues)
