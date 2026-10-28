@@ -4,8 +4,8 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev10
-с подтверждением OCR — docs/stage-5-confirmation-report.md.
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev11
+со списком OCR — docs/stage-5-usability-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
 импорты. Используется каталог приложения, без onefile, UPX и Qt WebEngine.
@@ -50,9 +50,9 @@ Headless-прогон CI отдельно отмечается в JSON. Прог
 системы обновлений и проверки лицензий готового публичного дистрибутива.
 Эти результаты относятся к завершению Windows на этапе 9.
 
-Схема новой книги dev10 — 0010; миграция OCR входит в ресурсы PyInstaller.
-Самопроверки исходников/EXE имеют 19 шагов, включая финансовый аудит и сохранение
-защиты повторов после восстановления. Обычный EXE не содержит OCR-runtime и меню
-распознавания; опытный запуск из исходников описан в windows-quickstart.md.
-Полный Windows/ Linux набор имеет бюджет 25 минут, job CI — 35 минут; тайм-аут
-одного теста 90 с с диагностикой. Успех сборки не завершает приёмку OCR-поставки.
+Текущая dev11 создаёт 0011 и включает 20 шагов самопроверки. SVG-индикаторы из
+presentation/icons включены в данные PyInstaller и проверяются чтением Qt в EXE.
+Бюджет полного набора 30 минут, job CI — 40, диагностика теста 90 с.
+Обычный EXE остаётся без OCR-runtime/меню; параметры/свои отправители и прежний
+журнал доступны, опытное распознавание запускается из исходников.
+[Текущий отчёт](stage-5-usability-report.md).
