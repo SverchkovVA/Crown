@@ -1,3 +1,4 @@
+import pytest
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QDialog, QFileDialog
 
@@ -85,3 +86,45 @@ def test_history_menu_uses_worker_and_cleans_job_before_showing(qtbot, qapp, tmp
     window._ocr_actions[1].trigger()
     qtbot.waitUntil(lambda: bool(seen), timeout=5000)
     assert seen == [2] and window.session is None and window._ocr_actions[1].isEnabled()
+
+
+def test_selected_row_note_and_source_follow_selection_and_clear(qtbot, monkeypatch):
+    dialog = OcrHistoryDialog(preview())
+    qtbot.addWidget(dialog)
+    assert dialog.selection_note.text() == "Выбрана строка 1 из 2"
+    first = dialog.image.outline.rect()
+    dialog.table.selectRow(1)
+    assert dialog.selection_note.text() == "Выбрана строка 2 из 2"
+    assert dialog.image.outline.rect() != first and dialog.review_button.isEnabled()
+    dialog.table.clearSelection()
+    assert dialog.selection_note.text() == "Строка не выбрана"
+    assert not dialog.image.outline.isVisible() and not dialog.review_button.isEnabled()
+    # currentIndex остаётся прежним, но не разрешает проверку снятого выбора.
+    assert dialog.table.currentIndex().row() == 1
+    monkeypatch.setattr(OcrPreviewDialog, "exec", lambda child: pytest.fail("Нет выбранной строки"))
+    dialog.review_selected()
+    assert not dialog.reviews
+
+
+def test_selection_is_visible_after_focus_moves_to_review_button(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor
+
+    from personal_finance.presentation.main_window import STYLE
+
+    dialog = OcrHistoryDialog(preview())
+    dialog.setStyleSheet(STYLE)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.table.selectRow(1)
+    dialog.review_button.setFocus()
+    qtbot.waitUntil(lambda: dialog.review_button.hasFocus())
+    rectangle = dialog.table.visualRect(dialog.model.index(1, 0))
+    point = rectangle.bottomRight()
+    point.setX(point.x() - 5)
+    point.setY(point.y() - 5)
+    pixels = dialog.table.viewport().grab().toImage()
+    assert pixels.pixelColor(point) == QColor("#17694f")
+    dialog.table.setFocus()
+    qtbot.keyClick(dialog.table, Qt.Key.Key_Up)
+    assert dialog.selection_note.text() == "Выбрана строка 1 из 2"

@@ -192,3 +192,35 @@ def test_fee_label_without_amount_also_blocks_history():
     doc = history()
     extra = OcrWord("Комиссия", OcrBox(20, 1350, 400, 20), Decimal(95), (1, 1, 999), 1)
     assert VtbHistoryAdapter().parse(replace(doc, words=(*doc.words, extra))).blocked_reason
+
+
+@pytest.mark.parametrize("summary", ["-2 ООО Р", "−2 000 P", "2 000Р", "2026 Р"])
+def test_unreadable_header_total_keeps_partial_date_without_inventing_year_or_operation(summary):
+    doc = history(header="28 октября " + summary, values=("-17 RUB",), summary=False)
+    result = VtbHistoryAdapter().parse(doc)
+    assert not result.blocked_reason and len(result.cards) == 1
+    assert result.cards[0].amount.value == 1700
+    assert result.cards[0].occurred_on.value is None
+    assert result.cards[0].occurred_on.word_indices
+    assert result.unassigned_fragments == 1
+
+
+def test_equal_transfers_under_two_partial_headers_are_separate_proposals():
+    doc = history(header="28 октября -2 ООО Р", values=("-17 RUB",), summary=False)
+    extra = (
+        OcrWord("26 октября -2 ООО Р", OcrBox(20, 300, 400, 20), Decimal(95), (1, 1, 90), 1),
+        OcrWord("Вымышленный перевод", OcrBox(20, 350, 300, 20), Decimal(95), (1, 1, 91), 1),
+        OcrWord("-17 RUB", OcrBox(700, 350, 300, 20), Decimal(95), (1, 1, 91), 2),
+    )
+    result = VtbHistoryAdapter().parse(replace(doc, words=(*doc.words, *extra)))
+    assert len(result.cards) == 2 and all(c.amount.value == 1700 for c in result.cards)
+    assert all(c.occurred_on.value is None for c in result.cards)
+    assert set(result.cards[0].amount.word_indices).isdisjoint(result.cards[1].amount.word_indices)
+    assert result.cards[0].occurred_on.word_indices != result.cards[1].occurred_on.word_indices
+
+
+def test_bad_amount_letters_are_never_converted_by_header_recovery():
+    result = VtbHistoryAdapter().parse(
+        history(header="28 октября -2 ООО Р", values=("-О,50 RUB",), summary=False)
+    )
+    assert not result.cards

@@ -41,7 +41,16 @@ class OcrHistoryDialog(QDialog):
         split.addWidget(self.image)
         panel = QWidget()
         right = QVBoxLayout(panel)
+        self.selection_note = plain("Строка не выбрана")
+        right.addWidget(self.selection_note)
         self.table = QTableView()
+        self.table.setObjectName("ocrHistoryTable")
+        self.table.setStyleSheet(
+            "QTableView#ocrHistoryTable::item:selected {"
+            " background: #17694f; color: #ffffff; }"
+            "QTableView#ocrHistoryTable::item:selected:!active {"
+            " background: #17694f; color: #ffffff; }"
+        )
         self.table.verticalHeader().hide()
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -106,17 +115,30 @@ class OcrHistoryDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.ResizeToContents
         )
-        self.review_button.setEnabled(bool(rows) and not self.preview.history.blocked_reason)
+        self._selected()
+
+    def _selected_index(self) -> int:
+        selection = self.table.selectionModel().selectedRows()
+        if len(selection) != 1:
+            return -1
+        index = selection[0].row()
+        return index if 0 <= index < len(self.preview.history.cards) else -1
 
     def _selected(self) -> None:
-        selection = self.table.selectionModel().selectedRows()
-        index = selection[0].row() if selection else -1
-        if 0 <= index < len(self.preview.history.cards):
+        index = self._selected_index()
+        if index >= 0:
+            self.selection_note.setText(
+                f"Выбрана строка {index + 1} из {len(self.preview.history.cards)}"
+            )
             self.image.show_evidence(self.preview.history.cards[index].amount.word_indices)
+        else:
+            self.selection_note.setText("Строка не выбрана")
+            self.image.show_evidence(())
+        self.review_button.setEnabled(index >= 0 and not self.preview.history.blocked_reason)
 
     def review_selected(self) -> None:
-        index = self.table.currentIndex().row()
-        if self.preview.history.blocked_reason or not 0 <= index < len(self.preview.history.cards):
+        index = self._selected_index()
+        if self.preview.history.blocked_reason or index < 0:
             return
         dialog = OcrPreviewDialog(
             OcrCardPreview(

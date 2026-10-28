@@ -8,12 +8,20 @@ from personal_finance.domain.ocr_cards import OcrField, OcrHistoryDraft, OcrIssu
 from personal_finance.infrastructure.ocr.rub_fields import (
     _DATE,
     _DATE_HINT,
+    _MONTHS,
     _NUMBER,
     parse_rub_fields,
 )
 
 _WEEKDAY = re.compile(
     r"^(?:пн|вт|ср|чт|пт|сб|вс|понедельник|вторник|среда|четверг|пятница|суббота|воскресенье|сегодня|вчера),?\s+",
+    re.I,
+)
+_DATE_PREFIX = re.compile(r"[0-9]{1,2}\s+(?:" + "|".join(_MONTHS) + r")\b", re.I)
+# Только признак суммы в заголовке. Ошибочные буквы не превращаются в деньги.
+_HEADER_AMOUNT_HINT = re.compile(
+    r"[+\-−—–]?\s*[0-9ОOоo][0-9ОOоo \u00a0\u202f,.]*"
+    r"(?:RUB|₽|руб\.?|[РP])?",
     re.I,
 )
 _CURRENCY = r"(?:RUB|₽|руб\.?|[РP])"
@@ -44,6 +52,19 @@ class VtbHistoryAdapter:
                     standalone_date,
                     tuple(indices[(w.line_key, w.word_number)] for w in line),
                 )
+                continue
+            partial = _DATE_PREFIX.match(standalone_date)
+            if partial and _HEADER_AMOUNT_HINT.fullmatch(standalone_date[partial.end() :].strip()):
+                # День/месяц остаются источником, год не заимствуется из суммы дня.
+                end = len(text) - len(standalone_date) + partial.end()
+                position = 0
+                origin = []
+                for word in line:
+                    if position < end:
+                        origin.append(indices[(word.line_key, word.word_number)])
+                    position += len(word.text) + 1
+                header = (partial.group(), tuple(origin))
+                fragments += 1
                 continue
             if _DATE_HINT.match(standalone_date):
                 header = None
