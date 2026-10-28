@@ -3,8 +3,8 @@
 Автономное приложение для **Windows 11 x64** на Python 3.13, PySide6,
 SQLAlchemy, Alembic и SQLCipher. Документация и интерфейс на русском языке.
 
-**Этап 5 в stage-5-ocr: 0.2.0.dev11, список OCR и настраиваемая проверка.**
-[Текущий срез и ограничения](docs/stage-5-usability-report.md),
+**Этап 5 в stage-5-ocr: 0.2.0.dev12, уточнение дат и правила категорий в списке OCR.**
+[Текущий срез и ограничения](docs/stage-5-refinement-report.md),
 [контракт списка и настроек](docs/ocr-workflow-contract.md).
 Опытные карточки/история Т-Банка и ВТБ доступны через отдельный запуск;
 обычный EXE пока без OCR-runtime и команд распознавания.
@@ -190,4 +190,5 @@ Linux-сборка не является Windows-программой.
 
 - [Подтверждение OCR и фактические проверки dev10](docs/stage-5-confirmation-report.md)
 
+- [Текущие даты и подсказки категорий dev12](docs/stage-5-refinement-report.md)
 - [Список OCR, интерфейс и проверки dev11](docs/stage-5-usability-report.md)
