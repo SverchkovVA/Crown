@@ -51,7 +51,13 @@ PR CI полностью прошёл: Linux 1160 passed за 876,18 с; Windows
 artifacts/ci-dev18-pr-1793256942308/verified-summary.json.
 Каталог программы PR: 12878464614; целиком ZIP программы не скачивался.
 EXE PR SHA-256: 05f5b6a331b5afe5824739287f2448d14c8e65065031a1bf3d9ca45278e897c8.
-Push Linux/Windows CI ещё выполняется для закреплённого кода dev18.
+Оба push-задания тоже завершены успешно: Linux 1160 passed за 1777,09 с;
+Windows JUnit 1701,286 с, 1160 тестов, source/EXE по 23 шага.
+Технический артефакт 12879970013 проверен по SHA-256 и отпечатку:
+artifacts/ci-dev18-push-1793257581518/verified-summary.json.
+Каталог программы push: 12879790480; EXE SHA-256:
+c072f71caadf1f168a15a0d710bb105ea8aecd95f6a1d6dd2db1b05e200ce5df.
+Полные проверки dev18 подтверждены локально и всеми четырьмя CI-заданиями.
 Дополнительный локальный EXE-прогон без Python/uv в PATH прошёл 23 шага:
 artifacts/dev18-without-python-path-943baf5183394432b438d0ddd81693af.
 Это не проверка на чистой Windows.
@@ -60,7 +66,7 @@ artifacts/dev18-without-python-path-943baf5183394432b438d0ddd81693af.
 Локальный отчёт: artifacts/windows-check-20261029-093148-f8604dc6b16a407faf2bc8f42962ea5c/report.json.
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40829750493),
 [PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40829755964).
-Результаты будут дополнены после фактического завершения.
+Все перечисленные полные проверки dev18 завершены и проверены отдельно.
 
 ## Приёмка и ограничения
 
