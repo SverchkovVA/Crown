@@ -1,9 +1,11 @@
 """Период и таблицы отчёта только для чтения, без финансовых команд."""
 
 from datetime import date
+from html import escape
 
 from PySide6.QtCore import QDate, QModelIndex, QSignalBlocker, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDateEdit,
     QDialog,
@@ -25,11 +27,12 @@ from personal_finance.domain.analytics import (
     IncomeExpenseReport,
     OperationFlow,
     ReportPeriod,
+    ReportScope,
     report_sources,
 )
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import OPERATION_LABELS
-from personal_finance.domain.models import Account, Category, Currency
+from personal_finance.domain.models import Account, Category, CategoryKind, Currency, Institution
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tables import replace_table
 
@@ -50,14 +53,52 @@ def format_report_amount(minor: int, currency: Currency) -> str:
     return ("−" if minor < 0 else "") + text
 
 
+def scope_captions(
+    report: IncomeExpenseReport, categories: list[Category], accounts: list[Account]
+) -> tuple[str, str]:
+    category_names = {c.id: category_title(c, categories) for c in categories}
+    account_names = {a.id: a.name for a in accounts}
+    compact = []
+    full = []
+    for title, identifiers, names in [
+        ("Счета", report.scope.account_ids, account_names),
+        ("Категории", report.scope.category_ids, category_names),
+    ]:
+        selected = (
+            []
+            if identifiers is None
+            else sorted((names.get(i, "Недоступная запись") for i in identifiers), key=str.casefold)
+        )
+        expanded = (
+            "все" if identifiers is None else ", ".join(selected) if selected else "не выбраны"
+        )
+        brief = (
+            expanded if len(expanded) <= 100 and len(selected) <= 2 else f"выбрано: {len(selected)}"
+        )
+        compact.append(title + ": " + brief)
+        full.append(title + ": " + expanded)
+    return " · ".join(compact), "\n".join(full)
+
+
 class ReportPeriodDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        accounts: list[Account] | None = None,
+        categories: list[Category] | None = None,
+        institutions: list[Institution] | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Доходы и расходы · Период")
+        self.setWindowTitle("Доходы и расходы · Период и фильтры")
+        self.resize(680, 450)
+        self._accounts = tuple(accounts or [])
+        self._categories = tuple(categories or [])
+        self.result_scope: ReportScope | None = None
         self.result_period: ReportPeriod | None = None
         layout = QVBoxLayout(self)
         layout.addWidget(
-            _label("Все счета и категории за выбранный период. Валюты рассчитываются отдельно.")
+            _label("Выберите период, банк, счёт и категорию. Валюты рассчитываются отдельно.")
         )
         form = QFormLayout()
         today = date.today()
@@ -74,6 +115,39 @@ class ReportPeriodDialog(QDialog):
             editor.setAccessibleName(name)
         form.addRow("С", self.start)
         form.addRow("По включительно", self.end)
+        self.bank = QComboBox()
+        self.bank.addItem("Все банки и наличные", None)
+        for institution in sorted(institutions or [], key=lambda v: v.name.casefold()):
+            self.bank.addItem(institution.name, institution.id)
+        self.bank.setAccessibleName("Банк отчёта")
+        self.account = QComboBox()
+        self.account.setAccessibleName("Счёт отчёта")
+        self.category = QComboBox()
+        self.category.addItem("Все категории", None)
+        self.category.setAccessibleName("Категория отчёта")
+        category_list = list(self._categories)
+        for item in sorted(
+            category_list, key=lambda v: (v.kind, category_title(v, category_list).casefold())
+        ):
+            kind = "Доход" if item.kind == CategoryKind.INCOME else "Расход"
+            self.category.addItem(kind + " · " + category_title(item, category_list), item.id)
+        self.include_children = QCheckBox("Включать подкатегории")
+        self.include_children.setChecked(True)
+        self.include_children.setEnabled(False)
+        self.bank.currentIndexChanged.connect(self._fill_accounts)
+        self.category.currentIndexChanged.connect(
+            lambda: self.include_children.setEnabled(self.category.currentData() is not None)
+        )
+        self._fill_accounts()
+        for combo in (self.bank, self.account, self.category):
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            combo.setMinimumContentsLength(24)
+        form.addRow("Банк", self.bank)
+        form.addRow("Счёт", self.account)
+        form.addRow("Категория", self.category)
+        form.addRow("", self.include_children)
         layout.addLayout(form)
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
@@ -90,16 +164,57 @@ class ReportPeriodDialog(QDialog):
 
     def _accept(self) -> None:
         try:
+            self.result_scope = self._scope()
             self.result_period = ReportPeriod(
                 date(self.start.date().year(), self.start.date().month(), self.start.date().day()),
                 date(self.end.date().year(), self.end.date().month(), self.end.date().day()),
             )
         except ValidationError as error:
             self.result_period = None
+            self.result_scope = None
             self.feedback.setText(str(error))
             self.feedback.show()
             return
         self.accept()
+
+    def _fill_accounts(self) -> None:
+        self.account.clear()
+        self.account.addItem(
+            "Все счета выбранного банка" if self.bank.currentData() else "Все счета", None
+        )
+        for item in sorted(self._accounts, key=lambda v: v.name.casefold()):
+            if self.bank.currentData() is None or item.institution_id == self.bank.currentData():
+                self.account.addItem(item.name + " · " + item.currency, item.id)
+
+    def _scope(self) -> ReportScope:
+        bank, account, category = (
+            self.bank.currentData(),
+            self.account.currentData(),
+            self.category.currentData(),
+        )
+        account_ids = (
+            None
+            if bank is None and account is None
+            else frozenset(
+                item.id
+                for item in self._accounts
+                if (bank is None or item.institution_id == bank)
+                and (account is None or item.id == account)
+            )
+        )
+        category_ids = None
+        if category is not None:
+            selected = {category}
+            if self.include_children.isChecked():
+                while True:
+                    updated = selected | {
+                        item.id for item in self._categories if item.parent_id in selected
+                    }
+                    if updated == selected:
+                        break
+                    selected = updated
+            category_ids = frozenset(selected)
+        return ReportScope(account_ids, category_ids)
 
 
 class OperationSourceDialog(QDialog):
@@ -220,6 +335,11 @@ class IncomeExpenseDialog(QDialog):
                 "Разница = доходы − расходы."
             )
         )
+        brief, full = scope_captions(report, categories, accounts or [])
+        self.scope_context = _label(brief)
+        self.scope_context.setAccessibleName("Глобальные фильтры отчёта")
+        self.scope_context.setToolTip("<qt>" + escape(full).replace("\n", "<br>") + "</qt>")
+        layout.addWidget(self.scope_context)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
         self.summary_table = self._table(
@@ -258,7 +378,7 @@ class IncomeExpenseDialog(QDialog):
             self.source_currency.addItem(code, code)
         bar.addWidget(self.source_currency)
         bar.addStretch()
-        self.source_reset = QPushButton("Все операции периода")
+        self.source_reset = QPushButton("Все операции отчёта")
         self.source_reset.clicked.connect(self._clear_source_filter)
         bar.addWidget(self.source_reset)
         sources.addLayout(bar)
@@ -363,7 +483,7 @@ class IncomeExpenseDialog(QDialog):
             if self._source_category
             else f"{self._source_month:%m.%Y}"
             if self._source_month
-            else "Весь период"
+            else "Весь отбор отчёта"
         )
         self.source_context.setText(context + (" · " + code if code else " · Нет данных"))
         rows = []

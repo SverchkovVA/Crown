@@ -24,7 +24,7 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
     check_audited_ocr_link,
     check_ocr_workflow,
 )
-from personal_finance.domain.analytics import ReportPeriod
+from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -479,6 +479,36 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         report_dialog.reject()
                         report_dialog.deleteLater()
                         QCoreApplication.sendPostedEvents(report_dialog, QEvent.Type.DeferredDelete)
+                    filtered_report = Analytics(ledger, source.mutex, source.ensure_open).report(
+                        ReportPeriod(today, today),
+                        ReportScope(frozenset({account.id}), frozenset({expenses[1]})),
+                    )
+                    if (
+                        filtered_report.operation_count != 1
+                        or len(filtered_report.totals) != 1
+                        or filtered_report.totals[0].expense_minor != 2000
+                    ):
+                        raise RuntimeError("Глобальный фильтр отчёта потерял выбранную часть.")
+                    filtered_dialog = IncomeExpenseDialog(
+                        filtered_report,
+                        source.catalog.categories(),
+                        accounts=source.catalog.accounts(),
+                    )
+                    try:
+                        filtered_dialog._select_sources("RUB", expenses[1])
+                        filtered_dialog.source_reset.click()
+                        if (
+                            len(filtered_dialog._source_rows) != 1
+                            or filtered_dialog._source_rows[0].totals.expense_minor != 2000
+                            or filtered_dialog._source_rows[0].operation.draft.amount.minor != 3000
+                        ):
+                            raise RuntimeError("Сброс строки расширил глобальный отбор отчёта.")
+                    finally:
+                        filtered_dialog.reject()
+                        filtered_dialog.deleteLater()
+                        QCoreApplication.sendPostedEvents(
+                            filtered_dialog, QEvent.Type.DeferredDelete
+                        )
                     if (
                         ledger.operations(include_deleted=True) != before_report
                         or _balances(source) != expected_balances

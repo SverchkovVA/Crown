@@ -52,7 +52,7 @@ from personal_finance.application.ocr_cards import (
 )
 from personal_finance.application.ocr_review import OcrReviewDefaults
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
-from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod
+from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
@@ -330,16 +330,25 @@ class MainWindow(QMainWindow):
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
-        dialog = ReportPeriodDialog(self)
+        with session.mutex:
+            session.ensure_open()
+            accounts = session.catalog.accounts()
+            categories = session.catalog.categories()
+            institutions = session.catalog.institutions()
+        dialog = ReportPeriodDialog(
+            self, accounts=accounts, categories=categories, institutions=institutions
+        )
         try:
             if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_period is None:
                 return
             period = dialog.result_period
+            scope = dialog.result_scope
         finally:
             dialog.deleteLater()
-        self.build_analytics(period)
+        if self.session is session:
+            self.build_analytics(period, scope)
 
-    def build_analytics(self, period: ReportPeriod) -> None:
+    def build_analytics(self, period: ReportPeriod, scope: ReportScope | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -348,7 +357,7 @@ class MainWindow(QMainWindow):
         def build() -> tuple[IncomeExpenseReport, list[Category], list[Account]]:
             with session.mutex:
                 return (
-                    analytics.report(period),
+                    analytics.report(period, scope),
                     session.catalog.categories(),
                     session.catalog.accounts(),
                 )

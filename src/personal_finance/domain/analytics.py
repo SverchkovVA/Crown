@@ -1,7 +1,7 @@
 """Доходы и расходы по принятым проводкам; без записи, пересчёта валют и float."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from personal_finance.domain.errors import ValidationError
@@ -17,6 +17,21 @@ class ReportPeriod:
     def __post_init__(self) -> None:
         if type(self.start) is not date or type(self.end) is not date or self.start > self.end:
             raise ValidationError("Укажите даты отчёта: начало не позже окончания.")
+
+
+@dataclass(frozen=True, slots=True)
+class ReportScope:
+    account_ids: frozenset[str] | None = None
+    category_ids: frozenset[str] | None = None
+
+    def __post_init__(self) -> None:
+        for identifiers in (self.account_ids, self.category_ids):
+            if identifiers is None:
+                continue
+            if type(identifiers) is not frozenset:
+                raise ValidationError("Фильтры отчёта должны быть неизменяемыми наборами.")
+            for identifier in identifiers:
+                require_identifier(identifier)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +64,7 @@ class IncomeExpenseReport:
     categories: tuple[CategoryFlow, ...]
     months: tuple[MonthlyFlow, ...]
     sources: tuple[Operation, ...]
+    scope: ReportScope = field(default_factory=ReportScope)
 
     @property
     def operation_references(self) -> tuple[tuple[str, str], ...]:
@@ -60,10 +76,14 @@ class IncomeExpenseReport:
 
 
 def income_expense_report(
-    operations: Sequence[Operation], period: ReportPeriod
+    operations: Sequence[Operation], period: ReportPeriod, scope: ReportScope | None = None
 ) -> IncomeExpenseReport:
     if not isinstance(period, ReportPeriod):
         raise ValidationError("Укажите период отчёта.")
+    if scope is None:
+        scope = ReportScope()
+    if not isinstance(scope, ReportScope):
+        raise ValidationError("Укажите фильтры отчёта.")
     totals: dict[Currency, list[int]] = {}
     categories: dict[tuple[str, Currency], list[int]] = {}
     months: dict[tuple[date, Currency], list[int]] = {}
@@ -81,8 +101,13 @@ def income_expense_report(
         value = operation.draft
         if operation.is_deleted or not period.start <= value.occurred_on <= period.end:
             continue
+        if scope.account_ids is not None and value.account_id not in scope.account_ids:
+            continue
         postings = tuple(
-            p for p in value.postings() if p.role in (LedgerRole.INCOME, LedgerRole.EXPENSE)
+            p
+            for p in value.postings()
+            if p.role in (LedgerRole.INCOME, LedgerRole.EXPENSE)
+            and (scope.category_ids is None or p.reference_id in scope.category_ids)
         )
         if not postings:
             continue
@@ -120,6 +145,7 @@ def income_expense_report(
             )
         ),
         tuple(sorted(sources, key=lambda value: value.id)),
+        scope,
     )
 
 
@@ -154,6 +180,11 @@ def report_sources(
         matched = False
         for posting in value.postings():
             if posting.role not in (LedgerRole.INCOME, LedgerRole.EXPENSE):
+                continue
+            if (
+                report.scope.category_ids is not None
+                and posting.reference_id not in report.scope.category_ids
+            ):
                 continue
             if category_id is not None and posting.reference_id != category_id:
                 continue
