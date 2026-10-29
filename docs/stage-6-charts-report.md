@@ -61,7 +61,19 @@ source_sha256: 34ad2e2266641fce479d69e6f8ceaa1b365ffa870a1d14253a89401d9c468042.
 - analytics-charts-native-c63b48671e074146b3db865c7a6f37b8/report.json — 1,50;
 - analytics-charts-native-1349d1810a74469282d2ea5ed8e22aaf/report.json — 3,00.
 
-Полный локальный Windows-прогон и CI окончательного 94b2b3e пока выполняются.
+Первый полный Windows-прогон на 94b2b3e завершился: 1134 passed, 1 failed,
+938,82 с. В старом синтетическом шаблоне test_ocr_fingerprint не создавался новый
+обязательный THIRD_PARTY_NOTICES.md. Шаблон исправлен без ослабления проверки;
+три теста происхождения сборки прошли за 0,47 с. Финансовый код не менялся.
+
+Повторный полный локальный прогон на 5d22cb47a9aaa7472ae39246433aee4f1526b02c:
+artifacts/windows-check-20261029-064525-d8125a9af7ac46d9bc2b58a48fbd7294/report.json.
+[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40813910667),
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40813914674).
+Они пока выполняются. Текущий source_sha256 после правки тестового шаблона:
+75bb403172b3eec752365a352dcbd3aecef9a5a025319a4974ffb842b742ef28.
+Нативные свидетельства выше относятся к неизменённому интерфейсу перед этой
+поправкой теста, их исходный отпечаток 34ad… сохранён без изменения JSON.
 Сборка и новый шаг EXE считаются подтверждёнными только после их завершения.
 Вымышленный пример: artifacts/manual-stage6-dev16/start.cmd. Каждая попытка
 создаёт новую книгу; секреты пользователя не требуются. Запускаются текущие
