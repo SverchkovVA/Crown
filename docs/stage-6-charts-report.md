@@ -70,20 +70,48 @@ source_sha256: 34ad2e2266641fce479d69e6f8ceaa1b365ffa870a1d14253a89401d9c468042.
 artifacts/windows-check-20261029-064525-d8125a9af7ac46d9bc2b58a48fbd7294/report.json.
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40813910667),
 [PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40813914674).
-Они пока выполняются. Текущий source_sha256 после правки тестового шаблона:
+Повторный локальный Windows 11 x64 / PowerShell 5.1 прошёл: 1135 passed,
+JUnit 913,068 с, без ошибок/провалов/пропусков. Сборка и обе самопроверки по 22 шага
+прошли; версия, JUnit, JSON и отпечаток сверены отдельно. verified-summary.json
+лежит в указанном каталоге прогона. EXE SHA-256:
+677da4894d839da67149dece840cd5f37edb3a6780d5a9eb53adcee588f56d2d.
+Дополнительный EXE-запуск с пустым cwd/PATH System32 прошёл 22 шага:
+artifacts/dev16-without-python-path-64a46c69f8d34decb95eb21ad6912df9/verified-summary.json.
+Все 37 лицензионных файлов 12 пакетов внутри _internal/legal сверены по manifest:
+licenses-verified.json. Изоляция PATH не заменяет чистую Windows или сетевую автономность.
+
+Оба CI завершены успешно:
+
+| Прогон | Linux | Windows / PowerShell 5.1 |
+|---|---|---|
+| Push 40813910667 | 1135 passed, 1622,24 с | 1135 passed, JUnit 1207,455 с |
+| PR 40813914674 | 1135 passed, 1181,69 с | 1135 passed, JUnit 1520,099 с |
+
+Технические архивы скачаны, digest SHA-256 сверены с GitHub; версия,
+source_sha256, JUnit без ошибок/провалов/пропусков, сборка и по 22 успешному
+шагу source/EXE проверены. Сводки:
+artifacts/ci-dev16-push-1793251690682/verified-summary.json;
+artifacts/ci-dev16-pr-1793251690682/verified-summary.json.
+Готовые каталоги без OCR-runtime/меню:
+[Push artifact](https://github.com/SverchkovVA/Crown/actions/runs/40813910667/artifacts/12872660805),
+[PR artifact](https://github.com/SverchkovVA/Crown/actions/runs/40813914674/artifacts/12871834460).
+Нужно сохранять весь каталог с _internal; хранение 14 дней.
+
+Текущий source_sha256 проверенной dev16 после правки тестового шаблона:
 75bb403172b3eec752365a352dcbd3aecef9a5a025319a4974ffb842b742ef28.
 Нативные свидетельства выше относятся к неизменённому интерфейсу перед этой
 поправкой теста, их исходный отпечаток 34ad… сохранён без изменения JSON.
-Сборка и новый шаг EXE считаются подтверждёнными только после их завершения.
+
 Вымышленный пример: artifacts/manual-stage6-dev16/start.cmd. Каждая попытка
 создаёт новую книгу; секреты пользователя не требуются. Запускаются текущие
 исходники/.venv, это не переносимый EXE и не закрепление старой версии.
 
 ## Ограничения и решение пользователя
 
-Универсальный OCR остаётся предпросмотром без записи, схема 0012 не активна.
-[Подготовленный проект](generic-ocr-storage-proposal.md) ждёт конкретного согласования
-после отказа автоматической проверки разрешений. Старые книги не мигрируются
+В проверенной dev16 универсальный OCR — предпросмотр, схема 0011. Позднее
+29.10.2026 пользователь разрешил подключение 0012 после обязательных проверок.
+Переход ведётся в [dev17](stage-5-generic-storage-report.md) по
+[согласованному проекту](generic-ocr-storage-proposal.md). Старые книги не мигрируются
 при открытии, восстановление только в новую папку. Пользовательские книги не читались.
 Ручная приёмка этапов 3–5, автономность сети и чистая Windows без Python впереди.
 
