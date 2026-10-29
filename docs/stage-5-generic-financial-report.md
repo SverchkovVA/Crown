@@ -29,6 +29,9 @@ Ledger/OcrImporting только для схемы 0012. Карточка име
   (отпечаток до исправления только опечатки теста).
 - Нативный DPR 1,25: artifacts/generic-financial-native-f00d77381b504d30b7e0910122b6e81a/report.json;
   текущий отпечаток be9f1454ed163f56696de07f734b18f616478724e618c567f1b8ebe682b21bcb.
+- Нативный DPR 1: artifacts/generic-financial-native-f4415b5789eb4e03999b2f1fb3210301/report.json.
+- Нативный DPR 1,5: artifacts/generic-financial-native-b46e9656ca904cc1a6deb4bc4da1afa4/report.json.
+  Во всех случаях три записи, повтор без новых денег, целостность и повторное открытие.
   Снимки содержат только вымышленные данные. Это не полная ручная приёмка масштабов.
 
 Тестовые лимиты увеличены по измерению dev17: Linux 1742,25 с почти исчерпал
@@ -37,8 +40,17 @@ Ledger/OcrImporting только для схемы 0012. Карточка име
 
 ## Полный прогон
 
-Полные Windows 11 / PowerShell 5.1, сборка, source/EXE и Linux/Windows CI ещё
-не подтверждены для dev18. Пользовательские книги и снимки не открывались.
+Локальные Windows 11 / PowerShell 5.1: 1160 passed, JUnit 1000,906 с, без
+ошибок/пропусков; Ruff/формат/Mypy, сборка и source/EXE по 23 шага прошли.
+Отчёты отдельно сверены по версии, отпечатку и JUnit; все 37 лицензий 12 пакетов
+в самом каталоге EXE совпали с закреплёнными SHA-256. EXE SHA-256:
+dbfe0c8bbd3e58dfcaa6a021d637809cfa0d4dcba8615a9a98c5a0866f77545c.
+Linux/Windows CI ещё выполняются для закреплённого кода dev18.
+Пользовательские книги и снимки не открывались.
+Код: 2dcbf51a8346b69fdf5bd03442b8ae0aefda3796; отпечаток be9f1454... выше.
+Локальный отчёт: artifacts/windows-check-20261029-093148-f8604dc6b16a407faf2bc8f42962ea5c/report.json.
+[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40829750493),
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40829755964).
 Результаты будут дополнены после фактического завершения.
 
 ## Приёмка и ограничения
