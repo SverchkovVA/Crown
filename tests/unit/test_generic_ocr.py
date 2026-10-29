@@ -392,7 +392,7 @@ def test_card_exact_russian_currency_forms(currency):
         card.occurred_on.value,
         card.local_time.value,
     ) == (47315, "RUB", CashDirection.OUT, date(2026, 10, 22), time(9, 18))
-    assert card.adapter == "generic-card-v2"
+    assert card.adapter == "generic-card-v3"
     assert card.currency.word_indices and card.amount.word_indices
     assert any(currency in card.document.words[i].text for i in card.currency.word_indices)
 
@@ -433,7 +433,7 @@ def test_history_currency_forms_and_date_header(currency):
     assert all(
         c.currency.value == "RUB"
         and c.occurred_on.value == date(2026, 10, 22)
-        and c.adapter == "generic-history-v2"
+        and c.adapter == "generic-history-v3"
         for c in value.cards
     )
 
@@ -464,3 +464,98 @@ def test_metadata_does_not_replace_primary_amount(line):
         document(("Детали операции", "Списано: 12,50 рубля", "22.10.2026", line))
     )
     assert card.amount.value == 1250 and not card.blocked_reason
+
+
+@pytest.mark.parametrize(
+    "amount,minor,currency",
+    [
+        ("−473 , 15", 47315, None),
+        ("−473, 15", 47315, None),
+        ("−473 ,15", 47315, None),
+        ("−1 234 , 50", 123450, None),
+        ("−1\u00a0234,50 RUB", 123450, "RUB"),
+        ("−1\u202f234,50 RUB", 123450, "RUB"),
+        ("+1\u202f234 , 5 рублей", 123450, "RUB"),
+        ("Списано: 473 , 15 RUB", 47315, "RUB"),
+        ("Сумма: 473 . 15", 47315, None),
+        ("−473 . 15 ₽", 47315, "RUB"),
+    ],
+)
+def test_exact_ocr_whitespace_keeps_fraction_and_original_words(amount, minor, currency):
+    card = GenericCardAdapter().parse(document(("Детали операции", amount, "22.10.2026 09:18")))
+    assert (
+        not card.blocked_reason and card.amount.value == minor and card.currency.value == currency
+    )
+    assert card.occurred_on.value == date(2026, 10, 22) and card.amount.word_indices
+    assert any(amount in card.document.words[i].text for i in card.amount.word_indices)
+    if currency is None:
+        assert suggest_corrections(card, OcrReviewDefaults()).currency == "RUB"
+
+
+@pytest.mark.parametrize(
+    "amount",
+    [
+        "−473 , 150",
+        "−473 , 150 RUB",
+        "−473 , 1 5",
+        "−473 , 1 5 RUB",
+        "−1 23 ,45 RUB",
+        "−473 ,",
+        "−473 . O5",
+        "−473 , 15 20 RUB",
+        "−473,150",
+        "Списано: 473 , 150 RUB",
+        "−1\u202f23 ,45 RUB",
+        "−473 . 150 рублей",
+    ],
+)
+def test_invalid_fraction_never_degrades_to_integer_or_suffix(amount):
+    card = GenericCardAdapter().parse(document(("Детали операции", amount, "22.10.2026")))
+    assert card.amount.value is None and card.blocked_reason
+
+
+@pytest.mark.parametrize("currency", ["", " RUB", " рублей"])
+def test_history_keeps_exact_fraction_and_header_date(currency):
+    value = GenericHistoryAdapter().parse(
+        layout(
+            [
+                ("История", 40, 20),
+                ("22 октября 2026", 40, 80),
+                ("Вымышленный пример", 40, 160),
+                ("−473 , 15" + currency, 650, 160),
+            ]
+        )
+    )
+    assert not value.blocked_reason and len(value.cards) == 1
+    card = value.cards[0]
+    assert (
+        card.amount.value == 47315
+        and card.direction.value == CashDirection.OUT
+        and card.occurred_on.value == date(2026, 10, 22)
+    )
+    assert " ".join(card.document.words[i].text for i in card.amount.word_indices).startswith(
+        "−473 , 15"
+    )
+
+
+@pytest.mark.parametrize("text", ["−473 , 150", "−473 , 150 RUB"])
+def test_history_does_not_offer_truncated_fraction(text):
+    value = GenericHistoryAdapter().parse(
+        layout(
+            [
+                ("История", 40, 20),
+                ("22 октября 2026", 40, 80),
+                ("Вымышленный пример", 40, 160),
+                (text, 650, 160),
+            ]
+        )
+    )
+    assert not value.cards
+
+
+@pytest.mark.parametrize("currency", ["USD", "EUR"])
+def test_spaced_fraction_never_turns_known_foreign_currency_into_default(currency):
+    card = GenericCardAdapter().parse(
+        document(("Детали операции", "Списано: −473 , 15 " + currency, "22.10.2026"))
+    )
+    assert card.amount.value == 47315 and card.currency.value == currency and card.blocked_reason

@@ -16,7 +16,11 @@ from personal_finance.domain.ocr_cards import (
 from personal_finance.infrastructure.ocr.generic_dates import date_spans, parse_date
 from personal_finance.infrastructure.ocr.rub_fields import parse_rub_fields
 
-_NUMBER = r"(?:[0-9]{1,3}(?:[ \u00a0\u202f][0-9]{3})+|[0-9]+)(?:[,.][0-9]{1,2})?"
+_SPACE = r"[ \u00a0\u202f]"
+_NUMBER = (
+    rf"(?:[0-9]{{1,3}}(?:{_SPACE}[0-9]{{3}})+|[0-9]+)"
+    rf"(?:{_SPACE}*[,.]{_SPACE}*[0-9]{{1,2}})?"
+)
 _RUSSIAN_RUBLE = r"руб(?:лей|ля|ль|\.?)"
 _CURRENCY = rf"(?:RUB|USD|EUR|CNY|KZT|BYN|GBP|CHF|JPY|₽|{_RUSSIAN_RUBLE}|[РP$€£¥])"
 _AMOUNT = re.compile(
@@ -128,7 +132,7 @@ def _money(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...], 
         prefix = row.text[: match.start()]
         suffix = row.text[match.end() :]
         signed = bool(re.match(r"[+\-−—–]", match["money"].lstrip()))
-        if not signed and re.search(r"(?:[0-9][0-9.,]*|[+\-−—–])\s*$", prefix):
+        if not signed and re.search(r"(?:[0-9][0-9., \u00a0\u202f]*|[+\-−—–])\s*$", prefix):
             try:
                 dated = parse_date(prefix)
             except ValueError:
@@ -142,6 +146,11 @@ def _money(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...], 
                 dated = None
             if dated is None:
                 continue
+        if not re.search(_CURRENCY + r"$", match["money"], re.I) and re.match(
+            rf"{_SPACE}*[,.]", suffix
+        ):
+            # Нельзя принять целую часть, если дробная часть не прошла грамматику.
+            continue
         refs = row.words(document, match.start(), match.end())
         if refs:
             values.append((match["money"], refs, match.start(), match.end()))
@@ -219,7 +228,8 @@ def _draft(
     low = (OcrIssue.LOW_CONFIDENCE,) if any(document.words[i].confidence < 80 for i in refs) else ()
     if match is not None:
         try:
-            minor = Money.parse(match["number"]).minor
+            number = match["number"].replace("\u00a0", " ").replace("\u202f", " ")
+            minor = Money.parse(number).minor
             if minor <= 0:
                 raise ValidationError("Нулевая сумма")
             amount_field = OcrField(minor, refs, low)
@@ -392,7 +402,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v2") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v3") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -436,14 +446,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v2",
+                "generic-card-v3",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return result
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v2")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v3")
         return replace(empty, blocked_reason=blocked)
 
 
@@ -566,7 +576,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v2",
+                "generic-history-v3",
                 blocked,
             )
             if index + 1 < len(rows):

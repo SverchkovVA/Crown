@@ -1,5 +1,6 @@
 """Проверка упаковки Qt/парсеров без OCR-движка и без финансовой книги."""
 
+from dataclasses import replace
 from decimal import Decimal
 
 from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice
@@ -72,7 +73,21 @@ def check_packaged_ocr_preview() -> None:
             ),
         )
         vtb_history = VtbHistoryAdapter().parse(vtb_history_document)
-        generic = GenericHistoryAdapter().parse(vtb_history_document)
+        generic_document = replace(
+            vtb_history_document,
+            words=(
+                *vtb_history_document.words[:-1],
+                replace(vtb_history_document.words[-1], text="−473 , 15"),
+            ),
+        )
+        generic = GenericHistoryAdapter().parse(generic_document)
+        if (
+            generic.blocked_reason
+            or len(generic.cards) != 1
+            or generic.cards[0].amount.value != 47315
+            or generic.cards[0].currency.value is not None
+        ):
+            raise RuntimeError("Неверный разбор дробной суммы общего профиля.")
         generic_dialog = OcrBatchDialog(
             OcrHistoryPreview(loaded, generic, UNIVERSAL_PROFILE),
             None,
@@ -84,6 +99,7 @@ def check_packaged_ocr_preview() -> None:
             generic_dialog.prepare()
             if (
                 len(generic_dialog.reviewed_cards) != 1
+                or generic_dialog.reviewed_cards[0].amount.minor != 47315
                 or generic_dialog.saved_count != 0
                 or generic_dialog._job is not None
             ):
@@ -135,7 +151,8 @@ def check_local_ocr_runtime(recognitions: tuple[CardRecognition, ...]) -> None:
     for y, caption in (
         (80, "Детали операции"),
         (180, "Покупка"),
-        (290, "Списано: 473,15 руб."),
+        (290, "Списано: −473    ,    15"),
+        (350, "Валюта: руб."),
         (400, "Дата операции: 22.10.2026 09:18"),
         (510, "Получатель: Вымышленный магазин"),
     ):
