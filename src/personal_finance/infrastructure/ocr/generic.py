@@ -117,13 +117,48 @@ def visual_rows(document: OcrDocument) -> list[Row]:
     return sorted(result, key=lambda row: row.top)
 
 
+def _bounded_date_spans(text: str) -> list[tuple[int, int, str]]:
+    found = date_spans(text)
+    if len(found) >= 2:
+        return found[:2]
+    if found:
+        # Две соседние даты должны дать неоднозначность, а не только последнюю.
+        earlier = date_spans(text[: found[0][0]])
+        if earlier:
+            return [earlier[-1], found[0]]
+    return found
+
+
+def _ends_in_date(prefix: str) -> bool:
+    prefix = prefix.rstrip()
+    spans = date_spans(prefix)
+    candidates = [prefix]
+    if spans and spans[-1][1] == len(prefix):
+        candidates.append(spans[-1][2])
+    for text in candidates:
+        try:
+            if parse_date(text) is not None:
+                return True
+        except ValueError:
+            pass
+    return False
+
+
 def _dates(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...]]]:
     monies = _money(document, row)
-    return [
-        (text, row.words(document, start, end))
-        for start, end, text in date_spans(row.text)
-        if not any(start < money[3] and end > money[2] for money in monies)
-    ]
+    gaps = []
+    cursor = 0
+    for _, _, start, end in monies:
+        gaps.append((cursor, start))
+        cursor = end
+    gaps.append((cursor, len(row.text)))
+    values = []
+    for start, end in gaps:
+        for left, right, text in _bounded_date_spans(row.text[start:end]):
+            values.append((text, row.words(document, start + left, start + right)))
+            if len(values) == 2:
+                return values
+    return values
 
 
 def _money(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...], int, int]]:
@@ -132,13 +167,12 @@ def _money(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...], 
         prefix = row.text[: match.start()]
         suffix = row.text[match.end() :]
         signed = bool(re.match(r"[+\-−—–]", match["money"].lstrip()))
-        if not signed and re.search(r"(?:[0-9][0-9., \u00a0\u202f]*|[+\-−—–])\s*$", prefix):
-            try:
-                dated = parse_date(prefix)
-            except ValueError:
-                dated = None
-            if dated is None:
-                continue
+        if (
+            not signed
+            and re.search(r"(?:[0-9][0-9., \u00a0\u202f]*|[+\-−—–])\s*$", prefix)
+            and not _ends_in_date(prefix)
+        ):
+            continue
         if re.match(r"\s+[0-9]", suffix) and not re.search(_CURRENCY + r"$", match["money"], re.I):
             try:
                 dated = parse_date(suffix)
@@ -402,7 +436,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v3") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v4") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -446,14 +480,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v3",
+                "generic-card-v4",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return result
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v3")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v4")
         return replace(empty, blocked_reason=blocked)
 
 
@@ -576,7 +610,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v3",
+                "generic-history-v4",
                 blocked,
             )
             if index + 1 < len(rows):

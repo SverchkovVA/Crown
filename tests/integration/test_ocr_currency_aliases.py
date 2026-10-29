@@ -10,7 +10,13 @@ from sqlalchemy import text
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
-from personal_finance.domain.ocr_cards import CardCorrections, CashDirection, OcrField, review_card
+from personal_finance.domain.ocr_cards import (
+    CardCorrections,
+    CashDirection,
+    OcrField,
+    OcrIssue,
+    review_card,
+)
 from personal_finance.domain.ocr_imports import (
     OcrEvidence,
     OcrImportStatus,
@@ -21,6 +27,7 @@ from personal_finance.domain.ocr_imports import (
 from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.infrastructure.ocr.generic import GenericCardAdapter
 from tests.ocr_fixtures import document
+from tests.unit.test_generic_ocr import layout
 
 
 def _selection(session, currency="рублей"):
@@ -55,7 +62,7 @@ def _selection(session, currency="рублей"):
 def test_literal_currency_is_audited_and_repeat_never_adds_movement(session):
     value = _selection(session)
     data = json.loads(value.evidence.payload)
-    assert data["adapter"] == "generic-card-v3" and data["fields"]["currency"]["value"] == "RUB"
+    assert data["adapter"] == "generic-card-v4" and data["fields"]["currency"]["value"] == "RUB"
     assert any("рублей" in w["text"] for w in data["words"])
     assert OcrEvidence(value.evidence.payload) == value.evidence
     session.ocr_importing.confirm(value)
@@ -151,5 +158,72 @@ def test_old_truncated_amount_is_never_rewritten_by_reanalysis(session):
         and len(session.ledger.operations()) == 1
         and session.ledger.operations()[0].draft.amount.minor == 47300
     )
+    assert session.ocr_importing.preview(old).status == OcrImportStatus.DUPLICATE
+    session.check_integrity()
+
+
+def _inline_selection(session):
+    value = _selection(session)
+    raw = GenericCardAdapter().parse(
+        layout(
+            [("Детали операции", 40, 20), ("22.10.2026 473,15 RUB Вымышленный магазин", 40, 120)]
+        )
+    )
+    assert (
+        raw.amount.value == 47315
+        and raw.occurred_on.value == date(2026, 10, 22)
+        and not raw.blocked_reason
+    )
+    corrections = CardCorrections("473,15", "RUB", CashDirection.OUT, "22.10.2026")
+    reviewed = review_card(
+        raw,
+        corrections,
+        confirmed_fields=frozenset({"amount", "currency", "direction", "occurred_on"}),
+        single_completed_operation=True,
+    )
+    return (
+        replace(value, evidence=make_ocr_evidence("a" * 64, UNIVERSAL_PROFILE, reviewed)),
+        raw,
+        corrections,
+    )
+
+
+def test_inline_date_is_preserved_in_raw_audit_and_financial_draft(session):
+    value, raw, corrections = _inline_selection(session)
+    data = value.evidence.data
+    assert data["fields"]["occurred_on"]["value"] == data["reviewed"]["occurred_on"] == "2026-10-22"
+    assert not set(data["fields"]["occurred_on"]["words"]) & set(data["fields"]["amount"]["words"])
+    session.ocr_importing.confirm(value)
+    operations = session.ledger.operations()
+    assert (
+        len(operations) == 1
+        and operations[0].draft.occurred_on == date(2026, 10, 22)
+        and operations[0].draft.amount.minor == 47315
+    )
+    assert session.ocr_importing.preview(value).status == OcrImportStatus.DUPLICATE
+    session.check_integrity()
+
+
+def test_new_inline_date_never_rewrites_old_manual_confirmation(session):
+    value, raw, corrections = _inline_selection(session)
+    old_raw = replace(
+        raw, adapter="generic-card-v3", occurred_on=OcrField(None, issues=(OcrIssue.MISSING,))
+    )
+    reviewed = review_card(
+        old_raw,
+        corrections,
+        confirmed_fields=frozenset({"amount", "currency", "direction", "occurred_on"}),
+        single_completed_operation=True,
+    )
+    old = replace(value, evidence=make_ocr_evidence("a" * 64, UNIVERSAL_PROFILE, reviewed))
+    session.ocr_importing.confirm(old)
+    with session.engine.connect() as connection:
+        before = tuple(connection.execute(text("SELECT * FROM ocr_records")).fetchall())
+    assert session.ocr_importing.preview(value).status == OcrImportStatus.CONFLICT
+    with pytest.raises(ValidationError):
+        session.ocr_importing.confirm(value)
+    with session.engine.connect() as connection:
+        after = tuple(connection.execute(text("SELECT * FROM ocr_records")).fetchall())
+    assert before == after and len(session.ledger.operations()) == 1
     assert session.ocr_importing.preview(old).status == OcrImportStatus.DUPLICATE
     session.check_integrity()

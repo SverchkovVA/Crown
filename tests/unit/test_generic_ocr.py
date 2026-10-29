@@ -392,7 +392,7 @@ def test_card_exact_russian_currency_forms(currency):
         card.occurred_on.value,
         card.local_time.value,
     ) == (47315, "RUB", CashDirection.OUT, date(2026, 10, 22), time(9, 18))
-    assert card.adapter == "generic-card-v3"
+    assert card.adapter == "generic-card-v4"
     assert card.currency.word_indices and card.amount.word_indices
     assert any(currency in card.document.words[i].text for i in card.currency.word_indices)
 
@@ -433,7 +433,7 @@ def test_history_currency_forms_and_date_header(currency):
     assert all(
         c.currency.value == "RUB"
         and c.occurred_on.value == date(2026, 10, 22)
-        and c.adapter == "generic-history-v3"
+        and c.adapter == "generic-history-v4"
         for c in value.cards
     )
 
@@ -559,3 +559,112 @@ def test_spaced_fraction_never_turns_known_foreign_currency_into_default(currenc
         document(("Детали операции", "Списано: −473 , 15 " + currency, "22.10.2026"))
     )
     assert card.amount.value == 47315 and card.currency.value == currency and card.blocked_reason
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "22.10.2026 473,15 RUB Вымышленный магазин",
+        "Вымышленный магазин 22.10.2026 473,15 RUB",
+        "Дата операции: 22.10.2026 473,15 рублей",
+        "22 октября 2026 473,15 RUB Магазин",
+        "22/10/2026 473,15 RUB Магазин",
+        "2026-10-22 473,15 RUB Магазин",
+    ],
+)
+def test_card_recognizes_date_directly_before_unsigned_money(line):
+    card = GenericCardAdapter().parse(layout([("Детали операции", 40, 20), (line, 40, 120)]))
+    assert not card.blocked_reason and card.amount.value == 47315 and card.currency.value == "RUB"
+    assert card.occurred_on.value == date(2026, 10, 22) and card.occurred_on.word_indices
+    assert not set(card.amount.word_indices) & set(card.occurred_on.word_indices)
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["24 октября 473,15 RUB Магазин", "Магазин 24 октября 473,15 RUB", "24.10 473,15 RUB Магазин"],
+)
+def test_missing_year_stays_raw_unknown_and_uses_explicit_setting(line):
+    card = GenericCardAdapter().parse(layout([("Детали операции", 40, 20), (line, 40, 120)]))
+    assert not card.blocked_reason and card.amount.value == 47315 and card.occurred_on.value is None
+    assert (
+        suggest_corrections(card, OcrReviewDefaults(reference_year=2026)).occurred_on
+        == "24.10.2026"
+    )
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "22.10 2025",
+        "Магазин 22.10 2025",
+        "22.10.2026 1234",
+        "Номер 1234",
+        "Магазин 1234",
+        "31.02.2026",
+        "Магазин 32.10.2026",
+        "22.10.20",
+        "22.10.20261",
+        "12,50",
+        "12.50",
+    ],
+)
+def test_numeric_prefix_is_not_silently_promoted_to_valid_date(prefix):
+    card = GenericCardAdapter().parse(
+        layout([("Детали операции", 40, 20), (prefix + " 473,15 RUB", 40, 120)])
+    )
+    assert card.amount.value is None and card.blocked_reason
+
+
+@pytest.mark.parametrize("prefix", ["22.10.2026 23.10.2026", "21.10.2026 22.10.2026 23.10.2026"])
+def test_adjacent_dates_remain_ambiguous(prefix):
+    card = GenericCardAdapter().parse(
+        layout([("Детали операции", 40, 20), (prefix + " 473,15 RUB Магазин", 40, 120)])
+    )
+    assert (
+        card.amount.value == 47315
+        and card.occurred_on.value is None
+        and OcrIssue.AMBIGUOUS in card.occurred_on.issues
+    )
+
+
+def test_history_keeps_each_inline_date_without_inheriting_previous_one():
+    history = GenericHistoryAdapter().parse(
+        layout(
+            [
+                ("История", 40, 20),
+                ("Магазин 22.10.2026 473,15 RUB", 40, 120),
+                ("Другой пример 23.10.2026 +12,50 RUB", 40, 220),
+            ]
+        )
+    )
+    assert not history.blocked_reason and len(history.cards) == 2
+    assert [c.amount.value for c in history.cards] == [47315, 1250]
+    assert [c.occurred_on.value for c in history.cards] == [date(2026, 10, 22), date(2026, 10, 23)]
+
+
+def test_day_summary_is_not_a_movement_and_supplies_header_date():
+    history = GenericHistoryAdapter().parse(
+        layout(
+            [("История", 40, 20), ("22 октября 473,15 Р", 40, 80), ("Магазин −12,50 RUB", 40, 160)]
+        )
+    )
+    assert (
+        not history.blocked_reason
+        and len(history.cards) == 1
+        and history.cards[0].amount.value == 1250
+    )
+    assert (
+        suggest_corrections(history.cards[0], OcrReviewDefaults(reference_year=2026)).occurred_on
+        == "22.10.2026"
+    )
+
+
+def test_valid_thousands_after_date_remain_one_exact_amount():
+    card = GenericCardAdapter().parse(
+        layout([("Детали операции", 40, 20), ("22.10.2026 123 473,15 RUB Магазин", 40, 120)])
+    )
+    assert (
+        not card.blocked_reason
+        and card.amount.value == 12347315
+        and card.occurred_on.value == date(2026, 10, 22)
+    )

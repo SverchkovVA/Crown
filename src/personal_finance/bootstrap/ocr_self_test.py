@@ -1,6 +1,7 @@
 """Проверка упаковки Qt/парсеров без OCR-движка и без финансовой книги."""
 
 from dataclasses import replace
+from datetime import date
 from decimal import Decimal
 
 from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice
@@ -88,6 +89,23 @@ def check_packaged_ocr_preview() -> None:
             or generic.cards[0].currency.value is not None
         ):
             raise RuntimeError("Неверный разбор дробной суммы общего профиля.")
+        inline_document = replace(
+            generic_document,
+            words=(
+                *generic_document.words[:2],
+                OcrWord("Магазин", OcrBox(10, 60, 80, 20), Decimal(95), (1, 1, 3), 1),
+                OcrWord("22.10.2026", OcrBox(105, 60, 95, 20), Decimal(95), (1, 1, 3), 2),
+                OcrWord("473,15 RUB", OcrBox(210, 60, 100, 20), Decimal(95), (1, 1, 3), 3),
+            ),
+        )
+        inline_history = GenericHistoryAdapter().parse(inline_document)
+        if (
+            inline_history.blocked_reason
+            or len(inline_history.cards) != 1
+            or inline_history.cards[0].amount.value != 47315
+            or inline_history.cards[0].occurred_on.value != date(2026, 10, 22)
+        ):
+            raise RuntimeError("Дата рядом с суммой общего профиля не выделена.")
         generic_dialog = OcrBatchDialog(
             OcrHistoryPreview(loaded, generic, UNIVERSAL_PROFILE),
             None,
@@ -136,7 +154,7 @@ def check_packaged_ocr_preview() -> None:
 def check_local_ocr_runtime(recognitions: tuple[CardRecognition, ...]) -> None:
     """Настоящий движок получает только PNG с вымышленными значениями."""
     import tempfile
-    from datetime import date, time
+    from datetime import time
     from pathlib import Path
 
     from matplotlib import get_data_path
