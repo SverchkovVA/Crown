@@ -4,8 +4,9 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev21
-с OCR-модулем в EXE — docs/stage-5-frozen-ocr-report.md.
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev22
+с уточнением валюты OCR — docs/stage-5-currency-report.md; доставка модуля:
+docs/stage-5-frozen-ocr-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
 импорты. Используется каталог приложения, без onefile, UPX и Qt WebEngine.
@@ -112,3 +113,10 @@ recognize_local_synthetic_image: всего 26. Последний строит 
 кандидатом, установщик/подпись/обновления относятся к этапу 9. Нынешний бюджет
 tests — 40 минут, job CI — 50; значение 30/40 выше относится к dev13.
 [Фактические проверки](stage-5-frozen-ocr-report.md).
+
+## Dev22: формы рубля, поставка прежняя
+
+Меняется только общий адаптер и версия приложения; schema 0012, lock-зависимости,
+spec и 24/26 шага самопроверки сохраняются. 31 новая регрессия, полная коллекция
+1274. Стандартный ZIP без OCR-бинарных файлов, отдельный локальный модуль тот же.
+[Результаты и оставшиеся проверки](stage-5-currency-report.md).

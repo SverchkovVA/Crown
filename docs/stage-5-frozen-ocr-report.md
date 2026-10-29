@@ -72,8 +72,19 @@ artifacts/ready-ocr-dev21-715276b4ee7d4f5382c886a7c9fe6ce3/start.cmd.
 Комплект автоматически не открывался на рабочем столе, пока пользователь занят.
 
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40854381796) и
-[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40854391415) выполняются.
-Их результат будет внесён только после получения и сверки фактических отчётов.
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40854391415) полностью успешны.
+Linux: по 1243 passed за 1942,54 / 1858,55 с; helpers/source-self-test прошли.
+Windows Server / PowerShell 5.1: по 1243, JUnit 1684,039 / 1611,758 с;
+сборка и source/EXE по 24 шага. Архивы технических отчётов сверены по SHA-256,
+версии, исходному отпечатку, JUnit и всем шагам:
+- push 12890541287: artifacts/ci-dev21-push-1793270145068/verified-summary.json;
+- PR 12889733980: artifacts/ci-dev21-pr-1793270148305/verified-summary.json.
+Каталоги программы: 12890287151 / 12890132504, без OCR-бинарных файлов.
+Полные ZIP программы не скачивались. EXE CI SHA-256:
+push 3c9784e18d1ca10f41a7d6c74ad03a65b40f82dcf59b5ed5fe352c54dd30ad22;
+PR 534cf02d32b678aa639a1901dd502bafa652b5d50c45d64925af11d0872c783c.
+Хеши технических ZIP: push 2c54ad3b842369bc9b8ac95e67ceff9b2a932968d67bf1629390ec65416b2d63;
+PR 32bf5a67e473b4a59d6a32e3bcc41a41ead10b5a8a16cb742242f8c4334213c8.
 
 ## Ограничения и продолжение
 
