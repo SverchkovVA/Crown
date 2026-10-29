@@ -4,7 +4,7 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev14
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev15
 с первым отчётом — docs/stage-6-analytics-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
@@ -67,3 +67,9 @@ presentation/icons включены в данные PyInstaller и провер�
 не достигается штатным созданием/восстановлением. Самопроверки имеют 21 шаг,
 новый проверяет точную сумму отчёта и его совпадение после восстановления.
 [Текущие результаты](stage-6-analytics-report.md).
+
+## Dev15: детализация без изменения схемы
+
+Из отчёта доступны исходные версии, полная сумма и вклад в отбор. Зависимости,
+схема 0011 и 21 шаг самопроверки сохранены. Обычный EXE без OCR-runtime/меню.
+Текущий статус полной проверки и CI: docs/stage-6-sources-report.md.
