@@ -18,12 +18,14 @@ from PySide6.QtWidgets import QApplication
 
 from personal_finance.application.analytics import Analytics
 from personal_finance.application.importing import Importing
+from personal_finance.application.ocr_cards import CardRecognition
 from personal_finance.application.vault import VaultSession, create_vault, open_vault, write_private
 from personal_finance.bootstrap.diagnostics import runtime_info
 from personal_finance.bootstrap.ocr_audit_self_test import (
     check_audited_ocr_link,
     check_ocr_workflow,
 )
+from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recognitions_for_directory
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.classification import (
     CategoryRule,
@@ -112,7 +114,9 @@ def _check_packaged_ofx(importing: Importing, day: date) -> None:
             raise RuntimeError("Парсеры OFX или кодировка сборки не прошли проверку.")
 
 
-def self_test(app: QApplication, report_path: Path | None = None) -> int:
+def self_test(
+    app: QApplication, report_path: Path | None = None, *, ocr_directory: Path | None = None
+) -> int:
     report: dict[str, Any] = {
         "format": 1,
         "status": "running",
@@ -120,10 +124,15 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
         "uses_real_financial_data": False,
         "windows11_manual_acceptance": "pending",
         "stage4_complete": False,
+        "local_ocr_runtime_requested": ocr_directory is not None,
     }
     exit_code = 0
     try:
         report["runtime"] = {**runtime_info(), "qt_platform": app.platformName()}
+        ocr_recognitions: tuple[CardRecognition, ...] = ()
+        if ocr_directory is not None:
+            with _step(report, "verify_local_ocr_runtime"):
+                ocr_recognitions = recognitions_for_directory(ocr_directory)
         with tempfile.TemporaryDirectory(prefix="pf-self-test-") as directory:
             root = Path(directory) / "Проверка пути с пробелами"
             root.mkdir()
@@ -726,10 +735,16 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                                 restored_recovery,
                                 recovery=True,
                             ).result(timeout=15)
-                            window = MainWindow()
+                            window = MainWindow(ocr_recognitions=ocr_recognitions)
                             window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
                             try:
                                 window.activate_session(background)
+                                if ocr_recognitions and not any(
+                                    action.text() == "Распознать изображение…"
+                                    and action.isEnabled()
+                                    for action in window._ocr_actions
+                                ):
+                                    raise RuntimeError("Команда автоматического OCR недоступна.")
                                 window.show()
                                 app.processEvents()
                                 if (
@@ -769,7 +784,13 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
         with _step(report, "preview_ocr_without_engine"):
             from personal_finance.bootstrap.ocr_self_test import check_packaged_ocr_preview
 
+            load_runtime_manifest()
             check_packaged_ocr_preview()
+        if ocr_recognitions:
+            with _step(report, "recognize_local_synthetic_image"):
+                from personal_finance.bootstrap.ocr_self_test import check_local_ocr_runtime
+
+                check_local_ocr_runtime(ocr_recognitions)
         report["status"] = "passed"
     except Exception as exc:
         report["status"] = "failed"

@@ -5,7 +5,11 @@ from decimal import Decimal
 from PySide6.QtCore import QBuffer, QCoreApplication, QEvent, QIODevice
 from PySide6.QtGui import QImage, QImageWriter
 
-from personal_finance.application.ocr_cards import OcrCardPreview, OcrHistoryPreview
+from personal_finance.application.ocr_cards import (
+    CardRecognition,
+    OcrCardPreview,
+    OcrHistoryPreview,
+)
 from personal_finance.domain.ocr import OcrBox, OcrDocument, OcrEngineInfo, OcrWord
 from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.ocr_settings import OcrPreferences
@@ -111,3 +115,44 @@ def check_packaged_ocr_preview() -> None:
             single.deleteLater()
             history.deleteLater()
             QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+
+
+def check_local_ocr_runtime(recognitions: tuple[CardRecognition, ...]) -> None:
+    """Настоящий движок получает только PNG с вымышленными значениями."""
+    import tempfile
+    from datetime import date, time
+    from pathlib import Path
+
+    from matplotlib import get_data_path
+    from PIL import Image, ImageDraw, ImageFont
+
+    from personal_finance.application.ocr_cards import OcrCardPreview
+    from personal_finance.domain.ocr_cards import CashDirection
+
+    pixels = Image.new("RGB", (1080, 1400), "white")
+    painter = ImageDraw.Draw(pixels)
+    font = ImageFont.truetype(str(Path(get_data_path()) / "fonts/ttf/DejaVuSans.ttf"), 35)
+    for y, caption in (
+        (80, "Детали операции"),
+        (180, "Покупка"),
+        (290, "Списано: 473,15 руб."),
+        (400, "Дата операции: 22.10.2026 09:18"),
+        (510, "Получатель: Вымышленный магазин"),
+    ):
+        painter.text((50, y), caption, font=font, fill="black")
+    with tempfile.TemporaryDirectory(prefix="pf-ocr-self-test-") as directory:
+        path = Path(directory) / "Синтетическая карточка.png"
+        pixels.save(path, format="PNG")
+        preview = recognitions[0].analyze(path)
+    if not isinstance(preview, OcrCardPreview) or preview.bank_name != UNIVERSAL_PROFILE:
+        raise RuntimeError("Не распознана одна проверочная карточка.")
+    card = preview.card
+    if (
+        card.blocked_reason
+        or card.amount.value != 47315
+        or card.currency.value != "RUB"
+        or card.direction.value != CashDirection.OUT
+        or card.occurred_on.value != date(2026, 10, 22)
+        or card.local_time.value != time(9, 18)
+    ):
+        raise RuntimeError("Проверочный OCR дал неверные поля.")

@@ -60,3 +60,63 @@ def test_existing_report_is_not_replaced(qapp, tmp_path) -> None:
     path.write_bytes(b"keep existing contents")
     assert module.self_test(qapp, path) == 2
     assert path.read_bytes() == b"keep existing contents"
+
+
+def test_optional_ocr_self_test_has_two_extra_steps_without_paths(qapp, tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from personal_finance.application.ocr import Ocr
+    from personal_finance.application.ocr_cards import CardRecognition
+    from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
+    from personal_finance.infrastructure.ocr.generic import (
+        GenericCardAdapter,
+        GenericHistoryAdapter,
+    )
+    from personal_finance.infrastructure.ocr.images import load_ocr_image
+    from tests.ocr_fixtures import document
+
+    class Engine:
+        def recognize(self, image):
+            doc = document(
+                ("Детали операции", "Списано: 473,15 руб.", "22.10.2026 09:18"),
+                image_sha256=image.sha256,
+            )
+            return replace(doc, width=image.width, height=image.height)
+
+    service = CardRecognition(
+        Ocr(Engine()),
+        load_ocr_image,
+        GenericCardAdapter(),
+        history_adapter=GenericHistoryAdapter(),
+        bank_name=UNIVERSAL_PROFILE,
+        auto_history_hint=GenericHistoryAdapter.has_heading,
+    )
+    monkeypatch.setattr(module, "recognitions_for_directory", lambda directory: (service,))
+    requested = tmp_path / "SECRET_RUNTIME_PATH"
+    path = tmp_path / "ocr-self-test.json"
+    assert module.self_test(qapp, path, ocr_directory=requested) == 0
+    report = json.loads(path.read_text())
+    assert report["status"] == "passed" and report["local_ocr_runtime_requested"] is True
+    assert len(report["steps"]) == 26
+    assert report["steps"][0]["id"] == "verify_local_ocr_runtime"
+    assert report["steps"][-1]["id"] == "recognize_local_synthetic_image"
+    assert "SECRET_RUNTIME_PATH" not in path.read_text() and str(tmp_path) not in path.read_text()
+
+
+def test_invalid_optional_runtime_fails_before_any_book_is_created(qapp, tmp_path, monkeypatch):
+    from personal_finance.infrastructure.ocr.process import OcrProcessError
+
+    marker = "SECRET_RUNTIME_FAILURE"
+    calls = []
+    monkeypatch.setattr(module, "create_vault", lambda *args: calls.append(True))
+
+    def failed(directory):
+        raise OcrProcessError(marker)
+
+    monkeypatch.setattr(module, "recognitions_for_directory", failed)
+    path = tmp_path / "failed-ocr.json"
+    assert module.self_test(qapp, path, ocr_directory=tmp_path) == 1
+    report = json.loads(path.read_text())
+    assert report["status"] == "failed" and report["error_type"] == "OcrProcessError"
+    assert report["steps"][-1]["id"] == "verify_local_ocr_runtime"
+    assert not calls and marker not in path.read_text() and str(tmp_path) not in path.read_text()

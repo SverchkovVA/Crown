@@ -8,6 +8,7 @@ datas = [(str(path), str(path.parent.relative_to(source))) for path in migration
 icons = source / "personal_finance" / "presentation" / "icons"
 datas += [(str(path), str(path.parent.relative_to(source))) for path in icons.glob("*.svg")]
 datas += [(str(root / "THIRD_PARTY_NOTICES.md"), ".")]
+datas += [(str(root / "packaging" / "ocr" / "runtime-candidate.json"), "ocr")]
 legal = root / "docs" / "legal"
 if legal.is_dir():
     datas += [
