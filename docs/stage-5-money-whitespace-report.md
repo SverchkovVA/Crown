@@ -59,11 +59,25 @@ artifacts/synthetic-money-whitespace-3f4f361ee09f439980316efe00b48e11/verified-p
 
 ## Полный прогон
 
-Запущен Windows 11 / PowerShell 5.1:
-artifacts/windows-check-20261029-135534-ba9c393452254712a0294c981a2a5ac1.
+Полный Windows 11 / PowerShell 5.1 прошёл: 1306 passed, JUnit 1047,136 с,
+Ruff/формат/Mypy, сборка и source/EXE по 24 усиленных шага. Отчёты сверены:
+artifacts/windows-check-20261029-135534-ba9c393452254712a0294c981a2a5ac1/verified-summary.json.
+EXE SHA-256: 5bbd819bb43eb60cb7c36aad7f58e1e1ebfffd7bab74183beb912ae262d404e9.
+Стандартный EXE из пустого cwd с PATH только System32 прошёл 24 шага:
+artifacts/dev23-without-python-path-0aae70455e344de8a7f5e533df172023.
+
+Все 37 лицензий 12 Python-пакетов сверены по SHA-256. Финальная копия EXE с
+58 проверенными файлами runtime в кириллическом пути с пробелами прошла 26 шагов,
+включая настоящее распознавание раздельной дроби и отдельного поля валюты.
+Модуль подключился автоматически, без Python/uv в PATH, из пустой папки:
+artifacts/ocr-exe-check-dev23-7e1564af7bd54323a166b21b8c367968/verified-summary.json.
+SHA-256 EXE совпал с полным прогоном. Локальный проверочный запуск:
+artifacts/start-checked-ocr-dev23.cmd. Книга заранее не создана, пароля нет.
+
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40861356850) и
 [PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40861364447) выполняются.
 Итог будет внесён после фактического завершения и сверки отчётов.
+Проверка PATH не заменяет чистую Windows и отключённую сеть.
 
 ## Осталось
 
