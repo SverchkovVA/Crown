@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -33,6 +34,16 @@ from personal_finance.domain.classification import (
     ClassificationInput,
     ClassificationStatus,
 )
+from personal_finance.domain.deposits import (
+    AccrualBoundary,
+    BalanceMoment,
+    DayCount,
+    DepositRate,
+    DepositScenario,
+    InterestRounding,
+    RoundingStage,
+    forecast_deposit,
+)
 from personal_finance.domain.errors import InvalidCredentials, ValidationError
 from personal_finance.domain.exporting import ExportFormat, ExportSettings
 from personal_finance.domain.imports import ImportSelection, ImportStatus
@@ -47,6 +58,7 @@ from personal_finance.infrastructure.importing.statements import CsvMapping
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
+from personal_finance.presentation.deposits import DepositForecastDialog
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -610,6 +622,45 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Отчёт движения средств изменил финансовые данные.")
+                with _step(report, "forecast_deposit_read_only"):
+                    before_deposit = ledger.operations(include_deleted=True)
+                    deposit = forecast_deposit(
+                        DepositScenario(
+                            opened_on=date(2026, 1, 1),
+                            matures_on=date(2027, 1, 1),
+                            initial=Money(1),
+                            rates=(DepositRate(str(uuid4()), date(2026, 1, 1), Decimal(50)),),
+                            movements=(),
+                            payout_dates=(date(2027, 1, 1),),
+                            boundary=AccrualBoundary.OPENING_INCLUDED,
+                            balance_moment=BalanceMoment.AFTER_MOVEMENTS,
+                            day_count=DayCount.FIXED_365,
+                            rounding=InterestRounding.HALF_UP,
+                            rounding_stage=RoundingStage.PAYOUT,
+                            capitalize=False,
+                            allow_topups=False,
+                            allow_withdrawals=False,
+                            minimum=Money(0),
+                        )
+                    )
+                    if deposit.interest_minor != 1 or deposit.closing_minor != 1:
+                        raise RuntimeError("Не подтверждено точное округление процентов.")
+                    deposit_dialog = DepositForecastDialog(deposit)
+                    try:
+                        model = deposit_dialog.model
+                        if model.rowCount() != 1 or model.data(model.index(0, 1)) != "0,01":
+                            raise RuntimeError("График процентов не совпал с точной выплатой.")
+                    finally:
+                        deposit_dialog.reject()
+                        deposit_dialog.deleteLater()
+                        QCoreApplication.sendPostedEvents(
+                            deposit_dialog, QEvent.Type.DeferredDelete
+                        )
+                    if (
+                        ledger.operations(include_deleted=True) != before_deposit
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Прогноз процентов изменил финансовые данные.")
                 with _step(report, "render_income_expense_charts"):
                     chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
                     try:

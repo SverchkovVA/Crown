@@ -55,6 +55,7 @@ from personal_finance.application.vault import VaultSession, create_vault, open_
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
+from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
@@ -92,6 +93,7 @@ from personal_finance.presentation.classification import (
     CategoryRuleHistoryDialog,
     CategoryRulePage,
 )
+from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
 from personal_finance.presentation.dialogs import (
     CreateDialog,
     NameDialog,
@@ -331,12 +333,14 @@ class MainWindow(QMainWindow):
         self.compare_action.setEnabled(False)
         self.cash_flow_action = reports_menu.addAction("Движение средств…", self.request_cash_flow)
         self.cash_flow_action.setEnabled(False)
+        self.deposit_action = reports_menu.addAction("Прогноз вклада…", self.request_deposit)
 
     def _update_report_action(self) -> None:
         enabled = not self._busy and self.session is not None and self.session.ledger is not None
         self.report_action.setEnabled(enabled)
         self.compare_action.setEnabled(enabled)
         self.cash_flow_action.setEnabled(enabled)
+        self.deposit_action.setEnabled(not self._busy)
 
     def request_analytics(self) -> None:
         session = self.session
@@ -516,6 +520,48 @@ class MainWindow(QMainWindow):
         if self.session is not session:
             return
         dialog = CashFlowDialog(result[0], result[1], self, categories=result[2])
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+
+    def request_deposit(self) -> None:
+        if self._busy:
+            return
+        self._run_deposit_form(DepositScenarioDialog(self))
+
+    def _run_deposit_form(self, dialog: DepositScenarioDialog) -> None:
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_scenario is None:
+            dialog.deleteLater()
+            return
+        scenario = dialog.result_scenario
+
+        def calculate() -> DepositForecast | str:
+            try:
+                return forecast_deposit(scenario)
+            except ValidationError as error:
+                return str(error)
+            except Exception:
+                # Ввод остаётся в прежней форме, технические данные не показываются.
+                return "Не удалось рассчитать прогноз. Проверьте условия и повторите попытку."
+
+        self._job(
+            calculate,
+            lambda result: self._show_deposit(dialog, result),
+            "Расчёт прогнозных процентов без записи в книгу…",
+            defer_success=True,
+        )
+
+    def _show_deposit(
+        self, input_dialog: DepositScenarioDialog, result: DepositForecast | str
+    ) -> None:
+        if isinstance(result, str):
+            input_dialog.feedback.setText(result)
+            input_dialog.feedback.show()
+            self._run_deposit_form(input_dialog)
+            return
+        input_dialog.deleteLater()
+        dialog = DepositForecastDialog(result, self)
         try:
             dialog.exec()
         finally:
