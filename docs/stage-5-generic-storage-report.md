@@ -59,12 +59,19 @@ Windows PowerShell 5.1, Linux/Windows CI, source/EXE. Общий список п
 
 ## Полный прогон — выполняется
 
-Код a863eb70828ae82d0a7fac1ed18fe1faf4e1aba7, source_sha256:
-d59b0a83a82e4f3209010da08d3150878118cb394c0ed49773951e024f8a1e37.
+Первый прогон a863eb7 остановлен после отдельного подтверждения устаревшего
+ожидания в test_generic_single_card_has_no_financial_prepare_button: общий
+чистый декодер теперь принимает проверенный профиль, а прежний тест ожидал отказа.
+Сам финансовый GUI остался выключенным; старые схемы защищены репозиторием.
+Ожидание обновлено, 62 GUI/контрактные проверки прошли за 3,27 с.
+Остановлены только два подтверждённых PID собственного pytest по GUID его отчёта.
+
+Повторный код 23278f7de850ba6d4db94e8c8081cec54724c729, source_sha256:
+6250c25c6e5f02f143eb8f9d40ea61357621e1aab668b190075f0ac94b629292.
 Локальный Windows 11 / PowerShell 5.1:
-artifacts/windows-check-20261029-083510-e4ffd27fd94d42af947983cdef79c016/report.json.
-[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40824234047),
-[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40824240015).
+artifacts/windows-check-20261029-085404-d42210d6ecc542ce828726cce4707605/report.json.
+[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40826016403),
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40826022626).
 До окончания нельзя считать подтверждёнными полную сборку/самопроверку EXE dev17.
 
 ## Что осталось
