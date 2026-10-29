@@ -4,8 +4,8 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev27
-со сценарными изменениями — docs/stage-6-deposit-changes-report.md; доставка модуля:
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev28
+с месячными остатками — docs/stage-6-cashflow-months-report.md; доставка модуля:
 docs/stage-5-frozen-ocr-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
@@ -158,3 +158,11 @@ spec и 24/26 шага самопроверки сохраняются. 31 но�
 forecast_deposit_read_only дополнен вводом смены ставки/пополнения/снятия и сверкой
 9,50 RUB процентов/175,00 RUB остатка и таблиц условий. Схема и зависимости прежние.
 [Фактический полный прогон](stage-6-deposit-changes-report.md).
+
+## Dev28: месячная аналитика
+
+Финальная коллекция 1567, source/EXE 26 стандартных / 28 с OCR. Существующий
+report_cash_flow_read_only проверяет также месячный остаток последнего движения,
+его источники и точную подпись графика, без записи. Схема 0012/зависимости прежние.
+[Фактический статус окончательного прогона](stage-6-cashflow-months-report.md).
+Предварительный код 12dc220/1566 тестов не является доказательством финального 1564431.
