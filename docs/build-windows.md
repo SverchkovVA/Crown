@@ -4,7 +4,7 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev15
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev16
 с первым отчётом — docs/stage-6-analytics-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
@@ -73,3 +73,13 @@ presentation/icons включены в данные PyInstaller и провер�
 Из отчёта доступны исходные версии, полная сумма и вклад в отбор. Зависимости,
 схема 0011 и 21 шаг самопроверки сохранены. Обычный EXE без OCR-runtime/меню.
 Текущий статус полной проверки и CI: docs/stage-6-sources-report.md.
+
+## Dev16: QtAgg и 22 шага
+
+Matplotlib 3.11.2 закреплён в uv.lock без смены прежних версий зависимостей.
+В spec выбран только QtAgg; Qt Charts/Graphs, другой Qt и Tk не подключаются.
+Лицензии 12 пакетов включены рекурсивно в _internal/legal с SHA-256 manifest.
+В source_sha256 теперь входят THIRD_PARTY_NOTICES.md и docs/legal; обычная
+документация/частные artifacts по-прежнему исключены. Новые и старые отпечатки
+не сравниваются как одна версия. График проверяется новым 22-м шагом source/EXE.
+Текущие результаты: docs/stage-6-charts-report.md; схема 0011 прежняя.
