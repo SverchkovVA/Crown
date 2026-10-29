@@ -123,3 +123,41 @@ def test_segmentation_mode_is_explicit_and_bounded(mode, tmp_path):
 
     with pytest.raises(ValidationError):
         TesseractEngine(runtime(tmp_path), page_segmentation=mode)
+
+
+@pytest.mark.parametrize("where", ["root", "parent", "models"])
+def test_junctions_in_runtime_paths_are_rejected(tmp_path, monkeypatch, where):
+    from pathlib import Path
+
+    value = runtime(tmp_path)
+    forbidden = {"root": tmp_path, "parent": tmp_path.parent, "models": tmp_path / "tessdata"}[
+        where
+    ]
+    original = Path.is_junction
+    monkeypatch.setattr(Path, "is_junction", lambda path: path == forbidden or original(path))
+    with pytest.raises(OcrProcessError):
+        value.verify()
+
+
+def test_oversized_runtime_file_is_rejected_before_hashing(tmp_path, monkeypatch):
+    from personal_finance.infrastructure.ocr import tesseract
+
+    value = runtime(tmp_path)
+    value.verify()
+    monkeypatch.setattr(tesseract, "MAX_RUNTIME_FILE_BYTES", 1)
+    calls = []
+    monkeypatch.setattr(tesseract.hashlib, "sha256", lambda: calls.append(True))
+    with pytest.raises(OcrProcessError):
+        value.verify()
+    assert not calls
+
+
+def test_total_runtime_size_is_bounded_even_when_each_file_fits(tmp_path, monkeypatch):
+    from personal_finance.infrastructure.ocr import tesseract
+
+    value = runtime(tmp_path)
+    value.verify()
+    total = sum((tmp_path / name).stat().st_size for name, _ in value.file_sha256)
+    monkeypatch.setattr(tesseract, "MAX_RUNTIME_BYTES", total - 1)
+    with pytest.raises(OcrProcessError):
+        value.verify()

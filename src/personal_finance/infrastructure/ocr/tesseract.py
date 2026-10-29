@@ -11,6 +11,9 @@ from personal_finance.domain.ocr import OcrDocument, OcrEngineInfo, OcrImage, re
 from personal_finance.infrastructure.ocr.process import OcrProcessError, run_ocr_process
 from personal_finance.infrastructure.ocr.tsv import parse_tesseract_tsv
 
+MAX_RUNTIME_FILE_BYTES = 128 * 1024 * 1024
+MAX_RUNTIME_BYTES = 512 * 1024 * 1024
+
 _ERROR = "Комплект локального OCR отсутствует, изменён или настроен неверно."
 
 
@@ -66,16 +69,30 @@ class TesseractRuntime:
 
     def verify(self) -> None:
         try:
-            if self.directory.is_symlink() or not self.directory.is_dir():
+            if (
+                self.directory.is_symlink()
+                or self.directory.is_junction()
+                or not self.directory.is_dir()
+            ):
                 raise OcrProcessError(_ERROR)
             allowed_dlls = {name.casefold() for name, _ in self.file_sha256 if "/" not in name}
             for path in self.directory.iterdir():
                 if path.suffix.lower() == ".dll" and path.name.casefold() not in allowed_dlls:
                     raise OcrProcessError(_ERROR)
+            total_bytes = 0
             for name, expected in self.file_sha256:
                 path = self.directory / name
-                if not stat.S_ISREG(path.lstat().st_mode) or any(
-                    parent.is_symlink() for parent in path.parents if parent != self.directory
+                info = path.lstat()
+                total_bytes += info.st_size
+                if (
+                    not stat.S_ISREG(info.st_mode)
+                    or not 0 < info.st_size <= MAX_RUNTIME_FILE_BYTES
+                    or total_bytes > MAX_RUNTIME_BYTES
+                    or any(
+                        parent.is_symlink() or parent.is_junction()
+                        for parent in path.parents
+                        if parent != self.directory
+                    )
                 ):
                     raise OcrProcessError(_ERROR)
                 digest = hashlib.sha256()
