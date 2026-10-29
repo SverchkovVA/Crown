@@ -52,18 +52,41 @@ artifacts/synthetic-inline-date-e22dbf86ac8142088e7a0c679f3cb677/verified-probe.
 
 ## Полный контроль
 
-Запущен Windows 11 / PowerShell 5.1:
-artifacts/windows-check-20261029-142048-8ba450732cac42fe9d71f55b21746564.
+Полный локальный Windows 11 / PowerShell 5.1 прошёл: 1333 passed, JUnit
+1045,601 с; Ruff/формат/Mypy, сборка и source/EXE по 24 усиленных шага.
+Все случаи, включая исправленные два теста переноса, прошли в одном полном наборе.
+Отчёты сверены: artifacts/windows-check-20261029-142048-8ba450732cac42fe9d71f55b21746564/verified-summary.json.
+EXE SHA-256: a5a4d1c7d9de3bf72a99d9d2af788775d01a2400eb88e416ffab49e7a2ed4578.
+
+Дополнительный стандартный EXE из пустой папки с PATH только System32: 24 passed,
+artifacts/dev24-without-python-path-bb2ce2ff0f6f468facc2dd08101c5a1c.
+Все 37 файлов лицензий 12 Python-пакетов сверены по SHA-256. Финальная копия
+с 58 закреплёнными файлами OCR в кириллическом пути с пробелами автоматически
+подключила модуль и прошла 26 шагов с настоящим Tesseract, без Python/uv в PATH:
+artifacts/ocr-exe-check-dev24-884cd79ea1184cd59151b2869af6293e/verified-summary.json.
+SHA-256 EXE совпал с полным прогоном. Проверка PATH не означает чистую Windows
+или отключённую сеть. Удобный локальный запуск: artifacts/start-checked-ocr-dev24.cmd.
+
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40864654951) и
-[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40864665068) выполняются.
-До получения/сверки результатов успех полного прогона не заявлен.
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40864665068) полностью успешны.
+Linux: по 1333 passed за 1951,28 / 885,55 с; helpers/source-self-test прошли.
+Windows Server / PowerShell 5.1: по 1333 теста, JUnit 1183,948 / 1460,731 с,
+сборка/source/EXE по 24 шага. Архивы сверены по SHA-256, версии, отпечатку,
+JUnit и всем шагам:
+- push 12894401724: artifacts/ci-dev24-push-1793280796217/verified-summary.json;
+- PR 12893804806: artifacts/ci-dev24-pr-1793280801430/verified-summary.json.
+Каталоги программы: 12894431994 / 12894014463; полные ZIP не скачивались.
+EXE CI SHA-256: push 83065d7ca7588cc537cfcf1f2bcb4788dbf612ee892ccd98c2f7f1a1229c22c9;
+PR 9c540f5addf09d277b47697aa48900ff850bdbecb538b23cb17eb50de7ee0748.
+SHA-256 технических ZIP: push d34b364d005e9f856d81f738041aa503bb6f20d5cbe0ac0f2eb77ae28e68eb0a;
+PR 3d3a242f12b3ccf7d7cf3f2c032e03a147c21e403940d2ab0523f75fec4c61e3.
 
 ## Ограничения
 
 Произвольные макеты/ошибки самого OCR и неизвестный суффикс валюты не решены.
 Стандартный архив CI без OCR-бинарных файлов; лицензии всех DLL, чистая Windows,
 отключённая сеть, банковская точность, Яндекс Пэй, ручная приёмка и вклады остаются.
-Пока dev24 проверяется, готовый локальный dev23: artifacts/start-checked-ocr-dev23.cmd.
+Проверенный локальный dev24: artifacts/start-checked-ocr-dev24.cmd.
 Книга заранее не создана, пароля нет. Во время занятости пользователя новых
 подтверждений/ручных действий не требуется.
 
