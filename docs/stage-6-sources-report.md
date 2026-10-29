@@ -46,11 +46,35 @@ source_sha256: a1ec3f26ecd6fddf08bcbbe6776bdddd59538e084c7b5cb01248a5de4649df9c.
 - analytics-sources-native-f8f2f22501d1449a9ad3aed342564920/report.json — 1,50;
 - analytics-sources-native-a18f20d549554e26b63a24bf3edd66a4/report.json — 3,00.
 
-Полный локальный Windows-прогон и сборка dev15 выполняются.
-CI запущены на 302973c5d6e173db8bc8ae891d5d7f3f77699001:
+Полный локальный Windows 11 x64 / PowerShell 5.1 прошёл: 1116 passed,
+JUnit 912,812 с, без ошибок/провалов/пропусков. Сборка и обе самопроверки
+по 21 шагу прошли. Версия, source_sha256, JUnit и JSON отдельно сверены.
+Отчёт: artifacts/windows-check-20261029-031226-bb46710ed23f4eafaa25887eeb2b0c7f/verified-summary.json.
+EXE SHA-256: 5f87571112638fc1c25990c3d1a9979f63d9f6b27fb3a6393a10e0d4874a01c7.
+Дополнительный EXE-прогон с пустой рабочей папкой и PATH только System32
+прошёл: 21 шаг, frozen=True, версия dev15. Отчёт:
+artifacts/dev15-without-python-path-a3277fc0a8004913aa9df4b0c0007b23/verified-summary.json.
+Изоляция PATH не подтверждает чистую Windows без Python или автономность сети.
+
+CI завершены успешно на 302973c5d6e173db8bc8ae891d5d7f3f77699001:
 [Push](https://github.com/SverchkovVA/Crown/actions/runs/40792489640),
 [PR](https://github.com/SverchkovVA/Crown/actions/runs/40792497139).
-Результатов dev15 пока нет.
+
+| Прогон | Linux | Windows / PowerShell 5.1 |
+|---|---|---|
+| Push 40792489640 | 1116 passed, 979,45 с | 1116 passed, JUnit 1000,209 с |
+| PR 40792497139 | 1116 passed, 1105,22 с | 1116 passed, JUnit 1563,484 с |
+
+Технические Windows-архивы скачаны, digest SHA-256 сверены с GitHub; версия,
+source_sha256, JUnit без ошибок/провалов/пропусков, сборка и по 21 успешному
+шагу source/EXE проверены. Локальные сводки:
+artifacts/ci-dev15-push-1793243060803/verified-summary.json;
+artifacts/ci-dev15-pr-1793243060803/verified-summary.json.
+Готовые каталоги без OCR-runtime/меню:
+[Push artifact](https://github.com/SverchkovVA/Crown/actions/runs/40792489640/artifacts/12862424902),
+[PR artifact](https://github.com/SverchkovVA/Crown/actions/runs/40792497139/artifacts/12862993362).
+Нужно распаковать весь каталог вместе с _internal; хранение 14 дней.
+Windows CI выполнялся на Server, полную ручную приёмку Windows 11 не заменяет.
 Успех dev14 не подменяет проверку dev15; самопроверка сохраняет 21 шаг,
 теперь дополнительно сверяет полную сумму и вклад выбранного источника.
 
@@ -66,7 +90,8 @@ CI запущены на 302973c5d6e173db8bc8ae891d5d7f3f77699001:
 
 ## Уточнения документации
 
-- Текущая версия dev14 → dev15; предыдущие результаты сохранены как исторические.
+- Текущая версия dev14 → dev15, включая предложение хранения OCR; предыдущие
+  результаты сохранены как исторические.
 - Прежнее «переход к операциям впереди» заменено действующей детализацией снимка.
 - Контракт описывает неизменяемые исходные версии, отдельно полную сумму и вклад,
   согласованные названия счетов и категорий; отчёт по-прежнему только для чтения.
