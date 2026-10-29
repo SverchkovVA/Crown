@@ -8,6 +8,7 @@ def test_ocr_runtime_manifest_changes_the_source_fingerprint(tmp_path):
         ".python-version",
         ".gitattributes",
         "check-windows.cmd",
+        "THIRD_PARTY_NOTICES.md",
     ):
         (tmp_path / name).write_text("", encoding="utf-8")
     folder = tmp_path / "packaging/ocr"
