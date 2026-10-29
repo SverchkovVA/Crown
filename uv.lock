@@ -403,7 +403,7 @@ wheels = [
 
 [[package]]
 name = "personal-finance-local"
-version = "0.2.0.dev27"
+version = "0.2.0.dev28"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },

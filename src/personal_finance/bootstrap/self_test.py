@@ -29,6 +29,7 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
 from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recognitions_for_directory
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashSourceKind, cash_flow_sources
+from personal_finance.domain.analytics_cashflow_months import cash_month_sources
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -613,6 +614,28 @@ def self_test(
                             ].isEnabled()
                         ):
                             raise RuntimeError("Остаток или источники недоступны в интерфейсе.")
+                        last_day = max(v.operation.draft.occurred_on for v in cash_report.movements)
+                        cash_dialog.months.month.setDate(QDate(last_day.year, last_day.month, 1))
+                        monthly_page = cash_dialog.months.page
+                        if (
+                            monthly_page is None
+                            or monthly_page.rows[0].totals.closing_minor != total.closing_minor
+                            or sum(
+                                v.minor
+                                for v in cash_month_sources(
+                                    monthly_page, 0, CashSourceKind.THROUGH_END
+                                )
+                            )
+                            != total.closing_minor
+                        ):
+                            raise RuntimeError("Месячный остаток не совпал с источниками.")
+                        cash_dialog.months.canvas.draw()
+                        if (
+                            format_report_amount(total.closing_minor, total.currency)
+                            not in {v.get_text() for v in cash_dialog.months.axes.texts}
+                            or not cash_dialog.months._targets
+                        ):
+                            raise RuntimeError("Месячный график не совпал с точным остатком.")
                     finally:
                         cash_dialog.reject()
                         cash_dialog.deleteLater()

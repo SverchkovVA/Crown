@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QPushButton,
+    QScrollArea,
     QTableView,
     QTabWidget,
     QVBoxLayout,
@@ -31,6 +32,7 @@ from personal_finance.presentation.analytics import (
     _label,
     format_report_amount,
 )
+from personal_finance.presentation.analytics_cashflow_months import CashFlowMonths
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tables import replace_table
 
@@ -153,6 +155,8 @@ class CashFlowSourcesDialog(QDialog):
 
     def _selected(self) -> CashMovement | None:
         index = self.table.currentIndex()
+        if not self.table.selectionModel().hasSelection():
+            return None
         return (
             self.lines[index.row()]
             if index.isValid() and 0 <= index.row() < len(self.lines)
@@ -223,14 +227,13 @@ class CashFlowDialog(QDialog):
         )
         self.scope_label.setToolTip("<p>" + escape("Счета: " + caption) + "</p>")
         layout.addWidget(self.scope_label)
-        layout.addWidget(
-            _label(
-                "Остаток на начало учитывает движения до периода. "
-                "Введённые начальные остатки внутри периода показаны отдельно. "
-                "Поступления и списания включают свои переводы, "
-                "не являясь доходами и расходами."
-            )
+        self.flow_description = _label(
+            "Остаток на начало учитывает движения до периода. "
+            "Введённые начальные остатки внутри периода показаны отдельно. "
+            "Поступления и списания включают свои переводы, "
+            "не являясь доходами и расходами."
         )
+        layout.addWidget(self.flow_description)
         self.tabs = QTabWidget()
         self.total_table = _view("Итоги движения средств по валютам")
         self.account_table = _view("Движение средств по счетам")
@@ -267,6 +270,13 @@ class CashFlowDialog(QDialog):
         self.account_table.setColumnWidth(0, 200)
         self.tabs.addTab(self.total_table, "Итоги")
         self.tabs.addTab(self.account_table, "Счета")
+        self.months = CashFlowMonths(report, self.account_names, self)
+        self.months.sources_requested.connect(self._show_month_sources)
+        self.months_scroll = QScrollArea()
+        self.months_scroll.setWidgetResizable(True)
+        self.months_scroll.setWidget(self.months)
+        self.tabs.addTab(self.months_scroll, "По месяцам")
+        self.finished.connect(self.months.dispose)
         layout.addWidget(self.tabs, 1)
         self.empty_label = _label(
             "До конца выбранного периода нет движений по выбранным счетам. "
@@ -287,13 +297,12 @@ class CashFlowDialog(QDialog):
             self.source_buttons[kind] = button
             row.addWidget(button)
         layout.addLayout(row)
-        layout.addWidget(
-            _label(
-                "Источники открываются из выбранной строки. "
-                "Суммы — в валюте строки; конвертации нет. "
-                "Снимок не меняется при последующем исправлении операций."
-            )
+        self.sources_hint = _label(
+            "Источники открываются из выбранной строки. "
+            "Суммы — в валюте строки; конвертации нет. "
+            "Снимок не меняется при последующем исправлении операций."
         )
+        layout.addWidget(self.sources_hint)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(self.reject)
@@ -320,8 +329,12 @@ class CashFlowDialog(QDialog):
         ]
 
     def _selected(self) -> tuple[Currency, str | None] | None:
+        if self.tabs.currentIndex() not in (0, 1):
+            return None
         accounts = self.tabs.currentIndex() == 1
         table = self.account_table if accounts else self.total_table
+        if not table.selectionModel().hasSelection():
+            return None
         index = table.currentIndex()
         if not index.isValid():
             return None
@@ -333,8 +346,12 @@ class CashFlowDialog(QDialog):
         return None
 
     def _update_actions(self) -> None:
+        monthly = self.tabs.currentIndex() == 2
+        self.flow_description.setVisible(not monthly)
+        self.sources_hint.setVisible(not monthly)
         selection = self._selected()
         for kind, button in self.source_buttons.items():
+            button.setVisible(self.tabs.currentIndex() in (0, 1))
             button.setEnabled(
                 selection is not None
                 and bool(
@@ -355,6 +372,19 @@ class CashFlowDialog(QDialog):
             CashSourceKind.PERIOD: "Движения в периоде",
             CashSourceKind.THROUGH_END: "Остаток на конец",
         }[kind]
+        dialog = CashFlowSourcesDialog(
+            lines, currency, title, self.account_names, self.category_names, self
+        )
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+
+    def _show_month_sources(
+        self, currency: Currency, lines: tuple[CashMovement, ...], title: str
+    ) -> None:
+        if not lines:
+            return
         dialog = CashFlowSourcesDialog(
             lines, currency, title, self.account_names, self.category_names, self
         )
