@@ -71,3 +71,17 @@ S:\Dev\Crown\artifacts\start-checked-ocr-dev31.cmd.
 заменён двумя группами с проверкой полноты; Windows сохранён. PR Linux dev31
 «повтор ожидается» заменён вторым фактическим тайм-аутом. Сохранённый GUI всё ещё
 прототип: его 137 проверок не прибавляются к рабочей коллекции dev32.
+
+
+## Запущенная полная проверка — 30.10.2026, 02:28 МСК
+
+Коммит d9d4bb0c18e816076a4a96b9cee96b1cc7ec2289. Локальный полный прогон:
+artifacts/windows-check-20261030-022646-5bfdcbae6a8240eaa3b5d5abd64e0987,
+начат в 02:26:46 МСК; результат ещё ожидается. Source с настоящим локальным
+OCR уже прошла 29 шагов: artifacts/dev32-source-with-ocr.json.
+
+GitHub принял workflow: [push 40973178756](https://github.com/SverchkovVA/Crown/actions/runs/40973178756),
+[PR 40973185945](https://github.com/SverchkovVA/Crown/actions/runs/40973185945).
+В каждом запущены обе Linux-группы и Windows; объединение Linux зависит от
+успеха обеих групп. Их полное прохождение пока не заявляется. Исходный
+отпечаток прежний 1791b9bb542ef7c07fcbe6e861f03d35ad17afc69f6659eb8d82cb31e0f0c711.
