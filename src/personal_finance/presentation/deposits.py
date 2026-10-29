@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QEvent, QObject
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -14,10 +14,14 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QTableView,
+    QTableWidget,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +31,7 @@ from personal_finance.domain.deposits import (
     BalanceMoment,
     DayCount,
     DepositForecast,
+    DepositMovement,
     DepositRate,
     DepositScenario,
     InterestRounding,
@@ -95,7 +100,7 @@ class DepositScenarioDialog(QDialog):
         layout.addWidget(
             _label(
                 "Введите условия своего договора. Это прогноз, без записи выплат в книгу. "
-                "Первый калькулятор: RUB, одна ставка, без пополнений и снятий."
+                "Валюта RUB. Изменения ставки и движения задаются на вкладке «Изменения»."
             )
         )
         scroll = QScrollArea()
@@ -103,7 +108,9 @@ class DepositScenarioDialog(QDialog):
         body = QWidget()
         form = QFormLayout(body)
         scroll.setWidget(body)
-        layout.addWidget(scroll, 1)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(scroll, "Основные условия")
+        layout.addWidget(self.tabs, 1)
         self.initial = QLineEdit()
         self.initial.setPlaceholderText("Например, 100000,00")
         self.initial.setMaxLength(128)
@@ -154,6 +161,43 @@ class DepositScenarioDialog(QDialog):
                 "Налоги, комиссии, досрочное закрытие и банковские специальные условия не учтены."
             )
         )
+        changes = QWidget()
+        change_layout = QVBoxLayout(changes)
+        change_layout.addWidget(
+            _label(
+                "Только сценарные предположения, без записи в книгу. Ставка первой вкладки "
+                "действует с открытия; здесь укажите последующие изменения. "
+                "Движения одного дня суммируются. До 1000 строк каждого вида."
+            )
+        )
+        policies = QFormLayout()
+        self.balance_moment = _combo(BALANCES, "Остаток дня для начисления")
+        self.balance_moment.setMinimumHeight(self.balance_moment.sizeHint().height())
+        self.minimum = QLineEdit("0,00")
+        self.minimum.setMaxLength(128)
+        self.minimum.setMinimumHeight(self.minimum.sizeHint().height())
+        self.minimum.setAccessibleName("Неснижаемый остаток вклада в рублях")
+        self.allow_topups = QCheckBox("Условия разрешают пополнения")
+        self.allow_withdrawals = QCheckBox("Условия разрешают снятия")
+        policies.addRow("Остаток для процентов", self.balance_moment)
+        policies.addRow("Неснижаемый остаток · RUB", self.minimum)
+        policies.addRow(self.allow_topups)
+        policies.addRow(self.allow_withdrawals)
+        change_layout.addLayout(policies)
+        self.rate_table, rate_buttons = self._event_table("Изменения ставки", "Новая ставка · %")
+        change_layout.addWidget(_label("Изменения ставки"))
+        change_layout.addWidget(self.rate_table, 1)
+        change_layout.addLayout(rate_buttons)
+        self.movement_table, movement_buttons = self._event_table(
+            "Сценарные пополнения и снятия", "Сумма · RUB: + пополнение, − снятие"
+        )
+        change_layout.addWidget(_label("Пополнения и снятия"))
+        change_layout.addWidget(self.movement_table, 1)
+        change_layout.addLayout(movement_buttons)
+        change_scroll = QScrollArea()
+        change_scroll.setWidgetResizable(True)
+        change_scroll.setWidget(changes)
+        self.tabs.addTab(change_scroll, "Изменения")
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
         self.feedback.hide()
@@ -181,20 +225,20 @@ class DepositScenarioDialog(QDialog):
                 opened_on=start,
                 matures_on=end,
                 initial=amount,
-                rates=(DepositRate(str(uuid4()), start, rate),),
-                movements=(),
+                rates=self._rates(start, rate),
+                movements=self._movements(),
                 payout_dates=monthly_payouts(start, end)
                 if self.frequency.currentData() == "monthly"
                 else (end,),
                 boundary=AccrualBoundary(self.boundary.currentData()),
-                balance_moment=BalanceMoment.AFTER_MOVEMENTS,
+                balance_moment=BalanceMoment(self.balance_moment.currentData()),
                 day_count=DayCount(self.day_count.currentData()),
                 rounding=InterestRounding(self.rounding.currentData()),
                 rounding_stage=RoundingStage(self.rounding_stage.currentData()),
                 capitalize=self.capitalize.isChecked(),
-                allow_topups=False,
-                allow_withdrawals=False,
-                minimum=Money(0, RUB),
+                allow_topups=self.allow_topups.isChecked(),
+                allow_withdrawals=self.allow_withdrawals.isChecked(),
+                minimum=Money.parse(self.minimum.text(), RUB),
             )
         except (ValidationError, InvalidOperation) as error:
             self.result_scenario = None
@@ -207,6 +251,119 @@ class DepositScenarioDialog(QDialog):
             return
         self.feedback.hide()
         self.accept()
+
+    def _event_table(self, name: str, value_title: str) -> tuple[QTableWidget, QHBoxLayout]:
+        table = QTableWidget(0, 2)
+        table.setAccessibleName(name)
+        table.setHorizontalHeaderLabels(["Дата", value_title])
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().show()
+        table.setMinimumHeight(180)
+        row = QHBoxLayout()
+        add = QPushButton("Добавить строку")
+        remove = QPushButton("Удалить выбранную строку")
+        add.setAccessibleName(name + ": добавить строку")
+        remove.setAccessibleName(name + ": удалить выбранную строку")
+        remove.setEnabled(False)
+
+        def selection_changed() -> None:
+            row = table.currentRow()
+            remove.setEnabled(row >= 0)
+            remove.setText(f"Удалить строку {row + 1}" if row >= 0 else "Удалить выбранную строку")
+
+        table.itemSelectionChanged.connect(selection_changed)
+        add.clicked.connect(lambda: self._add_event(table))
+        remove.clicked.connect(lambda: table.removeRow(table.currentRow()))
+        row.addWidget(add)
+        row.addWidget(remove)
+        return table, row
+
+    def _add_event(self, table: QTableWidget) -> None:
+        if table.rowCount() >= 1000:
+            self.feedback.setText("В форме допустимо до 1000 строк каждого вида.")
+            self.feedback.show()
+            return
+        row = table.rowCount()
+        table.insertRow(row)
+        day = self.start.date().addDays(1)
+        if not day.isValid():
+            day = self.start.date()
+        editor = QDateEdit(day)
+        editor.setDisplayFormat("dd.MM.yyyy")
+        editor.setCalendarPopup(True)
+        editor.setMinimumDate(QDate(1, 1, 1))
+        editor.setMaximumDate(QDate(9999, 12, 31))
+        editor.setProperty("recordId", str(uuid4()))
+        editor.setAccessibleName(table.accessibleName() + ": дата")
+        amount = QLineEdit()
+        amount.setMaxLength(128 if table is self.movement_table else 32)
+        amount.setAccessibleName(table.accessibleName() + ": значение")
+        editor.installEventFilter(self)
+        editor.lineEdit().installEventFilter(self)
+        amount.installEventFilter(self)
+        table.setCellWidget(row, 0, editor)
+        table.setCellWidget(row, 1, amount)
+        table.setRowHeight(row, max(editor.sizeHint().height(), amount.sizeHint().height()) + 6)
+        table.selectRow(row)
+        amount.setFocus()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() in (QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress):
+            for table in (self.rate_table, self.movement_table):
+                for row in range(table.rowCount()):
+                    editor, field = table.cellWidget(row, 0), table.cellWidget(row, 1)
+                    if (
+                        watched is editor
+                        or watched is field
+                        or isinstance(editor, QDateEdit)
+                        and watched is editor.lineEdit()
+                    ):
+                        table.selectRow(row)
+                        break
+        return super().eventFilter(watched, event)
+
+    def _rates(self, start: date, initial_rate: Decimal) -> tuple[DepositRate, ...]:
+        result = [DepositRate(str(uuid4()), start, initial_rate)]
+        for row in range(self.rate_table.rowCount()):
+            editor, field = self.rate_table.cellWidget(row, 0), self.rate_table.cellWidget(row, 1)
+            assert isinstance(editor, QDateEdit) and isinstance(field, QLineEdit)
+            day = date(editor.date().year(), editor.date().month(), editor.date().day())
+            try:
+                result.append(
+                    DepositRate(
+                        editor.property("recordId"),
+                        day,
+                        Decimal(field.text().strip().replace(",", ".")),
+                    )
+                )
+            except (ValidationError, InvalidOperation):
+                raise ValidationError(
+                    f"Изменение ставки {row + 1}: проверьте точную годовую ставку."
+                ) from None
+        return tuple(result)
+
+    def _movements(self) -> tuple[DepositMovement, ...]:
+        result = []
+        for row in range(self.movement_table.rowCount()):
+            editor, field = (
+                self.movement_table.cellWidget(row, 0),
+                self.movement_table.cellWidget(row, 1),
+            )
+            assert isinstance(editor, QDateEdit) and isinstance(field, QLineEdit)
+            day = date(editor.date().year(), editor.date().month(), editor.date().day())
+            try:
+                result.append(
+                    DepositMovement(
+                        editor.property("recordId"),
+                        day,
+                        Money.parse(field.text().replace("−", "-"), RUB),
+                    )
+                )
+            except ValidationError as error:
+                raise ValidationError(f"Движение {row + 1}: {error}") from None
+        return tuple(result)
 
 
 class DepositForecastDialog(QDialog):
@@ -221,7 +378,7 @@ class DepositForecastDialog(QDialog):
         self.summary = _label(
             f"{value.opened_on:%d.%m.%Y} — {value.matures_on:%d.%m.%Y} · "
             f"Начальная сумма: {format_report_amount(value.initial.minor, currency)} "
-            f"{currency.code}\n"
+            f"{currency.code} · Сценарных движений: {len(value.movements)}\n"
             f"Прогноз процентов: {format_report_amount(report.interest_minor, currency)} "
             f"{currency.code} · "
             f"Остаток вклада: {format_report_amount(report.closing_minor, currency)} "
@@ -239,6 +396,7 @@ class DepositForecastDialog(QDialog):
             " · ".join(
                 [
                     rate_caption,
+                    dict((v, k) for k, v in BALANCES)[value.balance_moment],
                     dict((v, k) for k, v in BOUNDARIES)[value.boundary],
                     dict((v, k) for k, v in DAY_COUNTS)[value.day_count],
                     dict((v, k) for k, v in ROUNDINGS)[value.rounding],
@@ -273,7 +431,43 @@ class DepositForecastDialog(QDialog):
             ],
             right_columns=(1, 2, 3),
         )
-        layout.addWidget(self.table, 1)
+        tabs = QTabWidget()
+        tabs.addTab(self.table, "Выплаты")
+        conditions = QWidget()
+        conditions_layout = QVBoxLayout(conditions)
+        conditions_layout.addWidget(
+            _label(
+                "Неснижаемый остаток: "
+                + format_report_amount(value.minimum.minor, currency)
+                + " "
+                + currency.code
+                + ". Это введённые условия сценария."
+            )
+        )
+        self.rate_table = self._conditions_table(
+            ["Действует с", "Ставка · % годовых"],
+            [
+                [
+                    f"{v.effective_on:%d.%m.%Y}",
+                    format(v.annual_percent, "f").replace(".", ",") if v.annual_percent else "0",
+                ]
+                for v in value.rates
+            ],
+            "Версии ставок сценария",
+        )
+        self.movement_table = self._conditions_table(
+            ["Дата", "Сценарное движение · " + currency.code],
+            [
+                [f"{v.occurred_on:%d.%m.%Y}", format_report_amount(v.amount.minor, currency)]
+                for v in value.movements
+            ],
+            "Движения сценария",
+        )
+        conditions_layout.addWidget(self.rate_table, 1)
+        conditions_layout.addWidget(self.movement_table, 1)
+        tabs.addTab(conditions, "Введённые условия")
+        self.tabs = tabs
+        layout.addWidget(tabs, 1)
         layout.addWidget(
             _label(
                 "Это сценарий, не фактическая банковская выплата. Отдельно выплаченные "
@@ -285,3 +479,15 @@ class DepositForecastDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    @staticmethod
+    def _conditions_table(headers: list[str], rows: list[list[str]], name: str) -> QTableView:
+        table = QTableView()
+        table.setAccessibleName(name)
+        table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
+        table.verticalHeader().hide()
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        replace_table(table, headers, rows, right_columns=(1,))
+        return table

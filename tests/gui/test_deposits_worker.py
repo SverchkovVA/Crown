@@ -1,5 +1,5 @@
 import pytest
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QDate, QThread
 from PySide6.QtWidgets import QDialog
 
 from personal_finance.domain.models import MAX_MINOR
@@ -119,6 +119,51 @@ def test_unexpected_calculation_error_is_safe_and_preserves_form(qtbot, monkeypa
         return QDialog.DialogCode.Rejected
 
     monkeypatch.setattr(module, "forecast_deposit", fail)
+    monkeypatch.setattr(DepositScenarioDialog, "exec", choose)
+    window.request_deposit()
+    qtbot.waitUntil(lambda: not window._busy and len(forms) == 2, timeout=15000)
+
+
+def test_background_error_keeps_scenario_rows_and_ids(qtbot, monkeypatch):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    forms = []
+    ids = []
+
+    def choose(dialog):
+        forms.append(dialog)
+        if len(forms) == 1:
+            fill(dialog)
+            dialog.initial.setText(str(MAX_MINOR // 100) + ",07")
+            dialog.allow_topups.setChecked(True)
+            dialog._add_event(dialog.movement_table)
+            dialog.movement_table.cellWidget(0, 1).setText("0,01")
+            dialog._add_event(dialog.rate_table)
+            dialog.rate_table.cellWidget(0, 0).setDate(QDate(2026, 1, 3))
+            dialog.rate_table.cellWidget(0, 1).setText("12,5")
+            ids.extend(
+                [
+                    dialog.movement_table.cellWidget(0, 0).property("recordId"),
+                    dialog.rate_table.cellWidget(0, 0).property("recordId"),
+                ]
+            )
+            dialog._accept()
+            assert dialog.result_scenario is not None
+            return QDialog.DialogCode.Accepted
+        assert (
+            dialog is forms[0]
+            and dialog.movement_table.rowCount() == 1
+            and dialog.rate_table.rowCount() == 1
+        )
+        assert dialog.movement_table.cellWidget(0, 1).text() == "0,01"
+        assert dialog.rate_table.cellWidget(0, 1).text() == "12,5"
+        assert [
+            dialog.movement_table.cellWidget(0, 0).property("recordId"),
+            dialog.rate_table.cellWidget(0, 0).property("recordId"),
+        ] == ids
+        assert "диапазон" in dialog.feedback.text()
+        return QDialog.DialogCode.Rejected
+
     monkeypatch.setattr(DepositScenarioDialog, "exec", choose)
     window.request_deposit()
     qtbot.waitUntil(lambda: not window._busy and len(forms) == 2, timeout=15000)
