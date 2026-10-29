@@ -4,8 +4,8 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev25
-с движением средств — docs/stage-6-cashflow-report.md; доставка модуля:
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev26
+со сценарным вкладом — docs/stage-6-deposit-report.md; доставка модуля:
 docs/stage-5-frozen-ocr-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
@@ -144,3 +144,10 @@ spec и 24/26 шага самопроверки сохраняются. 31 но�
 точное отображение и отсутствие финансовой записи. Схема 0012, lock-зависимости
 и состав OCR-модуля прежние. Обычный CI-архив по-прежнему без OCR-бинарных файлов.
 [Фактический статус полного прогона](stage-6-cashflow-report.md).
+
+## Dev26: сценарный вклад
+
+Коллекция 1525; source/EXE-самопроверка 26 стандартных / 28 с закреплённым OCR.
+Новый forecast_deposit_read_only рассчитывает только вымышленный сценарий и
+проверяет точное округление/график/неизменность журнала. Схема 0012 и зависимости
+прежние. [Результаты полного прогона](stage-6-deposit-report.md).
