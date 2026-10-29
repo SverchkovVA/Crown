@@ -75,8 +75,17 @@ SHA-256 EXE совпал с полным прогоном. Локальный п
 artifacts/start-checked-ocr-dev23.cmd. Книга заранее не создана, пароля нет.
 
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40861356850) и
-[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40861364447) выполняются.
-Итог будет внесён после фактического завершения и сверки отчётов.
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40861364447) полностью успешны.
+Linux: по 1306 passed за 1519,72 / 1869,53 с; helpers/source-self-test прошли.
+Windows: по 1306 тестов, JUnit 1654,390 / 1514,242 с; сборка/source/EXE по 24 шага.
+Технические архивы сверены по SHA-256, версии, отпечатку, JUnit и всем шагам:
+- push 12893586526: artifacts/ci-dev23-push-1793273306754/verified-summary.json;
+- PR 12893660645: artifacts/ci-dev23-pr-1793273314437/verified-summary.json.
+Каталоги программы: 12893601297 / 12892828480; полные ZIP не скачивались.
+EXE CI SHA-256: push 3ebbb256fc12f851e37c7de7cab4fb3867a9d1d27130774f4803cbbf61688c2a;
+PR 23be205002c25f1a5a746f245d4744db4a17239d4d92695c669b59c6aab1c3e7.
+SHA-256 технических ZIP: push be37991aa28f703bb5ac44ab10a9a955acfd58416d998d919885d01d1cec8ae7;
+PR 5cb269a1adf7c41f29b808c1b0fb2e3046772da8ead7131789dfc57f93a676bc.
 Проверка PATH не заменяет чистую Windows и отключённую сеть.
 
 ## Осталось
