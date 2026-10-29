@@ -458,9 +458,22 @@ class MainWindow(QMainWindow):
     def _show_ocr_preview(self, preview: OcrCardPreview | OcrHistoryPreview) -> None:
         session = self.session
         universal = preview.bank_name == UNIVERSAL_PROFILE
-        allow = session is not None and session.ocr_importing is not None and not universal
-        if isinstance(preview, OcrHistoryPreview) and universal:
+        allow = (
+            session is not None
+            and session.ocr_importing is not None
+            and (not universal or session.ocr_importing.supports_universal)
+        )
+        schema_notice = (
+            "Для записи универсального OCR нужна новая схема книги. Создайте новую книгу "
+            "или восстановите проверенную резервную копию в новую папку. "
+            "При открытии исходная книга не обновляется."
+            if universal and session is not None and not allow
+            else ""
+        )
+        if isinstance(preview, OcrHistoryPreview) and universal and not allow:
             batch = OcrBatchDialog(preview, None, [], [], self._ocr_preferences, self)
+            if schema_notice:
+                batch.notice.setText(batch.notice.text() + " " + schema_notice)
             try:
                 batch.exec()
             finally:
@@ -505,6 +518,8 @@ class MainWindow(QMainWindow):
                 review_defaults=self._review_defaults(),
             )
         )
+        if schema_notice and isinstance(dialog, OcrPreviewDialog):
+            dialog.notice.setText(dialog.notice.text() + " " + schema_notice)
         requested: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
         try:
             if dialog.exec() == QDialog.DialogCode.Accepted:

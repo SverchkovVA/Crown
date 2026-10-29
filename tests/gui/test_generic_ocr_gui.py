@@ -20,6 +20,7 @@ from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, Gene
 from personal_finance.presentation.main_window import MainWindow
 from personal_finance.presentation.ocr_batch import OcrBatchDialog
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
+from tests.integration.test_generic_ocr_upgrade import schema11 as schema11
 from tests.ocr_fixtures import document, png_image
 from tests.unit.test_generic_ocr import layout
 
@@ -90,10 +91,12 @@ def test_bad_date_does_not_discard_other_row_edits(qtbot):
     assert "Строка 2" in dialog.notice.text()
 
 
-def test_main_window_universal_list_never_receives_financial_service(qtbot, session, monkeypatch):
+def test_main_window_legacy_universal_list_stays_without_financial_service(
+    qtbot, schema11, monkeypatch
+):
     window = MainWindow()
     qtbot.addWidget(window)
-    window.activate_session(session)
+    window.activate_session(schema11)
     seen = []
 
     def inspect(dialog):
@@ -104,7 +107,7 @@ def test_main_window_universal_list_never_receives_financial_service(qtbot, sess
 
     monkeypatch.setattr(OcrBatchDialog, "exec", inspect)
     window._show_ocr_preview(history_source())
-    assert seen == [None] and not session.ledger.operations()
+    assert seen == [None] and not schema11.ledger.operations()
     window.lock_book()
 
 

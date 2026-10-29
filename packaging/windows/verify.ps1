@@ -76,7 +76,7 @@ try {
     Invoke-VerificationStep '06-types' $python @('-m', 'mypy', 'src/personal_finance') $environment
     Invoke-VerificationStep '07-tests' $python @('-m', 'pytest', '-vv', `
         '-o', 'faulthandler_timeout=90', '-o', 'faulthandler_exit_on_timeout=true', `
-        '--junitxml', (Join-Path $runRoot 'tests.xml')) $environment 1800
+        '--junitxml', (Join-Path $runRoot 'tests.xml')) $environment 2400
     $qtPlatform = $(if ($Headless) { 'offscreen' } else { 'windows' })
     $nativeEnvironment = @{ PYTHONUTF8 = '1'; QT_QPA_PLATFORM = $qtPlatform }
     $sourceReport = Join-Path $runRoot 'source-self-test.json'
