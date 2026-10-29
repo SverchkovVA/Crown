@@ -11,7 +11,6 @@ from personal_finance.application.ocr_cards import (
     OcrHistoryPreview,
 )
 from personal_finance.application.ocr_review import OcrReviewDefaults
-from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ocr import LoadedOcrImage
 from personal_finance.domain.ocr_cards import CashDirection
 from personal_finance.domain.ocr_imports import make_ocr_evidence
@@ -121,8 +120,9 @@ def test_generic_single_card_has_no_financial_prepare_button(qtbot):
     assert dialog.prepare_button is None
     dialog.finish.click()
     assert dialog.reviewed is not None
-    with pytest.raises(ValidationError):
-        make_ocr_evidence(preview.source.source_sha256, UNIVERSAL_PROFILE, dialog.reviewed)
+    origin = make_ocr_evidence(preview.source.source_sha256, UNIVERSAL_PROFILE, dialog.reviewed)
+    assert origin.data["bank"] == UNIVERSAL_PROFILE
+    assert origin.data["adapter"].startswith("generic-")
 
 
 class Engine:
