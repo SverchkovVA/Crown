@@ -97,10 +97,11 @@ class ReportPeriodDialog(QDialog):
         self.result_scope: ReportScope | None = None
         self.result_period: ReportPeriod | None = None
         layout = QVBoxLayout(self)
-        layout.addWidget(
-            _label("Выберите период, банк, счёт и категорию. Валюты рассчитываются отдельно.")
+        self.description = _label(
+            "Выберите период, банк, счёт и категорию. Валюты рассчитываются отдельно."
         )
-        form = QFormLayout()
+        layout.addWidget(self.description)
+        form = self.form = QFormLayout()
         today = date.today()
         self.start = QDateEdit(QDate(today.year, today.month, 1))
         self.end = QDateEdit(QDate(today.year, today.month, today.day))

@@ -53,6 +53,7 @@ from personal_finance.application.ocr_cards import (
 from personal_finance.application.ocr_review import OcrReviewDefaults
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
+from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
@@ -80,6 +81,10 @@ from personal_finance.infrastructure.backup.container import (
 )
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
 from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
+from personal_finance.presentation.analytics_comparison import (
+    ComparisonPeriodDialog,
+    IncomeExpenseComparisonDialog,
+)
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -320,11 +325,13 @@ class MainWindow(QMainWindow):
         reports_menu = self.menuBar().addMenu("Отчёты")
         self.report_action = reports_menu.addAction("Доходы и расходы…", self.request_analytics)
         self.report_action.setEnabled(False)
+        self.compare_action = reports_menu.addAction("Сравнить периоды…", self.request_comparison)
+        self.compare_action.setEnabled(False)
 
     def _update_report_action(self) -> None:
-        self.report_action.setEnabled(
-            not self._busy and self.session is not None and self.session.ledger is not None
-        )
+        enabled = not self._busy and self.session is not None and self.session.ledger is not None
+        self.report_action.setEnabled(enabled)
+        self.compare_action.setEnabled(enabled)
 
     def request_analytics(self) -> None:
         session = self.session
@@ -381,6 +388,72 @@ class MainWindow(QMainWindow):
             dialog.exec()
         finally:
             dialog.charts.dispose()
+            dialog.deleteLater()
+
+    def request_comparison(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        with session.mutex:
+            session.ensure_open()
+            accounts = session.catalog.accounts()
+            categories = session.catalog.categories()
+            institutions = session.catalog.institutions()
+        dialog = ComparisonPeriodDialog(
+            self, accounts=accounts, categories=categories, institutions=institutions
+        )
+        try:
+            if (
+                dialog.exec() != QDialog.DialogCode.Accepted
+                or dialog.result_period is None
+                or dialog.result_second_period is None
+                or dialog.result_scope is None
+            ):
+                return
+            before, after, scope = (
+                dialog.result_period,
+                dialog.result_second_period,
+                dialog.result_scope,
+            )
+        finally:
+            dialog.deleteLater()
+        if self.session is session:
+            self.build_comparison(before, after, scope)
+
+    def build_comparison(
+        self, before: ReportPeriod, after: ReportPeriod, scope: ReportScope | None = None
+    ) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
+
+        def build() -> tuple[IncomeExpenseComparison, list[Category], list[Account]]:
+            with session.mutex:
+                return (
+                    analytics.compare(before, after, scope),
+                    session.catalog.categories(),
+                    session.catalog.accounts(),
+                )
+
+        self._job(
+            build,
+            lambda data: self._show_comparison(session, data),
+            "Сравнение доходов и расходов…",
+            defer_success=True,
+        )
+
+    def _show_comparison(
+        self,
+        session: VaultSession,
+        result: tuple[IncomeExpenseComparison, list[Category], list[Account]],
+    ) -> None:
+        if self.session is not session:
+            return
+        dialog = IncomeExpenseComparisonDialog(result[0], result[1], self, accounts=result[2])
+        try:
+            dialog.exec()
+        finally:
             dialog.deleteLater()
 
     def _review_defaults(self) -> OcrReviewDefaults:

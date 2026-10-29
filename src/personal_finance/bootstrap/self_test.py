@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from time import monotonic
 from typing import Any
@@ -42,6 +42,7 @@ from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
 from personal_finance.presentation.analytics import IncomeExpenseDialog
+from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -514,6 +515,48 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Отчёт изменил финансовые данные.")
+                with _step(report, "compare_income_expense_read_only"):
+                    before_comparison = ledger.operations(include_deleted=True)
+                    earlier = today - timedelta(days=1)
+                    comparison = Analytics(ledger, source.mutex, source.ensure_open).compare(
+                        ReportPeriod(earlier, earlier),
+                        ReportPeriod(today, today),
+                        ReportScope(frozenset({account.id}), frozenset({expenses[1]})),
+                    )
+                    if (
+                        comparison.before.operation_count != 0
+                        or comparison.after.operation_count != 1
+                        or len(comparison.totals) != 1
+                        or comparison.totals[0].expense_delta != 2000
+                        or comparison.totals[0].difference_delta != -2000
+                    ):
+                        raise RuntimeError(
+                            "Сравнение периодов потеряло общий отбор или точную разницу."
+                        )
+                    comparison_dialog = IncomeExpenseComparisonDialog(
+                        comparison, source.catalog.categories(), accounts=source.catalog.accounts()
+                    )
+                    try:
+                        model = comparison_dialog.total_table.model()
+                        if (
+                            model.data(model.index(1, 4)) != "+20,00"
+                            or comparison_dialog.before_button.isEnabled()
+                            or not comparison_dialog.after_button.isEnabled()
+                        ):
+                            raise RuntimeError(
+                                "В сравнении недоступна сумма или неверен переход к источникам."
+                            )
+                    finally:
+                        comparison_dialog.reject()
+                        comparison_dialog.deleteLater()
+                        QCoreApplication.sendPostedEvents(
+                            comparison_dialog, QEvent.Type.DeferredDelete
+                        )
+                    if (
+                        ledger.operations(include_deleted=True) != before_comparison
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Сравнение периодов изменило финансовые данные.")
                 with _step(report, "render_income_expense_charts"):
                     chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
                     try:

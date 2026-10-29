@@ -20,7 +20,7 @@ def test_report_records_actual_platform_and_keeps_manual_acceptance_pending(qapp
     assert report["runtime"]["frozen"] is False
     assert report["windows11_manual_acceptance"] == "pending"
     assert report["uses_real_financial_data"] is False
-    assert len(report["steps"]) == 23
+    assert len(report["steps"]) == 24
     assert report["steps"][-1]["id"] == "preview_ocr_without_engine"
     assert all(step["status"] == "passed" for step in report["steps"])
     raw = path.read_text()
