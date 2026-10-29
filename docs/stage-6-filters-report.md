@@ -33,15 +33,26 @@
   DPR 1: artifacts/analytics-scopes-native-f4a7a2ed17034826b0d5985ab34f941a/report.json;
   DPR 1,25: artifacts/analytics-scopes-native-ee6a6ec2d66f4a6e9b10ba1f15510918/report.json;
   DPR 1,5: artifacts/analytics-scopes-native-f70f4d0660b54775a20568258d20fd11/report.json.
+  Дополнительно DPR 3 на фактическом экране: окно 1120×602 при рабочей области
+  1280×672, элементы/кнопки доступны; artifacts/analytics-scopes-native-13f794d8a72748a09d8e1864280d8311/report.json.
   Это автоматическая нативная проверка; ручная приёмка не подменяется.
 
 ## Полный прогон
 
-Выполняется. Локальный Windows 11 / PowerShell 5.1:
+Локально пройден. Windows 11 / PowerShell 5.1: 1187 passed, JUnit 1009,259 с,
+без ошибок/пропусков; Ruff/формат/Mypy, сборка и обе самопроверки по 23 шага прошли.
+JSON/JUnit/версия/отпечаток отдельно сверены. Все 37 файлов лицензий 12 пакетов
+в каталоге EXE совпали с манифестом. EXE SHA-256:
+599c65dc473e439064c5eb50a14e771a14da7684fd2499b20ff9bdd5328edf2d.
+Дополнительный EXE-прогон из пустой папки без Python/uv в PATH — 23 шага:
+artifacts/dev19-without-python-path-e40142b3fe7f418bb1a98a76db342374.
+Это не проверка чистой Windows/полной автономности.
+Локальный отчёт:
 artifacts/windows-check-20261029-095431-37d639f2f33d43218ffd206970de3e6c/report.json.
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40832056561),
 [PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40832062655).
-До фактического завершения сборку/EXE и CI dev19 не считать прошедшими.
+Linux/Windows CI ещё выполняются. До их фактического завершения не считать
+полностью подтверждёнными удалённые проверки dev19.
 [Предыдущая dev18](stage-5-generic-financial-report.md),
 [backend dev17](stage-5-generic-storage-report.md), [графики dev16](stage-6-charts-report.md).
 
