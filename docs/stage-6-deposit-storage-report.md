@@ -49,15 +49,27 @@ round-trip условий через codec и тот же прогноз; чис
   Коллекция 1695; стандартная self-test 26, с OCR 28.
 
 Source с настоящим локальным OCR: 28 passed, artifacts/dev29-source-with-ocr.json.
-Полный прогон/EXE/оба CI новой dev29 ещё выполняются, не объявлены успешными.
+Полный локальный Windows 11 / PowerShell 5.1 пройден: 1695 тестов,
+ошибок/пропусков нет, JUnit 1169,695 с. Ruff/формат/Mypy, сборка и
+source/EXE по 26 шагов успешны. Локальный EXE SHA-256:
+49d69259a6ad469501c714fa88faaf208f252f2bccae81e1ac71749f7dda6021.
+Из пустой cwd с PATH только System32 EXE прошёл 26:
+artifacts/dev29-without-python-path-3194d5a0d3e44d4b8e2f4bc9311fd0fb.
+Скопированный полный каталог с автоматически найденным соседним OCR-модулем
+прошёл 28 шагов; в PATH нет Python/uv:
+artifacts/ocr-exe-check-dev29-f3e6d622806e4f99b784100ffc20bc3e.
+Проверены все 58 закреплённых файлов runtime и 37 файлов лицензий Python.
+Это не чистая Windows и не завершённый аудит лицензий OCR.
+Оба CI ещё выполняются, не объявлены успешными.
 Код: b85d67042d96f3ee4f1e2e666ef3c719c4628961.
 Локальный отчёт:
 artifacts/windows-check-20261029-201913-e84297d51b934daf92946d2c5a08a0b5/report.json.
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40920133772),
 [PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40920142132).
 source_sha256: b66b128bb30ef6423b92023d25daf0b1658a6982e379e09325d610910699ef4f.
-Готовый проверенный локальный комплект пока dev28:
-artifacts/start-checked-ocr-dev28.cmd. Книги/пароля заранее нет.
+Готовый проверенный локальный комплект dev29:
+artifacts/start-checked-ocr-dev29.cmd;
+artifacts/ready-ocr-dev29-46ec84079fb84280b33e059f1725791f/Локальная проверка/PersonalFinance. Книги/пароля заранее нет.
 
 ## Продолжение и приёмка
 
