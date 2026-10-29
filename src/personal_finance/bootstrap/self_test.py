@@ -57,6 +57,7 @@ from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
@@ -423,7 +424,7 @@ def self_test(
                     )
                 with _step(report, "persist_generic_ocr_audit"):
                     if (
-                        source.schema_revision != "0012"
+                        source.schema_revision != SCHEMA_HEAD
                         or source.ocr_importing is None
                         or not source.ocr_importing.supports_universal
                     ):
@@ -755,6 +756,31 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Прогноз процентов изменил финансовые данные.")
+                with _step(report, "persist_deposit_scenarios"):
+                    scenario_service = source.deposit_scenarios
+                    if scenario_service is None:
+                        raise RuntimeError("Хранилище сценариев недоступно в новой книге.")
+                    deposit_command = str(uuid4())
+                    saved_deposit = scenario_service.save(
+                        "Синтетический сценарий", restored_scenario, command_id=deposit_command
+                    )
+                    scenario_service.rename(
+                        saved_deposit.id, saved_deposit.revision_id, "Сценарий после уточнения"
+                    )
+                    expected_deposit_history = scenario_service.history(saved_deposit.id)
+                    if (
+                        len(expected_deposit_history) != 2
+                        or scenario_service.save(
+                            "Синтетический сценарий", restored_scenario, command_id=deposit_command
+                        )
+                        != saved_deposit
+                    ):
+                        raise RuntimeError("История или повтор сценарной команды не подтверждены.")
+                    if (
+                        ledger.operations(include_deleted=True) != before_deposit
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Сохранение сценария изменило финансовые данные.")
                 with _step(report, "render_income_expense_charts"):
                     chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
                     try:
@@ -801,6 +827,24 @@ def self_test(
                     )
                 try:
                     with _step(report, "check_restored_data"):
+                        restored_scenarios = restored.deposit_scenarios
+                        if (
+                            restored_scenarios is None
+                            or restored_scenarios.history(saved_deposit.id)
+                            != expected_deposit_history
+                        ):
+                            raise RuntimeError("История сценария не восстановлена.")
+                        if (
+                            restored_scenarios.save(
+                                "Синтетический сценарий",
+                                restored_scenario,
+                                command_id=deposit_command,
+                            )
+                            != saved_deposit
+                        ):
+                            raise RuntimeError(
+                                "После восстановления не распознан повтор команды сценария."
+                            )
                         if (
                             {a.id for a in restored.catalog.accounts()} != {account.id, reserve.id}
                             or restored.replica_id == original_replica

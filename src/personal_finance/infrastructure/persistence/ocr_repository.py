@@ -45,7 +45,7 @@ class SqlOcrRepository:
         data = selection.evidence.data
         if data["bank"] == UNIVERSAL_PROFILE and not self.supports_universal:
             raise ValidationError(
-                "Общий профиль OCR требует схему 0012. Восстановите копию в новую папку."
+                "Общий профиль OCR требует схему не ниже 0012. Восстановите копию в новую папку."
             )
         return digest_json(
             {

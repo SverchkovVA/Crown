@@ -58,13 +58,23 @@ def test_open_schema10_keeps_original_and_restore_adds_only_new_workflow(old10, 
         backup = create_backup(opened, tmp_path / "old.pfbackup", BACKUP_PASSWORD)
         restored, _ = restore_backup(backup, tmp_path / "new.pfvault", BACKUP_PASSWORD, PASSWORD)
         try:
-            assert restored.schema_revision == "0012" and restored.ocr_settings is not None
+            assert restored.schema_revision == "0013" and restored.ocr_settings is not None
             assert (
                 restored.ocr_importing.supports_batches and restored.catalog.institutions() == banks
             )
             with restored.engine.connect() as connection:
                 current = guards(connection)
-            assert all(current[name] == value for name, value in previous.items())
+            assert all(
+                current[name] == value
+                for name, value in previous.items()
+                if name != "revision_payload_valid"
+            )
+            assert "deposit_scenario_revisions" in current["revision_payload_valid"]
+            suffix = ") BEGIN SELECT RAISE(ABORT, 'missing typed payload'); END"
+            assert (
+                previous["revision_payload_valid"].removesuffix(suffix)
+                in current["revision_payload_valid"]
+            )
             restored.check_integrity()
         finally:
             restored.close()

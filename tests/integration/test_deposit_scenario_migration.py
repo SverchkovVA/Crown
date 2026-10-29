@@ -12,7 +12,7 @@ from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import CategoryKind, Money
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.infrastructure.persistence.migration_runner import (
-    SCHEMA_HEAD,
+    initialize_schema,
     supported_schema,
 )
 from personal_finance.infrastructure.persistence.migrations.versions import (
@@ -23,10 +23,14 @@ from tests.integration.test_generic_ocr_migration import populate, staging_conne
 
 
 @pytest.fixture
-def session(tmp_path):
-    value, _ = vault.create_vault(
-        tmp_path / "synthetic12.pfvault", "Синтетическая книга 0012", PASSWORD
-    )
+def session(tmp_path, monkeypatch):
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            vault, "initialize_schema", lambda engine: initialize_schema(engine, target="0012")
+        )
+        value, _ = vault.create_vault(
+            tmp_path / "synthetic12.pfvault", "Синтетическая книга 0012", PASSWORD
+        )
     try:
         yield value
     finally:
@@ -170,10 +174,13 @@ def test_component_downgrade_refused():
         candidate.downgrade()
 
 
-def test_default_head_unchanged_and_reopen_does_not_apply_candidate(tmp_path):
-    assert SCHEMA_HEAD == "0012"
+def test_legacy_reopen_does_not_apply_new_schema(tmp_path, monkeypatch):
     folder = tmp_path / "no-auto.pfvault"
-    session, _ = vault.create_vault(folder, "Вымышленная книга", PASSWORD)
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            vault, "initialize_schema", lambda engine: initialize_schema(engine, target="0012")
+        )
+        session, _ = vault.create_vault(folder, "Вымышленная книга", PASSWORD)
     assert supported_schema(session.engine) == "0012"
     with session.engine.connect() as connection:
         assert not connection.exec_driver_sql(

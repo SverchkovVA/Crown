@@ -21,10 +21,16 @@ from tests.unit.test_deposits import scenario
 
 
 @pytest.fixture
-def storage(tmp_path):
-    session, _ = vault.create_vault(
-        tmp_path / "synthetic-scenarios.pfvault", "Синтетические сценарии", PASSWORD
-    )
+def storage(tmp_path, monkeypatch):
+    from personal_finance.infrastructure.persistence.migration_runner import initialize_schema
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            vault, "initialize_schema", lambda engine: initialize_schema(engine, target="0012")
+        )
+        session, _ = vault.create_vault(
+            tmp_path / "synthetic-scenarios.pfvault", "Синтетические сценарии", PASSWORD
+        )
     with staging_connection(session.engine):
         v0013_deposit_scenarios.upgrade()
     repository = SqlDepositScenariosRepository(

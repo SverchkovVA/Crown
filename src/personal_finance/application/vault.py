@@ -15,6 +15,7 @@ from sqlcipher3 import dbapi2 as sqlcipher
 
 from personal_finance.application.catalog import Catalog, utc_now
 from personal_finance.application.classification import Classification
+from personal_finance.application.deposit_scenarios import DepositScenarios
 from personal_finance.application.exporting import Exporting
 from personal_finance.application.importing import Importing
 from personal_finance.application.ledger import Ledger
@@ -32,6 +33,9 @@ from personal_finance.infrastructure.persistence.database import (
     connect_database,
     encrypted_snapshot,
     make_engine,
+)
+from personal_finance.infrastructure.persistence.deposit_scenarios_repository import (
+    SqlDepositScenariosRepository,
 )
 from personal_finance.infrastructure.persistence.export_repository import SqlExportRepository
 from personal_finance.infrastructure.persistence.import_repository import SqlImportRepository
@@ -118,16 +122,39 @@ class VaultSession:
                     self.replica_id,
                     self.mutex,
                     supports_splits=self.schema_revision
-                    in ("0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012"),
+                    in (
+                        "0004",
+                        "0005",
+                        "0006",
+                        "0007",
+                        "0008",
+                        "0009",
+                        "0010",
+                        "0011",
+                        "0012",
+                        "0013",
+                    ),
                     supports_refunds=self.schema_revision
-                    in ("0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012"),
+                    in ("0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"),
                     supports_periods=self.schema_revision
-                    in ("0006", "0007", "0008", "0009", "0010", "0011", "0012"),
+                    in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"),
                     supports_tags=self.schema_revision
-                    in ("0007", "0008", "0009", "0010", "0011", "0012"),
+                    in ("0007", "0008", "0009", "0010", "0011", "0012", "0013"),
                 )
                 if self.schema_revision
-                in ("0003", "0004", "0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012")
+                in (
+                    "0003",
+                    "0004",
+                    "0005",
+                    "0006",
+                    "0007",
+                    "0008",
+                    "0009",
+                    "0010",
+                    "0011",
+                    "0012",
+                    "0013",
+                )
                 else None
             )
             self.ledger = Ledger(ledger_repository) if ledger_repository is not None else None
@@ -144,20 +171,21 @@ class VaultSession:
             )
             self.importing = (
                 Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
-                if self.schema_revision in ("0008", "0009", "0010", "0011", "0012")
+                if self.schema_revision in ("0008", "0009", "0010", "0011", "0012", "0013")
                 and ledger_repository is not None
                 else None
             )
             self.periods = (
                 Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision in ("0006", "0007", "0008", "0009", "0010", "0011", "0012")
+                if self.schema_revision
+                in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013")
                 else None
             )
             self.organization = (
                 Organization(
                     SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision in ("0007", "0008", "0009", "0010", "0011", "0012")
+                if self.schema_revision in ("0007", "0008", "0009", "0010", "0011", "0012", "0013")
                 else None
             )
             self.classification = (
@@ -166,7 +194,7 @@ class VaultSession:
                     self.mutex,
                     self.ensure_open,
                 )
-                if self.schema_revision in ("0009", "0010", "0011", "0012")
+                if self.schema_revision in ("0009", "0010", "0011", "0012", "0013")
                 else None
             )
             ocr_repository = (
@@ -175,10 +203,14 @@ class VaultSession:
                     book_id,
                     self.mutex,
                     ledger_repository,
-                    supports_batches=self.schema_revision in ("0011", "0012"),
-                    supports_universal=self.schema_revision == "0012",
+                    supports_batches=self.schema_revision in ("0011", "0012", "0013"),
+                    supports_universal=self.schema_revision
+                    in (
+                        "0012",
+                        "0013",
+                    ),
                 )
-                if self.schema_revision in ("0010", "0011", "0012")
+                if self.schema_revision in ("0010", "0011", "0012", "0013")
                 and ledger_repository is not None
                 else None
             )
@@ -187,7 +219,14 @@ class VaultSession:
             )
             self.ocr_settings = (
                 SqlOcrSettings(self.engine, book_id, self.mutex, ocr_repository)
-                if self.schema_revision in ("0011", "0012") and ocr_repository is not None
+                if self.schema_revision in ("0011", "0012", "0013") and ocr_repository is not None
+                else None
+            )
+            self.deposit_scenarios = (
+                DepositScenarios(
+                    SqlDepositScenariosRepository(self.engine, book_id, self.replica_id, self.mutex)
+                )
+                if self.schema_revision == "0013"
                 else None
             )
         except Exception:
@@ -234,6 +273,8 @@ class VaultSession:
                 self.ocr_importing.check_integrity()
             if self.ocr_settings is not None:
                 self.ocr_settings.check_integrity()
+            if self.deposit_scenarios is not None:
+                self.deposit_scenarios.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:

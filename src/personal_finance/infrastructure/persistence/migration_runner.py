@@ -9,7 +9,7 @@ from sqlalchemy import Engine
 
 from personal_finance.domain.errors import UnsupportedFormat, VaultError
 
-SCHEMA_HEAD = "0012"
+SCHEMA_HEAD = "0013"
 SUPPORTED_SCHEMAS = (
     "0002",
     "0003",
@@ -22,6 +22,7 @@ SUPPORTED_SCHEMAS = (
     "0010",
     "0011",
     "0012",
+    "0013",
 )
 
 
