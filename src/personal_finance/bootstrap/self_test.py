@@ -14,8 +14,8 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QCoreApplication, QDate, QEvent, Qt
+from PySide6.QtWidgets import QApplication, QDateEdit, QLineEdit
 
 from personal_finance.application.analytics import Analytics
 from personal_finance.application.importing import Importing
@@ -58,7 +58,7 @@ from personal_finance.infrastructure.importing.statements import CsvMapping
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
-from personal_finance.presentation.deposits import DepositForecastDialog
+from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -656,6 +656,62 @@ def self_test(
                         QCoreApplication.sendPostedEvents(
                             deposit_dialog, QEvent.Type.DeferredDelete
                         )
+                    scenario_form = DepositScenarioDialog()
+                    try:
+                        scenario_form.initial.setText("100,00")
+                        scenario_form.rate.setText("365")
+                        scenario_form.start.setDate(QDate(2026, 1, 1))
+                        scenario_form.end.setDate(QDate(2026, 1, 4))
+                        scenario_form.day_count.setCurrentIndex(1)
+                        scenario_form.allow_topups.setChecked(True)
+                        scenario_form.allow_withdrawals.setChecked(True)
+                        scenario_form._add_event(scenario_form.rate_table)
+                        rate_date_editor = scenario_form.rate_table.cellWidget(0, 0)
+                        rate_value_field = scenario_form.rate_table.cellWidget(0, 1)
+                        if not isinstance(rate_date_editor, QDateEdit) or not isinstance(
+                            rate_value_field, QLineEdit
+                        ):
+                            raise RuntimeError("Поля изменения ставки недоступны.")
+                        rate_date_editor.setDate(QDate(2026, 1, 3))
+                        rate_value_field.setText("730")
+                        for row, day, amount_text in [(0, 2, "+100,00"), (1, 4, "−25,00")]:
+                            scenario_form._add_event(scenario_form.movement_table)
+                            movement_date_editor = scenario_form.movement_table.cellWidget(row, 0)
+                            movement_value_field = scenario_form.movement_table.cellWidget(row, 1)
+                            if not isinstance(movement_date_editor, QDateEdit) or not isinstance(
+                                movement_value_field, QLineEdit
+                            ):
+                                raise RuntimeError("Поля сценарного движения недоступны.")
+                            movement_date_editor.setDate(QDate(2026, 1, day))
+                            movement_value_field.setText(amount_text)
+                        scenario_form._accept()
+                        if scenario_form.result_scenario is None:
+                            raise RuntimeError("Не подготовлены сценарные ставки и движения.")
+                        changed_deposit = forecast_deposit(scenario_form.result_scenario)
+                        if (
+                            changed_deposit.interest_minor != 950
+                            or changed_deposit.closing_minor != 17500
+                        ):
+                            raise RuntimeError("Сценарные изменения дали неверный прогноз.")
+                        changed_dialog = DepositForecastDialog(changed_deposit)
+                        try:
+                            if (
+                                changed_dialog.rate_table.model().rowCount() != 2
+                                or changed_dialog.movement_table.model().rowCount() != 2
+                                or changed_dialog.model.data(changed_dialog.model.index(0, 1))
+                                != "9,50"
+                            ):
+                                raise RuntimeError("Условия сценария недоступны в результате.")
+                        finally:
+                            changed_dialog.reject()
+                            changed_dialog.deleteLater()
+                            QCoreApplication.sendPostedEvents(
+                                changed_dialog, QEvent.Type.DeferredDelete
+                            )
+                    finally:
+                        scenario_form.reject()
+                        scenario_form.deleteLater()
+                        QCoreApplication.sendPostedEvents(scenario_form, QEvent.Type.DeferredDelete)
                     if (
                         ledger.operations(include_deleted=True) != before_deposit
                         or _balances(source) != expected_balances
