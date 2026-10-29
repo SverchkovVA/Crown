@@ -10,6 +10,7 @@ from personal_finance.domain.analytics import (
     ReportScope,
     income_expense_report,
 )
+from personal_finance.domain.analytics_cashflow import CashFlowReport, cash_flow_report
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison, compare_periods
 from personal_finance.domain.ledger import Operation
 
@@ -25,6 +26,9 @@ class Analytics:
         self, before: ReportPeriod, after: ReportPeriod, scope: ReportScope | None = None
     ) -> IncomeExpenseComparison:
         return compare_periods(self._snapshot(), before, after, scope)
+
+    def cash_flow(self, period: ReportPeriod, scope: ReportScope | None = None) -> CashFlowReport:
+        return cash_flow_report(self._snapshot(), period, scope)
 
     def _snapshot(self) -> tuple[Operation, ...]:
         with self._mutex:
