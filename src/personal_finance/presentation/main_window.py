@@ -345,9 +345,13 @@ class MainWindow(QMainWindow):
             return
         analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
 
-        def build() -> tuple[IncomeExpenseReport, list[Category]]:
+        def build() -> tuple[IncomeExpenseReport, list[Category], list[Account]]:
             with session.mutex:
-                return analytics.report(period), session.catalog.categories()
+                return (
+                    analytics.report(period),
+                    session.catalog.categories(),
+                    session.catalog.accounts(),
+                )
 
         self._job(
             build,
@@ -357,11 +361,13 @@ class MainWindow(QMainWindow):
         )
 
     def _show_analytics(
-        self, session: VaultSession, result: tuple[IncomeExpenseReport, list[Category]]
+        self,
+        session: VaultSession,
+        result: tuple[IncomeExpenseReport, list[Category], list[Account]],
     ) -> None:
         if self.session is not session:
             return
-        dialog = IncomeExpenseDialog(result[0], result[1], self)
+        dialog = IncomeExpenseDialog(result[0], result[1], self, accounts=result[2])
         try:
             dialog.exec()
         finally:

@@ -48,7 +48,11 @@ class IncomeExpenseReport:
     totals: tuple[FlowTotals, ...]
     categories: tuple[CategoryFlow, ...]
     months: tuple[MonthlyFlow, ...]
-    operation_references: tuple[tuple[str, str], ...]
+    sources: tuple[Operation, ...]
+
+    @property
+    def operation_references(self) -> tuple[tuple[str, str], ...]:
+        return tuple((value.id, value.revision_id) for value in self.sources)
 
     @property
     def operation_count(self) -> int:
@@ -65,7 +69,7 @@ def income_expense_report(
     months: dict[tuple[date, Currency], list[int]] = {}
     currencies: dict[str, Currency] = {}
     seen: set[str] = set()
-    references = []
+    sources = []
     for operation in operations:
         if not isinstance(operation, Operation):
             raise ValidationError("Отчёт принимает только финансовые операции.")
@@ -86,7 +90,7 @@ def income_expense_report(
         if currency.code in currencies and currencies[currency.code] != currency:
             raise ValidationError("Определения одной валюты в отчёте различаются.")
         currencies[currency.code] = currency
-        references.append((operation.id, operation.revision_id))
+        sources.append(operation)
         month = value.occurred_on.replace(day=1)
         for posting in postings:
             if posting.reference_id is None:
@@ -115,5 +119,51 @@ def income_expense_report(
                 months.items(), key=lambda item: (item[0][0], item[0][1].code)
             )
         ),
-        tuple(sorted(references)),
+        tuple(sorted(sources, key=lambda value: value.id)),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class OperationFlow:
+    operation: Operation
+    totals: FlowTotals
+
+
+def report_sources(
+    report: IncomeExpenseReport,
+    currency: Currency,
+    *,
+    category_id: str | None = None,
+    month: date | None = None,
+) -> tuple[OperationFlow, ...]:
+    """Вклад исходных версий в выбранную часть того же снимка, без нового чтения БД."""
+    if currency not in {value.currency for value in report.totals}:
+        raise ValidationError("Валюты нет в этом отчёте.")
+    if category_id is not None:
+        require_identifier(category_id)
+    if month is not None and (type(month) is not date or month.day != 1):
+        raise ValidationError("Месяц отчёта задаётся первым календарным днём.")
+    result = []
+    for source in report.sources:
+        value = source.draft
+        if value.amount.currency != currency or (
+            month is not None and value.occurred_on.replace(day=1) != month
+        ):
+            continue
+        income = expense = 0
+        matched = False
+        for posting in value.postings():
+            if posting.role not in (LedgerRole.INCOME, LedgerRole.EXPENSE):
+                continue
+            if category_id is not None and posting.reference_id != category_id:
+                continue
+            matched = True
+            if posting.role == LedgerRole.INCOME:
+                income -= posting.amount.minor
+            else:
+                expense += posting.amount.minor
+        if matched:
+            result.append(OperationFlow(source, FlowTotals(currency, income, expense)))
+    return tuple(
+        sorted(result, key=lambda row: (row.operation.draft.occurred_on, row.operation.id))
     )

@@ -2,23 +2,34 @@
 
 from datetime import date
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, QModelIndex, QSignalBlocker, Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
+    QPushButton,
+    QScrollArea,
     QTableView,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from personal_finance.domain.analytics import FlowTotals, IncomeExpenseReport, ReportPeriod
+from personal_finance.domain.analytics import (
+    FlowTotals,
+    IncomeExpenseReport,
+    OperationFlow,
+    ReportPeriod,
+    report_sources,
+)
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.models import Category, Currency
+from personal_finance.domain.ledger import OPERATION_LABELS
+from personal_finance.domain.models import Account, Category, Currency
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tables import replace_table
 
@@ -91,15 +102,110 @@ class ReportPeriodDialog(QDialog):
         self.accept()
 
 
+class OperationSourceDialog(QDialog):
+    def __init__(
+        self,
+        flow: OperationFlow,
+        names: dict[str, str],
+        accounts: dict[str, str],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.flow = flow
+        self.fields: dict[str, QLabel] = {}
+        self.setWindowTitle("Операция из снимка отчёта")
+        self.resize(720, 560)
+        if (screen := self.screen()) is not None:
+            available = screen.availableGeometry()
+            self.resize(min(720, available.width() - 50), min(560, available.height() - 70))
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            _label(
+                "Записанная версия на момент формирования отчёта. "
+                "Вклад в отбор может быть частью полной суммы операции."
+            )
+        )
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        form = QFormLayout(content)
+        value = flow.operation.draft
+        currency = value.amount.currency
+
+        def field(title: str, text: str) -> None:
+            label = _label(text)
+            label.setTextInteractionFlags(
+                Qt.TextInteractionFlag.TextSelectableByMouse
+                | Qt.TextInteractionFlag.TextSelectableByKeyboard
+            )
+            self.fields[title] = label
+            form.addRow(title, label)
+
+        def money(minor: int) -> str:
+            return format_report_amount(minor, currency) + " " + currency.code
+
+        field("Дата", f"{value.occurred_on:%d.%m.%Y}")
+        field("Вид", OPERATION_LABELS[value.kind])
+        field("Счёт", accounts.get(value.account_id, "Счёт недоступен"))
+        if value.destination_account_id:
+            field("Счёт получения", accounts.get(value.destination_account_id, "Счёт недоступен"))
+        field("Сумма операции", money(value.amount.minor))
+        if value.fee.minor:
+            field("Комиссия", money(value.fee.minor))
+        field("Доход в отборе", money(flow.totals.income_minor))
+        field("Расход в отборе", money(flow.totals.expense_minor))
+        parts = [
+            names.get(part.category_id, "Недоступная категория") + ": " + money(part.amount.minor)
+            for part in value.category_allocations()
+        ]
+        if value.fee_category_id:
+            parts.append(
+                "Комиссия · "
+                + names.get(value.fee_category_id, "Недоступная категория")
+                + ": "
+                + money(value.fee.minor)
+            )
+        if parts:
+            field("Категории операции", "\n".join(parts))
+        field("Примечание", value.note or "—")
+        scroll.setWidget(content)
+        layout.addWidget(scroll, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+
 class IncomeExpenseDialog(QDialog):
     def __init__(
-        self, report: IncomeExpenseReport, categories: list[Category], parent: QWidget | None = None
+        self,
+        report: IncomeExpenseReport,
+        categories: list[Category],
+        parent: QWidget | None = None,
+        *,
+        accounts: list[Account] | None = None,
     ) -> None:
         super().__init__(parent)
         self.report = report
+        self._names = {c.id: category_title(c, categories) for c in categories}
+        self._accounts = {a.id: a.name for a in accounts or []}
+        self._category_order = sorted(
+            report.categories,
+            key=lambda v: (v.totals.currency.code, self._names.get(v.category_id, "").casefold()),
+        )
+        self._currencies = {value.currency.code: value.currency for value in report.totals}
+        self._source_category: str | None = None
+        self._source_month: date | None = None
+        self._source_rows: tuple[OperationFlow, ...] = ()
         self.setWindowTitle("Доходы и расходы")
-        self.resize(1020, 650)
-        self.setMinimumSize(760, 480)
+        self.resize(1120, 700)
+        self.setMinimumSize(800, 500)
+        if (screen := self.screen()) is not None:
+            available = screen.availableGeometry()
+            self.resize(
+                min(1120, max(800, available.width() - 50)),
+                min(700, max(500, available.height() - 70)),
+            )
         layout = QVBoxLayout(self)
         layout.addWidget(
             _label(
@@ -114,54 +220,213 @@ class IncomeExpenseDialog(QDialog):
                 "Разница = доходы − расходы."
             )
         )
-        tabs = QTabWidget()
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs, 1)
         self.summary_table = self._table(
-            tabs,
             "Итоги",
             ["Валюта", "Доходы", "Расходы с возвратами", "Разница"],
             [self._total_row(v) for v in report.totals],
             (1, 2, 3),
         )
-        names = {c.id: category_title(c, categories) for c in categories}
         self.category_table = self._table(
-            tabs,
             "Категории",
             ["Категория", "Валюта", "Доходы", "Расходы с возвратами"],
             [
                 [
-                    names.get(v.category_id, "Недоступная категория"),
+                    self._names.get(v.category_id, "Недоступная категория"),
                     v.totals.currency.code,
                     format_report_amount(v.totals.income_minor, v.totals.currency),
                     format_report_amount(v.totals.expense_minor, v.totals.currency),
                 ]
-                for v in sorted(
-                    report.categories,
-                    key=lambda v: (v.totals.currency.code, names.get(v.category_id, "").casefold()),
-                )
+                for v in self._category_order
             ],
             (2, 3),
         )
         self.month_table = self._table(
-            tabs,
             "По месяцам",
             ["Месяц", "Валюта", "Доходы", "Расходы с возвратами", "Разница"],
             [[f"{v.month:%m.%Y}", *self._total_row(v.totals)] for v in report.months],
             (2, 3, 4),
         )
-        layout.addWidget(tabs, 1)
+        self.source_panel = QWidget()
+        sources = QVBoxLayout(self.source_panel)
+        bar = QHBoxLayout()
+        bar.addWidget(_label("Валюта"))
+        self.source_currency = QComboBox()
+        self.source_currency.setAccessibleName("Валюта источников отчёта")
+        for code in self._currencies:
+            self.source_currency.addItem(code, code)
+        bar.addWidget(self.source_currency)
+        bar.addStretch()
+        self.source_reset = QPushButton("Все операции периода")
+        self.source_reset.clicked.connect(self._clear_source_filter)
+        bar.addWidget(self.source_reset)
+        sources.addLayout(bar)
+        self.source_context = _label("")
+        sources.addWidget(self.source_context)
+        self.source_table = self._view([], [], ())
+        self.source_table.setAccessibleName("Операции снимка отчёта")
+        sources.addWidget(self.source_table, 1)
+        self.source_totals = _label("")
+        sources.addWidget(self.source_totals)
+        sources.addWidget(
+            _label(
+                "Доход и расход в отборе показывают только выбранную часть. "
+                "Полная сумма операции приведена отдельно; для перевода в расход входит комиссия."
+            )
+        )
+        self.tabs.addTab(self.source_panel, "Операции")
         self.notice = _label(
             "В выбранном периоде нет действующих доходов, расходов, возвратов или комиссий."
             if not report.operation_count
             else "Снимок текущих записанных операций. "
             "После изменения книги сформируйте отчёт заново. "
-            "В таблице месяцев показаны месяцы с движениями; отрицательный расход означает "
-            "превышение возвратов в этом периоде."
+            "Месяцы без движений не показаны; отрицательный расход означает превышение возвратов. "
+            "Выберите строку и откройте её операции кнопкой или двойным щелчком."
         )
         layout.addWidget(self.notice)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        self.source_button = QPushButton("Операции выбранной строки")
+        self.source_button.clicked.connect(self._sources_clicked)
+        buttons.addButton(self.source_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.source_details = QPushButton("Поля выбранной операции")
+        self.source_details.clicked.connect(self.show_source_details)
+        buttons.addButton(self.source_details, QDialogButtonBox.ButtonRole.ActionRole)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self.summary_table.doubleClicked.connect(self._summary_sources)
+        self.category_table.doubleClicked.connect(self._category_sources)
+        self.month_table.doubleClicked.connect(self._month_sources)
+        self.source_table.doubleClicked.connect(self.show_source_details)
+        for table in (self.summary_table, self.category_table, self.month_table):
+            table.selectionModel().selectionChanged.connect(self._update_actions)
+        self.tabs.currentChanged.connect(self._update_actions)
+        self.source_currency.currentIndexChanged.connect(self._render_sources)
+        self._render_sources()
+        self._update_actions()
+
+    def _select_sources(
+        self, code: str, category_id: str | None = None, month: date | None = None
+    ) -> None:
+        with QSignalBlocker(self.source_currency):
+            self.source_currency.setCurrentIndex(self.source_currency.findData(code))
+        self._source_category, self._source_month = category_id, month
+        self._render_sources()
+        self.tabs.setCurrentWidget(self.source_panel)
+
+    def _summary_sources(self, index: QModelIndex) -> None:
+        if index.isValid():
+            self._select_sources(self.report.totals[index.row()].currency.code)
+
+    def _category_sources(self, index: QModelIndex) -> None:
+        if index.isValid():
+            value = self._category_order[index.row()]
+            self._select_sources(value.totals.currency.code, value.category_id)
+
+    def _month_sources(self, index: QModelIndex) -> None:
+        if index.isValid():
+            value = self.report.months[index.row()]
+            self._select_sources(value.totals.currency.code, month=value.month)
+
+    def _sources_clicked(self) -> None:
+        current = self.tabs.currentWidget()
+        if current is self.summary_table:
+            self._summary_sources(self.summary_table.currentIndex())
+        elif current is self.category_table:
+            self._category_sources(self.category_table.currentIndex())
+        elif current is self.month_table:
+            self._month_sources(self.month_table.currentIndex())
+
+    def _clear_source_filter(self) -> None:
+        self._source_category = self._source_month = None
+        self._render_sources()
+
+    def _render_sources(self) -> None:
+        code = self.source_currency.currentData()
+        currency = self._currencies.get(code)
+        self._source_rows = (
+            report_sources(
+                self.report, currency, category_id=self._source_category, month=self._source_month
+            )
+            if currency
+            else ()
+        )
+        context = (
+            self._names.get(self._source_category, "Недоступная категория")
+            if self._source_category
+            else f"{self._source_month:%m.%Y}"
+            if self._source_month
+            else "Весь период"
+        )
+        self.source_context.setText(context + (" · " + code if code else " · Нет данных"))
+        rows = []
+        for row in self._source_rows:
+            value = row.operation.draft
+            rows.append(
+                [
+                    f"{value.occurred_on:%d.%m.%Y}",
+                    OPERATION_LABELS[value.kind],
+                    self._accounts.get(value.account_id, "Счёт недоступен"),
+                    format_report_amount(value.amount.minor, value.amount.currency)
+                    + " "
+                    + value.amount.currency.code,
+                    format_report_amount(row.totals.income_minor, row.totals.currency),
+                    format_report_amount(row.totals.expense_minor, row.totals.currency),
+                    value.note,
+                ]
+            )
+        replace_table(
+            self.source_table,
+            [
+                "Дата",
+                "Вид",
+                "Счёт",
+                "Сумма операции",
+                "Доход в отборе",
+                "Расход в отборе",
+                "Примечание",
+            ],
+            rows,
+            right_columns=(3, 4, 5),
+            selection_changed=self._update_actions,
+        )
+        if rows:
+            self.source_table.selectRow(0)
+        if currency:
+            income = sum(v.totals.income_minor for v in self._source_rows)
+            expense = sum(v.totals.expense_minor for v in self._source_rows)
+            self.source_totals.setText(
+                f"Операций: {len(rows)} · "
+                f"Доход: {format_report_amount(income, currency)} {code} · "
+                f"Расход: {format_report_amount(expense, currency)} {code}"
+            )
+        else:
+            self.source_totals.setText("Нет операций для просмотра.")
+        self.source_reset.setEnabled(bool(self._currencies))
+        self._update_actions()
+
+    def _update_actions(self) -> None:
+        table = self.tabs.currentWidget()
+        self.source_button.setEnabled(
+            table in (self.summary_table, self.category_table, self.month_table)
+            and table.currentIndex().isValid()
+        )
+        self.source_details.setEnabled(
+            table is self.source_panel and self.source_table.currentIndex().isValid()
+        )
+
+    def show_source_details(self) -> None:
+        index = self.source_table.currentIndex()
+        if not index.isValid() or not 0 <= index.row() < len(self._source_rows):
+            return
+        dialog = OperationSourceDialog(
+            self._source_rows[index.row()], self._names, self._accounts, self
+        )
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     @staticmethod
     def _total_row(value: FlowTotals) -> list[str]:
@@ -173,19 +438,25 @@ class IncomeExpenseDialog(QDialog):
         ]
 
     @staticmethod
-    def _table(
-        tabs: QTabWidget,
-        title: str,
-        headers: list[str],
-        rows: list[list[str]],
-        right_columns: tuple[int, ...],
+    def _view(
+        headers: list[str], rows: list[list[str]], right_columns: tuple[int, ...]
     ) -> QTableView:
         table = QTableView()
-        table.setAccessibleName(title + " отчёта")
         replace_table(table, headers, rows, right_columns=right_columns)
+        table.setWordWrap(False)
+        table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setStretchLastSection(True)
-        tabs.addTab(table, title)
+        if rows:
+            table.selectRow(0)
+        return table
+
+    def _table(
+        self, title: str, headers: list[str], rows: list[list[str]], right_columns: tuple[int, ...]
+    ) -> QTableView:
+        table = self._view(headers, rows, right_columns)
+        table.setAccessibleName(title + " отчёта")
+        self.tabs.addTab(table, title)
         return table

@@ -450,6 +450,15 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             != "22,23"
                         ):
                             raise RuntimeError("Точная сумма отчёта недоступна в интерфейсе.")
+                        report_dialog._select_sources("RUB", expenses[1])
+                        selected_sources = report_dialog._source_rows
+                        if (
+                            len(selected_sources) != 1
+                            or selected_sources[0].operation.id != spending.id
+                            or selected_sources[0].operation.draft.amount.minor != 3000
+                            or selected_sources[0].totals.expense_minor != 2000
+                        ):
+                            raise RuntimeError("Не совпал вклад части исходной операции в отчёт.")
                     finally:
                         report_dialog.deleteLater()
                         QCoreApplication.sendPostedEvents(report_dialog, QEvent.Type.DeferredDelete)
