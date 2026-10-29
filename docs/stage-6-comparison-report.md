@@ -56,15 +56,31 @@ Analytics._snapshot читает текущий журнал один раз п�
 
 ## Полный прогон
 
-Выполняется для кода 6c58ad5f5da292afcdd312ea034df890b7dc3ea4.
+Полностью пройден для кода 6c58ad5f5da292afcdd312ea034df890b7dc3ea4.
+Локально Windows 11 / PowerShell 5.1: 1218 passed, JUnit 1010,281 с,
+сборка/source/EXE по 24 шага; Ruff/формат/Mypy прошли. Отчёты отдельно сверены.
+EXE SHA-256: c11a6bf3b47890ad6b11683968a6ff003a14b092efa48bd8d6e62ee0b710eb4b.
+Все 37 файлов лицензий 12 пакетов в каталоге EXE совпали с закреплёнными хешами.
+Дополнительный EXE-прогон без Python/uv в PATH прошёл 24 шага:
+artifacts/dev20-without-python-path-9e0b1d508cb042e9b8e6280c3c10b295.
 source_sha256: db3ecf9cc08252f428fb5f023e3352c60bfa0db8c7b1843a77bd777fee0a0a01.
 Локальный Windows 11 / PowerShell 5.1:
 artifacts/windows-check-20261029-114648-ce679542fa8946e7aa198dc96ff890fd/report.json.
-До фактического результата сборку/EXE и CI dev20 не считать прошедшими.
+[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40844594785) и
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40844604087) полностью успешны.
+Linux: 1218 passed за 1833,18 / 1239,26 с; последующие helpers/source-self-test прошли.
+Windows: по 1218 тестов, JUnit 1551,086 / 1550,544 с; source/EXE по 24 шага.
+Технические архивы сверены по SHA-256, версии, отпечатку, JUnit и всем шагам:
+- push 12885004069: artifacts/ci-dev20-push-1793265972118/verified-summary.json;
+- PR 12886305516: artifacts/ci-dev20-pr-1793265977002/verified-summary.json.
+Каталоги программы: 12885163636 / 12885996043. Их полные ZIP не скачивались.
+EXE CI SHA-256: push 893de53ff6f3c6bc780c6f1b50333416c0e393f00130b3f03f73a95aa271516b;
+PR bc7fa8896bb0233fec04f35a3e3ae664b157fd9c99b2295e78cae0b3599e1529.
+Это не чистая Windows и не завершённая ручная приёмка.
 
 ## Осталось
 
-Полный прогон dev20, ручная приёмка предыдущих этапов, вклады/проценты и прочие
+Ручная приёмка предыдущих этапов, вклады/проценты и прочие
 отчёты. OCR-runtime пока только в отдельном запуске; его поставка в обычном EXE,
 банковская точность, Яндекс Пэй, автономность и чистая Windows без Python не закрыты.
 Пользовательские книги/снимки не открывались. Новых подтверждений во время занятости
