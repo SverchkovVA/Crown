@@ -35,6 +35,7 @@ from personal_finance.domain.classification import (
     ClassificationInput,
     ClassificationStatus,
 )
+from personal_finance.domain.deposit_scenarios import scenario_from_json, scenario_json
 from personal_finance.domain.deposits import (
     AccrualBoundary,
     BalanceMoment,
@@ -710,7 +711,12 @@ def self_test(
                         scenario_form._accept()
                         if scenario_form.result_scenario is None:
                             raise RuntimeError("Не подготовлены сценарные ставки и движения.")
-                        changed_deposit = forecast_deposit(scenario_form.result_scenario)
+                        restored_scenario = scenario_from_json(
+                            scenario_json(scenario_form.result_scenario)
+                        )
+                        if restored_scenario != scenario_form.result_scenario:
+                            raise RuntimeError("Контракт сценария изменил условия расчёта.")
+                        changed_deposit = forecast_deposit(restored_scenario)
                         if (
                             changed_deposit.interest_minor != 950
                             or changed_deposit.closing_minor != 17500
