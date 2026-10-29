@@ -53,6 +53,7 @@ from personal_finance.application.ocr_cards import (
 from personal_finance.application.ocr_review import OcrReviewDefaults
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
+from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
@@ -81,6 +82,7 @@ from personal_finance.infrastructure.backup.container import (
 )
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
 from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
+from personal_finance.presentation.analytics_cashflow import CashFlowDialog, CashFlowPeriodDialog
 from personal_finance.presentation.analytics_comparison import (
     ComparisonPeriodDialog,
     IncomeExpenseComparisonDialog,
@@ -327,11 +329,14 @@ class MainWindow(QMainWindow):
         self.report_action.setEnabled(False)
         self.compare_action = reports_menu.addAction("Сравнить периоды…", self.request_comparison)
         self.compare_action.setEnabled(False)
+        self.cash_flow_action = reports_menu.addAction("Движение средств…", self.request_cash_flow)
+        self.cash_flow_action.setEnabled(False)
 
     def _update_report_action(self) -> None:
         enabled = not self._busy and self.session is not None and self.session.ledger is not None
         self.report_action.setEnabled(enabled)
         self.compare_action.setEnabled(enabled)
+        self.cash_flow_action.setEnabled(enabled)
 
     def request_analytics(self) -> None:
         session = self.session
@@ -459,6 +464,62 @@ class MainWindow(QMainWindow):
     def _review_defaults(self) -> OcrReviewDefaults:
         value = self._ocr_preferences
         return OcrReviewDefaults(value.default_currency, value.year, value.confirm_fields)
+
+    def request_cash_flow(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        with session.mutex:
+            session.ensure_open()
+            accounts = session.catalog.accounts()
+            institutions = session.catalog.institutions()
+        dialog = CashFlowPeriodDialog(self, accounts=accounts, institutions=institutions)
+        try:
+            if (
+                dialog.exec() != QDialog.DialogCode.Accepted
+                or dialog.result_period is None
+                or dialog.result_scope is None
+            ):
+                return
+            period, scope = dialog.result_period, dialog.result_scope
+        finally:
+            dialog.deleteLater()
+        if self.session is session:
+            self.build_cash_flow(period, scope)
+
+    def build_cash_flow(self, period: ReportPeriod, scope: ReportScope | None = None) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
+
+        def build() -> tuple[CashFlowReport, list[Account], list[Category]]:
+            with session.mutex:
+                return (
+                    analytics.cash_flow(period, scope),
+                    session.catalog.accounts(),
+                    session.catalog.categories(),
+                )
+
+        self._job(
+            build,
+            lambda data: self._show_cash_flow(session, data),
+            "Расчёт движения средств…",
+            defer_success=True,
+        )
+
+    def _show_cash_flow(
+        self,
+        session: VaultSession,
+        result: tuple[CashFlowReport, list[Account], list[Category]],
+    ) -> None:
+        if self.session is not session:
+            return
+        dialog = CashFlowDialog(result[0], result[1], self, categories=result[2])
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
 
     def configure_ocr(self) -> None:
         if self._busy:

@@ -27,6 +27,7 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
 )
 from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recognitions_for_directory
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
+from personal_finance.domain.analytics_cashflow import CashSourceKind, cash_flow_sources
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -43,7 +44,8 @@ from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
-from personal_finance.presentation.analytics import IncomeExpenseDialog
+from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
+from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
 from personal_finance.presentation.main_window import MainWindow
 
@@ -566,6 +568,48 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Сравнение периодов изменило финансовые данные.")
+                with _step(report, "report_cash_flow_read_only"):
+                    before_cash_flow = ledger.operations(include_deleted=True)
+                    cash_report = Analytics(ledger, source.mutex, source.ensure_open).cash_flow(
+                        ReportPeriod(date.min, date.max)
+                    )
+                    if (
+                        {v.account_id: v.totals.closing_minor for v in cash_report.accounts}
+                        != expected_balances
+                        or len(cash_report.totals) != 1
+                        or cash_report.totals[0].closing_minor != sum(expected_balances.values())
+                    ):
+                        raise RuntimeError("Движение средств не совпало с остатками журнала.")
+                    total = cash_report.totals[0]
+                    cash_lines = cash_flow_sources(
+                        cash_report, total.currency, CashSourceKind.THROUGH_END
+                    )
+                    if sum(v.minor for v in cash_lines) != total.closing_minor:
+                        raise RuntimeError("Источники движения средств не совпали с итогом.")
+                    cash_dialog = CashFlowDialog(
+                        cash_report,
+                        source.catalog.accounts(),
+                        categories=source.catalog.categories(),
+                    )
+                    try:
+                        model = cash_dialog.total_table.model()
+                        if (
+                            model.data(model.index(0, 6))
+                            != format_report_amount(total.closing_minor, total.currency)
+                            or not cash_dialog.source_buttons[
+                                CashSourceKind.THROUGH_END
+                            ].isEnabled()
+                        ):
+                            raise RuntimeError("Остаток или источники недоступны в интерфейсе.")
+                    finally:
+                        cash_dialog.reject()
+                        cash_dialog.deleteLater()
+                        QCoreApplication.sendPostedEvents(cash_dialog, QEvent.Type.DeferredDelete)
+                    if (
+                        ledger.operations(include_deleted=True) != before_cash_flow
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Отчёт движения средств изменил финансовые данные.")
                 with _step(report, "render_income_expense_charts"):
                     chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
                     try:

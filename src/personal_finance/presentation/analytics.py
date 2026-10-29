@@ -30,6 +30,7 @@ from personal_finance.domain.analytics import (
     ReportScope,
     report_sources,
 )
+from personal_finance.domain.analytics_cashflow import CashMovement
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import OPERATION_LABELS
 from personal_finance.domain.models import Account, Category, CategoryKind, Currency, Institution
@@ -221,7 +222,7 @@ class ReportPeriodDialog(QDialog):
 class OperationSourceDialog(QDialog):
     def __init__(
         self,
-        flow: OperationFlow,
+        flow: OperationFlow | CashMovement,
         names: dict[str, str],
         accounts: dict[str, str],
         parent: QWidget | None = None,
@@ -238,7 +239,11 @@ class OperationSourceDialog(QDialog):
         layout.addWidget(
             _label(
                 "Записанная версия на момент формирования отчёта. "
-                "Вклад в отбор может быть частью полной суммы операции."
+                + (
+                    "Вклад в отбор может быть частью полной суммы операции."
+                    if isinstance(flow, OperationFlow)
+                    else "Показано движение выбранного счёта. Другие поля описывают всю операцию."
+                )
             )
         )
         scroll = QScrollArea()
@@ -267,9 +272,21 @@ class OperationSourceDialog(QDialog):
             field("Счёт получения", accounts.get(value.destination_account_id, "Счёт недоступен"))
         field("Сумма операции", money(value.amount.minor))
         if value.fee.minor:
-            field("Комиссия", money(value.fee.minor))
-        field("Доход в отборе", money(flow.totals.income_minor))
-        field("Расход в отборе", money(flow.totals.expense_minor))
+            field(
+                "Комиссия" if isinstance(flow, OperationFlow) else "Комиссия операции",
+                money(value.fee.minor),
+            )
+        if isinstance(flow, OperationFlow):
+            field("Доход в отборе", money(flow.totals.income_minor))
+            field("Расход в отборе", money(flow.totals.expense_minor))
+        else:
+            field("Счёт движения", accounts.get(flow.account_id, "Счёт недоступен"))
+            field(
+                "Изменение остатка",
+                format_report_amount(flow.minor, flow.currency) + " " + flow.currency.code,
+            )
+            if value.fee.minor:
+                field("Комиссия по счёту", money(flow.fee_minor))
         parts = [
             names.get(part.category_id, "Недоступная категория") + ": " + money(part.amount.minor)
             for part in value.category_allocations()
