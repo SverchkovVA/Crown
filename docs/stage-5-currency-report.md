@@ -63,8 +63,18 @@ EXE SHA-256 совпал с полным прогоном. Это не чист�
 подменяет отдельное исправление этого дефекта.
 
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40857860117) и
-[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40857868793) выполняются.
-Их итог будет внесён после получения и сверки фактических отчётов.
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40857868793) полностью успешны.
+Linux: 1274 passed за 1807,80 / 1391,92 с; helpers/source-self-test прошли.
+Windows Server / PowerShell 5.1: по 1274 теста, JUnit 1512,960 / 1577,606 с,
+сборка и source/EXE по 24 шага. Архивы отчётов сверены по SHA-256, версии,
+исходному отпечатку, JUnit и всем шагам:
+- push 12891372575: artifacts/ci-dev22-push-1793271847050/verified-summary.json;
+- PR 12891049644: artifacts/ci-dev22-pr-1793271852080/verified-summary.json.
+Каталоги программы: 12891312671 / 12892031211; полные ZIP не скачивались.
+EXE CI SHA-256: push 64b59e7fd18504379b2ad47356e4d3544b21ae2a423a078443931f925cdddadf;
+PR e79b3110c07c72426651cf11c8e2ffa1887a67360cb39783c307998175051691.
+Хеши ZIP технических отчётов: push 63bb1ae4a26042811a5b975a2daf1513e169f64a421cbe2e722d0637ae972b89;
+PR 4bb6d443e29cfe4b13683210f7ba48da8930409cd4b6c1f560901fd251710aae.
 
 ## Ограничения
 
