@@ -4,8 +4,8 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev23
-с исправлением дробной суммы — docs/stage-5-money-whitespace-report.md; доставка модуля:
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev24
+с датой рядом с суммой — docs/stage-5-inline-date-report.md; доставка модуля:
 docs/stage-5-frozen-ocr-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
@@ -129,3 +129,9 @@ spec и 24/26 шага самопроверки сохраняются. 31 но�
 отдельное «Валюта: руб.»: сумма/валюта/направление/дата/время проверяются точно.
 Общее число шагов остаётся 24/26; формат и поставка OCR-модуля прежние.
 [Фактические проверки](stage-5-money-whitespace-report.md).
+
+## Dev24: дата рядом с суммой
+
+Коллекция 1333; схема/зависимости/24–26 шагов прежние. Стандартный preview-шаг
+проверяет явную дату 22.10.2026 в строке с именем и суммой при предыдущем
+заголовке 27.10.2026: выбирается дата строки. [Результат](stage-5-inline-date-report.md).
