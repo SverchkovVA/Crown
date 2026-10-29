@@ -60,7 +60,22 @@ artifacts/dev29-without-python-path-3194d5a0d3e44d4b8e2f4bc9311fd0fb.
 artifacts/ocr-exe-check-dev29-f3e6d622806e4f99b784100ffc20bc3e.
 Проверены все 58 закреплённых файлов runtime и 37 файлов лицензий Python.
 Это не чистая Windows и не завершённый аудит лицензий OCR.
-Оба CI ещё выполняются, не объявлены успешными.
+Оба CI успешно завершены: все четыре задания Linux/Windows.
+Linux push — 1695 passed за 1817,77 с, PR — за 1421,51 с.
+Windows JUnit push 1792,607 с, PR 1797,513 с; source/EXE по 26.
+Перед распаковкой технических ZIP сверены опубликованные SHA-256, затем
+версия, source_sha256, JUnit без ошибок/пропусков и отчёты сборки:
+
+| Доказательство | Push | PR |
+|---|---|---|
+| windows-check | 12919028832 | 12919702570 |
+| SHA-256 ZIP | fc0b43d12078b427548c503019ef5e5ee9ab91d36b15287cf99a369d3c9747bd | 657b545862327d8aac26b9def4e80788775063ad65c0e103e2fc71e9ada7a5ca |
+| Каталог сверки | artifacts/ci-dev29-push-1793296366636 | artifacts/ci-dev29-pr-1793296366636 |
+| SHA-256 EXE CI | ac8431f25396f0954004b28e395b35ffd7719820857caea48c577624b086063c | 0a2dcf0f6e6c76ba45d57baaaf20ce6475e8fcf0a8b019a7d15d0e65e4cb83c0 |
+| Crown-Windows-x64 | 12919597679 | 12919118691 |
+
+Стандартные CI-каталоги без бинарного OCR. Полные 80-MB ZIP программы не
+скачивались: технические отчёты сверены отдельно, локальный EXE проверен выше.
 Код: b85d67042d96f3ee4f1e2e666ef3c719c4628961.
 Локальный отчёт:
 artifacts/windows-check-20261029-201913-e84297d51b934daf92946d2c5a08a0b5/report.json.
