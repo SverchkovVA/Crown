@@ -220,17 +220,5 @@
     "version": "26.3",
     "path": "packaging/packaging-26.3.dist-info/licenses/LICENSE.BSD",
     "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
-  },
-  {
-    "package": "packaging",
-    "version": "26.3",
-    "path": "packaging/packaging/licenses/__init__.py",
-    "sha256": "590d12eee73ddbec53b4e9ee5bfc64d9cb3aacb4940e8ebcba260757ce56740b"
-  },
-  {
-    "package": "packaging",
-    "version": "26.3",
-    "path": "packaging/packaging/licenses/_spdx.py",
-    "sha256": "596ec35e2ca0ebcba9fd8343ff0a51625af548786257815f24b41f7e08613314"
   }
 ]
