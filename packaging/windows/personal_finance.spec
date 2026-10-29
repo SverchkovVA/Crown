@@ -10,7 +10,10 @@ datas += [(str(path), str(path.parent.relative_to(source))) for path in icons.gl
 datas += [(str(root / "THIRD_PARTY_NOTICES.md"), ".")]
 legal = root / "docs" / "legal"
 if legal.is_dir():
-    datas += [(str(path), "legal") for path in legal.iterdir() if path.is_file()]
+    datas += [
+        (str(path), "legal/" + path.parent.relative_to(legal).as_posix())
+        for path in legal.rglob("*") if path.is_file()
+    ]
 
 analysis = Analysis(
     [str(source / "personal_finance" / "bootstrap" / "main.py")],
@@ -21,6 +24,7 @@ analysis = Analysis(
         "sqlalchemy.dialects.sqlite.pysqlite", "sqlcipher3.dbapi2", "alembic.ddl.sqlite",
         "alembic.ddl.impl", "nacl.bindings", "_cffi_backend",
     ],
+    hooksconfig={"matplotlib": {"backends": ["QtAgg"]}},
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter", "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick"],

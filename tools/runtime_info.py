@@ -16,6 +16,7 @@ def source_fingerprint(root: Path) -> str:
             ".python-version",
             ".gitattributes",
             "check-windows.cmd",
+            "THIRD_PARTY_NOTICES.md",
         )
     }
     for folder, pattern in [
@@ -29,6 +30,7 @@ def source_fingerprint(root: Path) -> str:
         ("packaging", "*.json"),
     ]:
         files.update((root / folder).rglob(pattern))
+    files.update(path for path in (root / "docs" / "legal").rglob("*") if path.is_file())
     digest = hashlib.sha256()
     for path in sorted(files, key=lambda item: item.relative_to(root).as_posix()):
         digest.update(path.relative_to(root).as_posix().encode())

@@ -276,6 +276,12 @@ class IncomeExpenseDialog(QDialog):
             )
         )
         self.tabs.addTab(self.source_panel, "Операции")
+        from personal_finance.presentation.analytics_charts import IncomeExpenseCharts
+
+        self.charts = IncomeExpenseCharts(report, self._names, self)
+        self.charts.sources_requested.connect(self._select_sources)
+        self.tabs.addTab(self.charts, "Графики")
+        self.finished.connect(self.charts.dispose)
         self.notice = _label(
             "В выбранном периоде нет действующих доходов, расходов, возвратов или комиссий."
             if not report.operation_count
@@ -408,6 +414,10 @@ class IncomeExpenseDialog(QDialog):
 
     def _update_actions(self) -> None:
         table = self.tabs.currentWidget()
+        chart_visible = table is self.charts
+        self.notice.setVisible(not chart_visible)
+        self.source_button.setVisible(not chart_visible)
+        self.source_details.setVisible(not chart_visible)
         self.source_button.setEnabled(
             table in (self.summary_table, self.category_table, self.month_table)
             and table.currentIndex().isValid()

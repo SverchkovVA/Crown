@@ -371,6 +371,7 @@ class MainWindow(QMainWindow):
         try:
             dialog.exec()
         finally:
+            dialog.charts.dispose()
             dialog.deleteLater()
 
     def _review_defaults(self) -> OcrReviewDefaults:

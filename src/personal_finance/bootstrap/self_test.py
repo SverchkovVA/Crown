@@ -460,6 +460,7 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         ):
                             raise RuntimeError("Не совпал вклад части исходной операции в отчёт.")
                     finally:
+                        report_dialog.reject()
                         report_dialog.deleteLater()
                         QCoreApplication.sendPostedEvents(report_dialog, QEvent.Type.DeferredDelete)
                     if (
@@ -467,6 +468,22 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Отчёт изменил финансовые данные.")
+                with _step(report, "render_income_expense_charts"):
+                    chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
+                    try:
+                        chart_dialog.charts.kind.setCurrentIndex(1)
+                        chart_dialog.charts.canvas.draw()
+                        if (
+                            chart_dialog.charts.report != expected_report
+                            or "20,00"
+                            not in {text.get_text() for text in chart_dialog.charts.axes.texts}
+                            or not chart_dialog.charts._targets
+                        ):
+                            raise RuntimeError("График не совпал с точным снимком отчёта.")
+                    finally:
+                        chart_dialog.reject()
+                        chart_dialog.deleteLater()
+                        QCoreApplication.sendPostedEvents(chart_dialog, QEvent.Type.DeferredDelete)
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
                     source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)

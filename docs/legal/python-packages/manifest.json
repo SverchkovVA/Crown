@@ -1,0 +1,236 @@
+[
+  {
+    "package": "matplotlib",
+    "version": "3.11.2",
+    "path": "matplotlib/matplotlib-3.11.2.dist-info/LICENSE",
+    "sha256": "822e8e528147569a41975592aee19c11992ab667ba50451cd929031d5fc74491"
+  },
+  {
+    "package": "matplotlib",
+    "version": "3.11.2",
+    "path": "matplotlib/matplotlib/mpl-data/fonts/ttf/LICENSE_DEJAVU",
+    "sha256": "d75938dec098f06f0ac3c00853065d94f020be1c3c62ef1dc2975ba15b4d9b0e"
+  },
+  {
+    "package": "matplotlib",
+    "version": "3.11.2",
+    "path": "matplotlib/matplotlib/mpl-data/fonts/ttf/LICENSE_STIX",
+    "sha256": "bab3d31dfef07f483624f2f65f2711e76065b8e7273278b1c071ede1041c9959"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/LICENSE.txt",
+    "sha256": "a804dff0ead9fadc5293456410bcbfc32bf024be9c4513459663fb7b442d2341"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/_core/include/numpy/libdivide/LICENSE.txt",
+    "sha256": "d544761558b510866c21f7e8a2d5716fca76e0b98117e3b6b86314db7244d150"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/_core/src/common/pythoncapi-compat/COPYING",
+    "sha256": "aea41976c720f91bd19725c16916a1ace40eb1ea42620d340e587a5de4bbcea0"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/_core/src/highway/LICENSE",
+    "sha256": "d208152e2777ffd0126eacc1bd21c0320d69e4e6b622d21a2a12a47e8ef73763"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/_core/src/multiarray/dragon4_LICENSE.txt",
+    "sha256": "b0fd592d4ead563148e3977e7b589169d46a5ef2ff133c755a81af880a3fc919"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/_core/src/npysort/x86-simd-sort/LICENSE.md",
+    "sha256": "a732977853530066790c42817087f4829b518dd98d340c916acbfd227e39d3cb"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/_core/src/umath/svml/LICENSE",
+    "sha256": "585483905b13d4b42f800c55ba99e89d6e2e33ccd5f503e201c07531d148ff41"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/fft/pocketfft/LICENSE.md",
+    "sha256": "8db000e158c162e7249787852d8c69764706502ccee725c06641b31c1e95c8af"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/linalg/lapack_lite/LICENSE.txt",
+    "sha256": "19060ef465e1797d682ee0fc3081bd25ab1395e995e43d25c9d13c95d9a3cd6b"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/ma/LICENSE",
+    "sha256": "d78dbb208b80d92b4d333e41a4baae50d12444f46e53199fa7726a91de6e2da7"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/LICENSE.md",
+    "sha256": "b4bc2f4fa1c95778f1ed3dd8f14706bece399475b978f9f34b5d3cd72521b48a"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/src/distributions/LICENSE.md",
+    "sha256": "cf5619f25b112d5ce7c896efffc8e610bcb345dfadcc19f2c1460aa48fff2c9e"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/src/mt19937/LICENSE.md",
+    "sha256": "92c10699884321f1c2947fe2a70ab23b0fbf1507f756d89dd08f38c61fc3d4fa"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/src/pcg64/LICENSE.md",
+    "sha256": "41190663b77bee5302386495a07b7eabfbfa571aa0ae2f11da6764162062fc4f"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/src/philox/LICENSE.md",
+    "sha256": "322ac46d870c8aeead6c53adcccc839296fb3c8e456eae155081297daf7f8013"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/src/sfc64/LICENSE.md",
+    "sha256": "28cad82ce1379dc529df30da78ec012d7d0d1d576b03ddcb93388aee53659f59"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy-2.5.4.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md",
+    "sha256": "454ec7350e478e037061850b67395753b425b1cb0a34bbc26290b020bf89d763"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy/_core/include/numpy/random/LICENSE.txt",
+    "sha256": "d544761558b510866c21f7e8a2d5716fca76e0b98117e3b6b86314db7244d150"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy/ma/LICENSE",
+    "sha256": "d78dbb208b80d92b4d333e41a4baae50d12444f46e53199fa7726a91de6e2da7"
+  },
+  {
+    "package": "numpy",
+    "version": "2.5.4",
+    "path": "numpy/numpy/random/LICENSE.md",
+    "sha256": "b4bc2f4fa1c95778f1ed3dd8f14706bece399475b978f9f34b5d3cd72521b48a"
+  },
+  {
+    "package": "pillow",
+    "version": "13.0.0",
+    "path": "pillow/pillow-13.0.0.dist-info/licenses/LICENSE",
+    "sha256": "988ffe8ab3480b0f4e9a0ab2702bffd73d9fb6b47198043fb3ba101a62fac236"
+  },
+  {
+    "package": "contourpy",
+    "version": "1.4.0",
+    "path": "contourpy/contourpy-1.4.0.dist-info/licenses/LICENSE",
+    "sha256": "0e55e86a8fbf3e9b482ae8dc9e111e1b0dc09a7d300e7f480dda68c1125ed614"
+  },
+  {
+    "package": "cycler",
+    "version": "0.12.1",
+    "path": "cycler/cycler-0.12.1.dist-info/LICENSE",
+    "sha256": "f1218143d766da3fea66f13396b7f15df46a83303f29bf96ba6e98eb4d42f408"
+  },
+  {
+    "package": "fonttools",
+    "version": "4.68.0",
+    "path": "fonttools/fonttools-4.68.0.dist-info/licenses/LICENSE",
+    "sha256": "22bef80697ecfaa17f97e62b9a26dfa12820be05583e8dd12ad169b241274c99"
+  },
+  {
+    "package": "fonttools",
+    "version": "4.68.0",
+    "path": "fonttools/fonttools-4.68.0.dist-info/licenses/LICENSE.external",
+    "sha256": "b082a5f86775b2641f01bccb8b9c82908481de5f502bb254b1e13bfc2a9f303d"
+  },
+  {
+    "package": "kiwisolver",
+    "version": "1.5.1",
+    "path": "kiwisolver/kiwisolver-1.5.1.dist-info/licenses/LICENSE",
+    "sha256": "b24c2bf6185f31a124ad6bacccae3071bdc7ad7882de00b00110aa62abb76a15"
+  },
+  {
+    "package": "pyparsing",
+    "version": "3.3.3",
+    "path": "pyparsing/pyparsing-3.3.3.dist-info/licenses/LICENSE",
+    "sha256": "a5425f9dc14ac74d4c5f0b679e941f2442e32cca7452a4418d5b1a49893ebe4e"
+  },
+  {
+    "package": "python-dateutil",
+    "version": "3.0.0",
+    "path": "python-dateutil/python_dateutil-3.0.0.dist-info/licenses/LICENSE",
+    "sha256": "ba00f51a0d92823b5a1cde27d8b5b9d2321e67ed8da9bc163eff96d5e17e577e"
+  },
+  {
+    "package": "six",
+    "version": "1.17.0",
+    "path": "six/six-1.17.0.dist-info/LICENSE",
+    "sha256": "4375ba20e2b9c6c4e7cad2940a628fd90e95cc3d50ee92aae755715d8ba1fbd0"
+  },
+  {
+    "package": "tzdata",
+    "version": "2026.6",
+    "path": "tzdata/tzdata-2026.6.dist-info/licenses/LICENSE",
+    "sha256": "df58f69ea88683035d720b5375bcef0cf5aeaa98a1d098d572e0992c378deb46"
+  },
+  {
+    "package": "tzdata",
+    "version": "2026.6",
+    "path": "tzdata/tzdata-2026.6.dist-info/licenses/licenses/LICENSE_APACHE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  {
+    "package": "packaging",
+    "version": "26.3",
+    "path": "packaging/packaging-26.3.dist-info/licenses/LICENSE",
+    "sha256": "cad1ef5bd340d73e074ba614d26f7deaca5c7940c3d8c34852e65c4909686c48"
+  },
+  {
+    "package": "packaging",
+    "version": "26.3",
+    "path": "packaging/packaging-26.3.dist-info/licenses/LICENSE.APACHE",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "package": "packaging",
+    "version": "26.3",
+    "path": "packaging/packaging-26.3.dist-info/licenses/LICENSE.BSD",
+    "sha256": "b70e7e9b742f1cc6f948b34c16aa39ffece94196364bc88ff0d2180f0028fac5"
+  },
+  {
+    "package": "packaging",
+    "version": "26.3",
+    "path": "packaging/packaging/licenses/__init__.py",
+    "sha256": "590d12eee73ddbec53b4e9ee5bfc64d9cb3aacb4940e8ebcba260757ce56740b"
+  },
+  {
+    "package": "packaging",
+    "version": "26.3",
+    "path": "packaging/packaging/licenses/_spdx.py",
+    "sha256": "596ec35e2ca0ebcba9fd8343ff0a51625af548786257815f24b41f7e08613314"
+  }
+]
