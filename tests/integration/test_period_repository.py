@@ -324,7 +324,7 @@ def test_old5_is_unchanged_and_only_restored_copy_gets_periods(tmp_path, monkeyp
         backup = create_backup(source, tmp_path / "old5.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0005"
         restored, _ = restore_backup(backup, tmp_path / "new6.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0011" and restored.periods is not None
+        assert restored.schema_revision == "0012" and restored.periods is not None
         assert restored.ledger.add(returned.draft, command_id=command) == returned
         restored.periods.close(MONTH)
         assert [hashlib.sha256(p.read_bytes()).hexdigest() for p in files] == hashes

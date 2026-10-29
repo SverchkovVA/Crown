@@ -17,11 +17,18 @@ from personal_finance.domain.ocr_imports import (
     canonical,
     make_ocr_evidence,
 )
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
+from personal_finance.infrastructure.ocr.generic import GenericCardAdapter
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 
 
 def check_audited_ocr_link(
-    session: VaultSession, operation: Operation, account_id: str, command_id: str
+    session: VaultSession,
+    operation: Operation,
+    account_id: str,
+    command_id: str,
+    *,
+    profile: str = "Т-Банк",
 ) -> tuple[OcrSelection, OcrImportResult]:
     service = session.ocr_importing
     if service is None or session.ledger is None:
@@ -30,7 +37,7 @@ def check_audited_ocr_link(
     minor = abs(movement)
     amount = f"{minor // 100},{minor % 100:02d}"
     document = OcrDocument(
-        "a" * 64,
+        ("c" if profile == UNIVERSAL_PROFILE else "a") * 64,
         500,
         200,
         OcrEngineInfo(
@@ -55,7 +62,9 @@ def check_audited_ocr_link(
         ),
     )
     checked = review_card(
-        TBankCardAdapter().parse(document),
+        (GenericCardAdapter() if profile == UNIVERSAL_PROFILE else TBankCardAdapter()).parse(
+            document
+        ),
         CardCorrections(
             amount,
             "RUB",
@@ -66,7 +75,7 @@ def check_audited_ocr_link(
         single_completed_operation=True,
     )
     selection = OcrSelection(
-        make_ocr_evidence("b" * 64, "Т-Банк", checked),
+        make_ocr_evidence(("d" if profile == UNIVERSAL_PROFILE else "b") * 64, profile, checked),
         account_id,
         operation.draft,
         existing_operation_id=operation.id,

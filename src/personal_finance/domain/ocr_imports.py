@@ -26,6 +26,7 @@ from personal_finance.domain.ocr_cards import (
     ReviewedOcrCard,
     review_card,
 )
+from personal_finance.domain.ocr_profiles import PROFILE_PREFIXES
 
 MAX_OCR_EVIDENCE_BYTES = 128 * 1024
 _FIELDS = ("amount", "currency", "direction", "occurred_on", "local_time", "description")
@@ -80,9 +81,13 @@ def _decode(payload: str) -> tuple[dict[str, Any], ReviewedOcrCard]:
         raise ValidationError(_ERROR)
     for key in ("file_sha256", "image_sha256", "document_sha256"):
         require_sha256(data[key])
-    if data["bank"] not in ("Т-Банк", "ВТБ") or canonical(data) != payload:
+    if (
+        not isinstance(data["bank"], str)
+        or data["bank"] not in PROFILE_PREFIXES
+        or canonical(data) != payload
+    ):
         raise ValidationError(_ERROR)
-    prefix = "t-bank-" if data["bank"] == "Т-Банк" else "vtb-"
+    prefix = PROFILE_PREFIXES[data["bank"]]
     if not isinstance(data["adapter"], str) or not data["adapter"].startswith(prefix):
         raise ValidationError(_ERROR)
     engine = data["engine"]

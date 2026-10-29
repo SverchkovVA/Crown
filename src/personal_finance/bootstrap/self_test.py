@@ -36,6 +36,7 @@ from personal_finance.domain.imports import ImportSelection, ImportStatus
 from personal_finance.domain.ledger import OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.domain.ocr_imports import OcrImportStatus
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
@@ -394,6 +395,21 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                     expected_ocr_settings = (
                         source.ocr_settings.load()[0] if source.ocr_settings is not None else None
                     )
+                with _step(report, "persist_generic_ocr_audit"):
+                    if (
+                        source.schema_revision != "0012"
+                        or source.ocr_importing is None
+                        or not source.ocr_importing.supports_universal
+                    ):
+                        raise RuntimeError("Общий OCR недоступен в новой схеме.")
+                    generic_command = str(uuid4())
+                    generic_selection, generic_result = check_audited_ocr_link(
+                        source,
+                        corrected_spending,
+                        account.id,
+                        generic_command,
+                        profile=UNIVERSAL_PROFILE,
+                    )
                 with _step(report, "protect_closed_period"):
                     periods = source.periods
                     if periods is None:
@@ -576,6 +592,19 @@ def self_test(app: QApplication, report_path: Path | None = None) -> int:
                             != ocr_result
                         ):
                             raise RuntimeError("Аудит OCR или защита повторов не восстановлены.")
+                        if (
+                            restored.ocr_importing is None
+                            or not restored.ocr_importing.supports_universal
+                            or restored.ocr_importing.preview(generic_selection).status
+                            != OcrImportStatus.DUPLICATE
+                            or restored.ocr_importing.confirm(
+                                generic_selection, command_id=generic_command
+                            )
+                            != generic_result
+                        ):
+                            raise RuntimeError(
+                                "Общий аудит OCR или его квитанция не восстановлены."
+                            )
                         if (
                             restored.ocr_settings is None
                             or restored.ocr_settings.load()[0] != expected_ocr_settings

@@ -20,6 +20,7 @@ class OcrImportRepository(Protocol):
     def confirm(self, selection: OcrSelection, command_id: str) -> OcrImportResult: ...
 
     supports_batches: bool
+    supports_universal: bool
 
     def preview_many(
         self, selections: tuple[OcrSelection, ...]
@@ -62,6 +63,10 @@ class OcrImporting:
     @property
     def supports_batches(self) -> bool:
         return self._repository.supports_batches
+
+    @property
+    def supports_universal(self) -> bool:
+        return self._repository.supports_universal
 
     def preview_many(self, selections: tuple[OcrSelection, ...]) -> tuple[OcrImportPreview, ...]:
         return self._repository.preview_many(selections)

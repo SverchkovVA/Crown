@@ -17,6 +17,7 @@ from personal_finance.domain.ocr_imports import (
     OcrImportStatus,
     OcrSelection,
 )
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.infrastructure.persistence.ledger_repository import (
     SqlLedgerRepository,
     operation_payload,
@@ -32,17 +33,24 @@ class SqlOcrRepository:
         ledger: SqlLedgerRepository,
         *,
         supports_batches: bool = False,
+        supports_universal: bool = False,
     ) -> None:
         self._engine, self._book_id, self._mutex, self._ledger = engine, book_id, mutex, ledger
         self.supports_batches = supports_batches
+        self.supports_universal = supports_universal
 
     def _request(self, selection: OcrSelection) -> str:
         if not isinstance(selection, OcrSelection):
             raise ValidationError("Некорректная финансовая команда OCR.")
+        data = selection.evidence.data
+        if data["bank"] == UNIVERSAL_PROFILE and not self.supports_universal:
+            raise ValidationError(
+                "Общий профиль OCR требует схему 0012. Восстановите копию в новую папку."
+            )
         return digest_json(
             {
                 "kind": "ocr-confirm-v1",
-                "evidence": selection.evidence.data,
+                "evidence": data,
                 "account_id": selection.account_id,
                 "draft": operation_payload(selection.draft),
                 "acknowledged_duplicate": selection.acknowledged_duplicate,

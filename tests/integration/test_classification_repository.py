@@ -285,7 +285,7 @@ def test_old8_is_unchanged_and_only_restored_copy_gets_rules(tmp_path, monkeypat
         backup = create_backup(old, tmp_path / "old8.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0008"
         restored, _ = restore_backup(backup, tmp_path / "new9.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.classification is not None and restored.schema_revision == "0011"
+        assert restored.classification is not None and restored.schema_revision == "0012"
         assert restored.ledger.operations() == [operation]
         restored.classification.save(
             CategoryRule(str(uuid4()), "Новое правило", OperationKind.EXPENSE, "тест", category)
