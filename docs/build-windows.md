@@ -4,8 +4,8 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev20
-с первым отчётом — docs/stage-6-analytics-report.md.
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev21
+с OCR-модулем в EXE — docs/stage-5-frozen-ocr-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
 импорты. Используется каталог приложения, без onefile, UPX и Qt WebEngine.
@@ -92,3 +92,23 @@ Matplotlib 3.11.2 закреплён в uv.lock без смены прежних
 обычный EXE пока без OCR-runtime/меню. Текущие фактические результаты:
 docs/stage-5-generic-storage-report.md. Проверенная предыдущая dev16:
 docs/stage-6-charts-report.md.
+
+## Dev21: отдельный OCR-модуль для EXE
+
+Spec включает только доверенный packaging/ocr/runtime-candidate.json в
+_internal/ocr. OCR-бинарные файлы не добавляются в Git, стандартную сборку или
+CI-архив. Если рядом с EXE есть ocr-runtime, bootstrap проверяет все закреплённые
+файлы и внедряет три прежних профиля. Возможен явный --ocr-runtime; поиска в PATH,
+рабочей папке и скачивания нет. Без модуля — прежний запуск без OCR.
+
+Полный набор содержит 1243 теста; стандартная самопроверка — 24 шага. Отдельный
+проверенный OCR-модуль добавляет verify_local_ocr_runtime и
+recognize_local_synthetic_image: всего 26. Последний строит в памяти вымышленную
+карточку Pillow/DejaVu Sans и проверяет реальные 47315/RUB/out/22.10.2026/09:18;
+книги из распознавания не изменяются. Шрифт/лицензия уже поставляются Matplotlib.
+Проверка из пустой папки с PATH только System32 не заменяет чистую Windows.
+
+До проверки всех лицензий DLL и чистой Windows комплект остаётся локальным
+кандидатом, установщик/подпись/обновления относятся к этапу 9. Нынешний бюджет
+tests — 40 минут, job CI — 50; значение 30/40 выше относится к dev13.
+[Фактические проверки](stage-5-frozen-ocr-report.md).
