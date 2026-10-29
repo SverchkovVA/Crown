@@ -45,12 +45,26 @@ artifacts/synthetic-currency-probe-86d357d820014a45a4d1169ed5a2fe68/verified-cur
 
 ## Полный прогон
 
-Запущен Windows 11 / PowerShell 5.1:
-artifacts/windows-check-20261029-132844-4de26ffc929044f59327e437d169902f.
+Полный локальный Windows 11 / PowerShell 5.1 прошёл: 1274 passed, JUnit
+1038,069 с, Ruff/формат/Mypy, сборка и source/EXE по 24 шага.
+Версия, отпечаток, JUnit и обязательные шаги сверены:
+artifacts/windows-check-20261029-132844-4de26ffc929044f59327e437d169902f/verified-summary.json.
+EXE SHA-256: 54b7fff939e260536e2cb3d82a651c6e2be7865c66b9b09d2aaadc01a3fc488c.
+Дополнительный стандартный EXE без Python/uv в PATH: 24 passed,
+artifacts/dev22-without-python-path-87a9ac5ffd7c4a6b8ec7cec42a31c8c5.
+
+Все 37 файлов лицензий 12 Python-пакетов сверены по SHA-256. Финальный каталог
+скопирован в кириллический путь с пробелами, добавлены только 58 закреплённых
+файлов runtime. Тот же EXE автоматически подключил модуль и прошёл 26 шагов
+с настоящим Tesseract, из пустого cwd с PATH только System32:
+artifacts/ocr-exe-check-dev22-dd14a2d1690e4451b3508143611ac3c9/verified-summary.json.
+EXE SHA-256 совпал с полным прогоном. Это не чистая Windows/отключённая сеть.
+Стандартная контрольная карточка не содержит раздельной дробной части и не
+подменяет отдельное исправление этого дефекта.
+
 [Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40857860117) и
 [PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40857868793) выполняются.
-Пока полного фактического результата нет, он не заявлен.
-Стандартная source/EXE-самопроверка — 24 шага, с локальным модулем — 26.
+Их итог будет внесён после получения и сверки фактических отчётов.
 
 ## Ограничения
 
