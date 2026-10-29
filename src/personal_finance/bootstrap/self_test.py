@@ -669,11 +669,16 @@ def self_test(
                     )
                     if deposit.interest_minor != 1 or deposit.closing_minor != 1:
                         raise RuntimeError("Не подтверждено точное округление процентов.")
-                    deposit_dialog = DepositForecastDialog(deposit)
+                    deposit_dialog = DepositForecastDialog(deposit, allow_edit=True)
                     try:
                         model = deposit_dialog.model
                         if model.rowCount() != 1 or model.data(model.index(0, 1)) != "0,01":
                             raise RuntimeError("График процентов не совпал с точной выплатой.")
+                        if deposit_dialog.edit_button is None:
+                            raise RuntimeError("Возврат к условиям прогноза недоступен.")
+                        deposit_dialog.edit_button.click()
+                        if not deposit_dialog.edit_requested:
+                            raise RuntimeError("Не выбран возврат к условиям прогноза.")
                     finally:
                         deposit_dialog.reject()
                         deposit_dialog.deleteLater()
@@ -711,6 +716,10 @@ def self_test(
                         scenario_form._accept()
                         if scenario_form.result_scenario is None:
                             raise RuntimeError("Не подготовлены сценарные ставки и движения.")
+                        first_scenario = scenario_form.result_scenario
+                        scenario_form._accept()
+                        if scenario_form.result_scenario != first_scenario:
+                            raise RuntimeError("Повторный расчёт изменил идентичность условий.")
                         restored_scenario = scenario_from_json(
                             scenario_json(scenario_form.result_scenario)
                         )

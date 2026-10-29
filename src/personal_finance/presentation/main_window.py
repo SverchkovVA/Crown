@@ -553,19 +553,27 @@ class MainWindow(QMainWindow):
         )
 
     def _show_deposit(
-        self, input_dialog: DepositScenarioDialog, result: DepositForecast | str
+        self,
+        input_dialog: DepositScenarioDialog,
+        result: DepositForecast | str,
     ) -> None:
         if isinstance(result, str):
             input_dialog.feedback.setText(result)
             input_dialog.feedback.show()
             self._run_deposit_form(input_dialog)
             return
-        input_dialog.deleteLater()
-        dialog = DepositForecastDialog(result, self)
+        edit = False
+        dialog: DepositForecastDialog | None = None
         try:
-            dialog.exec()
+            dialog = DepositForecastDialog(result, self, allow_edit=True)
+            edit = dialog.exec() == QDialog.DialogCode.Accepted and dialog.edit_requested
         finally:
-            dialog.deleteLater()
+            if dialog is not None:
+                dialog.deleteLater()
+            if not edit:
+                input_dialog.deleteLater()
+        if edit:
+            self._run_deposit_form(input_dialog)
 
     def configure_ocr(self) -> None:
         if self._busy:

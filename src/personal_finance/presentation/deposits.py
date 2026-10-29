@@ -96,6 +96,7 @@ class DepositScenarioDialog(QDialog):
         self.setWindowTitle("Прогноз вклада · Условия сценария")
         _size(self, 820, 730)
         self.result_scenario: DepositScenario | None = None
+        self.initial_rate_id = str(uuid4())
         layout = QVBoxLayout(self)
         layout.addWidget(
             _label(
@@ -325,7 +326,7 @@ class DepositScenarioDialog(QDialog):
         return super().eventFilter(watched, event)
 
     def _rates(self, start: date, initial_rate: Decimal) -> tuple[DepositRate, ...]:
-        result = [DepositRate(str(uuid4()), start, initial_rate)]
+        result = [DepositRate(self.initial_rate_id, start, initial_rate)]
         for row in range(self.rate_table.rowCount()):
             editor, field = self.rate_table.cellWidget(row, 0), self.rate_table.cellWidget(row, 1)
             assert isinstance(editor, QDateEdit) and isinstance(field, QLineEdit)
@@ -367,9 +368,13 @@ class DepositScenarioDialog(QDialog):
 
 
 class DepositForecastDialog(QDialog):
-    def __init__(self, report: DepositForecast, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, report: DepositForecast, parent: QWidget | None = None, *, allow_edit: bool = False
+    ) -> None:
         super().__init__(parent)
         self.report = report
+        self.edit_requested = False
+        self.edit_button: QPushButton | None = None
         self.setWindowTitle("Прогноз вклада · График выплат")
         _size(self, 1000, 660)
         layout = QVBoxLayout(self)
@@ -472,13 +477,27 @@ class DepositForecastDialog(QDialog):
             _label(
                 "Это сценарий, не фактическая банковская выплата. Отдельно выплаченные "
                 "проценты не входят в остаток вклада. Средства в книге не меняются. "
-                "Условия и расчёт не сохраняются после закрытия."
+                "Условия и расчёт на диске не сохраняются."
             )
         )
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        if allow_edit:
+            self.edit_button = buttons.addButton(
+                "Изменить условия", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            self.edit_button.setAccessibleName("Изменить условия прогноза вклада")
+            self.edit_button.setToolTip(
+                "Вернуться к введённым условиям и рассчитать другой вариант."
+            )
+            self.edit_button.clicked.connect(self._edit)
+
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _edit(self) -> None:
+        self.edit_requested = True
+        self.accept()
 
     @staticmethod
     def _conditions_table(headers: list[str], rows: list[list[str]], name: str) -> QTableView:
