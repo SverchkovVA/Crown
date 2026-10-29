@@ -48,7 +48,13 @@ round-trip условий через codec и тот же прогноз; чис
 - Ruff и формат прошли (240 файлов), Mypy Windows/Linux — 126 source.
   Коллекция 1695; стандартная self-test 26, с OCR 28.
 
+Source с настоящим локальным OCR: 28 passed, artifacts/dev29-source-with-ocr.json.
 Полный прогон/EXE/оба CI новой dev29 ещё выполняются, не объявлены успешными.
+Код: b85d67042d96f3ee4f1e2e666ef3c719c4628961.
+Локальный отчёт:
+artifacts/windows-check-20261029-201913-e84297d51b934daf92946d2c5a08a0b5/report.json.
+[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40920133772),
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40920142132).
 source_sha256: b66b128bb30ef6423b92023d25daf0b1658a6982e379e09325d610910699ef4f.
 Готовый проверенный локальный комплект пока dev28:
 artifacts/start-checked-ocr-dev28.cmd. Книги/пароля заранее нет.
@@ -74,3 +80,7 @@ OCR-DLL, Яндекс Пэй и ручная приёмка прежних эт�
 - «Хранение отсутствует» уточнено: компоненты подготовлены, runtime/GUI не включены.
 - Наличие v0013 в исходниках не означает SCHEMA_HEAD=0013: остаётся 0012;
   отказ активации и необходимые следующие проверки записаны явно.
+
+[Полный список ручных действий пользователя](manual-acceptance-full.md).
+[Независимая инвентаризация OCR-лицензий](ocr-runtime-license-audit.md) остаётся
+незавершённой; бинарный OCR-модуль и его флаги допуска не изменены.
