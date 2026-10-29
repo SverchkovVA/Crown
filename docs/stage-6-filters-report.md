@@ -39,6 +39,8 @@
 
 Выполняется. Локальный Windows 11 / PowerShell 5.1:
 artifacts/windows-check-20261029-095431-37d639f2f33d43218ffd206970de3e6c/report.json.
+[Push CI](https://github.com/SverchkovVA/Crown/actions/runs/40832056561),
+[PR CI](https://github.com/SverchkovVA/Crown/actions/runs/40832062655).
 До фактического завершения сборку/EXE и CI dev19 не считать прошедшими.
 [Предыдущая dev18](stage-5-generic-financial-report.md),
 [backend dev17](stage-5-generic-storage-report.md), [графики dev16](stage-6-charts-report.md).

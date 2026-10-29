@@ -45,7 +45,16 @@ Ledger/OcrImporting только для схемы 0012. Карточка име
 Отчёты отдельно сверены по версии, отпечатку и JUnit; все 37 лицензий 12 пакетов
 в самом каталоге EXE совпали с закреплёнными SHA-256. EXE SHA-256:
 dbfe0c8bbd3e58dfcaa6a021d637809cfa0d4dcba8615a9a98c5a0866f77545c.
-Linux/Windows CI ещё выполняются для закреплённого кода dev18.
+PR CI полностью прошёл: Linux 1160 passed за 876,18 с; Windows JUnit
+1032,796 с, 1160 тестов и source/EXE по 23 шага. Технический артефакт
+12879370205 проверен по SHA-256 и отпечатку:
+artifacts/ci-dev18-pr-1793256942308/verified-summary.json.
+Каталог программы PR: 12878464614; целиком ZIP программы не скачивался.
+EXE PR SHA-256: 05f5b6a331b5afe5824739287f2448d14c8e65065031a1bf3d9ca45278e897c8.
+Push Linux/Windows CI ещё выполняется для закреплённого кода dev18.
+Дополнительный локальный EXE-прогон без Python/uv в PATH прошёл 23 шага:
+artifacts/dev18-without-python-path-943baf5183394432b438d0ddd81693af.
+Это не проверка на чистой Windows.
 Пользовательские книги и снимки не открывались.
 Код: 2dcbf51a8346b69fdf5bd03442b8ae0aefda3796; отпечаток be9f1454... выше.
 Локальный отчёт: artifacts/windows-check-20261029-093148-f8604dc6b16a407faf2bc8f42962ea5c/report.json.
