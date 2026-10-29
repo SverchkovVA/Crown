@@ -1,5 +1,7 @@
 """Месячные остатки одного снимка: таблица, график и источники."""
 
+from calendar import monthrange
+from datetime import date
 from typing import Any
 
 from PySide6.QtCore import QDate, QSignalBlocker, Qt, Signal
@@ -24,6 +26,7 @@ from matplotlib.figure import Figure
 
 from personal_finance.domain.analytics_cashflow import CashFlowReport, CashSourceKind
 from personal_finance.domain.analytics_cashflow_months import (
+    CashMonth,
     CashMonthPage,
     cash_month_sources,
     cash_months,
@@ -32,6 +35,18 @@ from personal_finance.domain.analytics_cashflow_months import (
 from personal_finance.domain.errors import ValidationError
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.tables import replace_table
+
+
+def _date_text(day: date) -> str:
+    return f"{day.day:02}.{day.month:02}.{day.year:04}"
+
+
+def _month_caption(row: CashMonth) -> str:
+    first, last = row.period.start, row.period.end
+    title = f"{first.month:02}.{first.year:04}"
+    if first.day != 1 or last.day != monthrange(last.year, last.month)[1]:
+        title += f" · {first.day:02}–{last.day:02}"
+    return title
 
 
 class CashFlowMonths(QWidget):
@@ -193,7 +208,7 @@ class CashFlowMonths(QWidget):
             ],
             [
                 [
-                    f"{v.period.start.month:02}.{v.period.start.year:04}",
+                    _month_caption(v),
                     *[
                         format_report_amount(x, v.totals.currency)
                         for x in [
@@ -235,13 +250,15 @@ class CashFlowMonths(QWidget):
             self.month.setDate(QDate(first.year, first.month, 1))
         self.canvas.setMinimumHeight(max(180, len(rows) * 42 + 40))
         self.axes.set_title(
-            "Остаток на конец месяца · " + currency.code, color="#172b35", fontsize=10
+            "Остаток на конец периода в каждом месяце · " + currency.code,
+            color="#172b35",
+            fontsize=10,
         )
         self.page_label.setText(
             f"Месяцы {self._offset + 1}–{self._offset + len(rows)} из {self.page.month_count}"
         )
         self.message.setText(
-            f"Страница: {first:%d.%m.%Y} — {last:%d.%m.%Y}. Суммы в {currency.code}. "
+            f"Страница: {_date_text(first)} — {_date_text(last)}. Суммы в {currency.code}. "
             "Неполные месяцы ограничены периодом. Свои переводы включены в потоки. "
             "Столбец открывает источники "
             "остатка на конец месяца; с клавиатуры используйте таблицу и кнопки."
@@ -259,7 +276,7 @@ class CashFlowMonths(QWidget):
         )
         padding = max(1, (high - low) // 3)
         self.axes.set_xlim(low - padding, high + padding)
-        labels = [f"{v.period.start.month:02}.{v.period.start.year:04}" for v in rows]
+        labels = [_month_caption(v) for v in rows]
         self.axes.set_yticks(range(len(rows)), labels, parse_math=False)
         self.axes.invert_yaxis()
         bars = self.axes.barh(
@@ -316,15 +333,18 @@ class CashFlowMonths(QWidget):
         if lines:
             period = self.page.rows[row].period
             title = {
-                CashSourceKind.BEFORE: "Остаток на начало месяца",
+                CashSourceKind.BEFORE: "Остаток на начало",
                 CashSourceKind.PERIOD: "Движения месяца",
-                CashSourceKind.THROUGH_END: "Остаток на конец месяца",
+                CashSourceKind.THROUGH_END: "Остаток на конец",
             }[kind]
-            self.sources_requested.emit(
-                self.page.currency,
-                lines,
-                title + f" · {period.start.month:02}.{period.start.year:04}",
+            exact_dates = (
+                _date_text(period.start)
+                if kind == CashSourceKind.BEFORE
+                else _date_text(period.end)
+                if kind == CashSourceKind.THROUGH_END
+                else _date_text(period.start) + " — " + _date_text(period.end)
             )
+            self.sources_requested.emit(self.page.currency, lines, title + " · " + exact_dates)
 
     def _picked(self, event: Any) -> None:
         if not self._disposed and event.artist in self._targets:

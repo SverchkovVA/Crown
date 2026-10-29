@@ -167,3 +167,22 @@ def test_invalid_account_selection_does_not_mean_all_accounts(make):
     widget.account.setCurrentIndex(-1)
     assert widget.page is None and widget.model.rowCount() == 0
     assert all(not b.isEnabled() for b in widget.source_buttons.values())
+
+
+def test_partial_month_titles_show_exact_balance_dates(make):
+    widget = make(example())
+    seen = []
+    widget.sources_requested.connect(lambda *args: seen.append(args))
+    assert widget.model.data(widget.model.index(0, 0)) == "09.2026 · 15–30"
+    assert widget.model.data(widget.model.index(3, 0)) == "12.2026 · 01–15"
+    widget.table.selectRow(3)
+    widget.show_sources(CashSourceKind.THROUGH_END)
+    assert seen[-1][2].endswith("15.12.2026")
+    partial = make(
+        cash_flow_report(snapshot(), ReportPeriod(date(2026, 10, 10), date(2026, 10, 17)))
+    )
+    partial.sources_requested.connect(lambda *args: seen.append(args))
+    partial.show_sources(CashSourceKind.BEFORE)
+    assert seen[-1][2].endswith("10.10.2026")
+    partial.show_sources(CashSourceKind.PERIOD)
+    assert "10.10.2026 — 17.10.2026" in seen[-1][2]
