@@ -4,8 +4,8 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev22
-с уточнением валюты OCR — docs/stage-5-currency-report.md; доставка модуля:
+с правилами — docs/stage-4-classification-report.md; текущая опытная dev23
+с исправлением дробной суммы — docs/stage-5-money-whitespace-report.md; доставка модуля:
 docs/stage-5-frozen-ocr-report.md.
 
 PyInstaller spec включает миграции Alembic как ресурсы и необходимые динамические
@@ -120,3 +120,12 @@ tests — 40 минут, job CI — 50; значение 30/40 выше отно
 spec и 24/26 шага самопроверки сохраняются. 31 новая регрессия, полная коллекция
 1274. Стандартный ZIP без OCR-бинарных файлов, отдельный локальный модуль тот же.
 [Результаты и оставшиеся проверки](stage-5-currency-report.md).
+
+## Dev23: дробная сумма в самопроверке
+
+32 новые регрессии, коллекция 1306. В стандартном шаге preview_ocr_without_engine
+общий список проверяет сырые 47315 с неизвестной валютой и предложение RUB без
+записи. Настоящий recognize_local_synthetic_image рисует «Списано: −473 , 15» и
+отдельное «Валюта: руб.»: сумма/валюта/направление/дата/время проверяются точно.
+Общее число шагов остаётся 24/26; формат и поставка OCR-модуля прежние.
+[Фактические проверки](stage-5-money-whitespace-report.md).

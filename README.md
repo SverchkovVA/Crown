@@ -3,8 +3,9 @@
 Автономное приложение для **Windows 11 x64** на Python 3.13, PySide6,
 SQLAlchemy, Alembic и SQLCipher. Документация и интерфейс на русском языке.
 
-**Этапы 5–6 в stage-5-ocr: 0.2.0.dev22, русские формы валюты в общем OCR, локальный модуль EXE и аналитика.**
-[Текущий срез и ограничения](docs/stage-5-currency-report.md),
+**Этапы 5–6 в stage-5-ocr: 0.2.0.dev23, точная дробная сумма OCR, русские формы валюты, модуль EXE и аналитика.**
+[Текущий срез и ограничения](docs/stage-5-money-whitespace-report.md),
+[русская валюта dev22](docs/stage-5-currency-report.md),
 [локальный OCR-модуль dev21](docs/stage-5-frozen-ocr-report.md),
 [проверенное сравнение dev20](docs/stage-6-comparison-report.md),
 [проверенные фильтры dev19](docs/stage-6-filters-report.md),
