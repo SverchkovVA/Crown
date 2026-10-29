@@ -17,7 +17,8 @@ from personal_finance.infrastructure.ocr.generic_dates import date_spans, parse_
 from personal_finance.infrastructure.ocr.rub_fields import parse_rub_fields
 
 _NUMBER = r"(?:[0-9]{1,3}(?:[ \u00a0\u202f][0-9]{3})+|[0-9]+)(?:[,.][0-9]{1,2})?"
-_CURRENCY = r"(?:RUB|USD|EUR|CNY|KZT|BYN|GBP|CHF|JPY|₽|руб\.?|[РP$€£¥])"
+_RUSSIAN_RUBLE = r"руб(?:лей|ля|ль|\.?)"
+_CURRENCY = rf"(?:RUB|USD|EUR|CNY|KZT|BYN|GBP|CHF|JPY|₽|{_RUSSIAN_RUBLE}|[РP$€£¥])"
 _AMOUNT = re.compile(
     rf"(?<![\w.,+\-−—–])(?P<money>(?:[+\-−—–]\s*)?{_NUMBER}\s*{_CURRENCY}|[+\-−—–]\s*{_NUMBER})(?![\w.,])",
     re.I,
@@ -230,6 +231,9 @@ def _draft(
             "₽": "RUB",
             "руб": "RUB",
             "руб.": "RUB",
+            "рубль": "RUB",
+            "рубля": "RUB",
+            "рублей": "RUB",
             "$": "USD",
             "€": "EUR",
             "£": "GBP",
@@ -288,7 +292,8 @@ def _residue(row: Row, money: tuple[str, tuple[int, ...], int, int]) -> str:
 
 def _currency_hint(row: Row) -> tuple[str, tuple[int, ...]] | None:
     match = re.fullmatch(
-        r"(?:валюта(?: операции)?\s*:?\s*)?(RUB|USD|EUR|CNY|KZT|BYN|GBP|CHF|JPY|₽|руб\.?|[$€£¥])",
+        rf"(?:валюта(?: операции)?\s*:?\s*)?"
+        rf"(RUB|USD|EUR|CNY|KZT|BYN|GBP|CHF|JPY|₽|{_RUSSIAN_RUBLE}|[$€£¥])",
         row.text,
         re.I,
     )
@@ -299,6 +304,9 @@ def _currency_hint(row: Row) -> tuple[str, tuple[int, ...]] | None:
         "₽": "RUB",
         "руб": "RUB",
         "руб.": "RUB",
+        "рубль": "RUB",
+        "рубля": "RUB",
+        "рублей": "RUB",
         "$": "USD",
         "€": "EUR",
         "£": "GBP",
@@ -384,7 +392,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v1") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v2") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -428,14 +436,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v1",
+                "generic-card-v2",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return result
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v1")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v2")
         return replace(empty, blocked_reason=blocked)
 
 
@@ -558,7 +566,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v1",
+                "generic-history-v2",
                 blocked,
             )
             if index + 1 < len(rows):
