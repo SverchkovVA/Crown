@@ -736,5 +736,5 @@ S:\Dev\Crown\artifacts\start-checked-ocr-dev32.cmd. Полный Windows:
 1774 теста, source/EXE 27, отдельный EXE с локальным OCR 29. Проверены запуск
 из пустой папки при PATH без Python/uv и Unicode-путь. Это не чистая Windows.
 Книга/пароль заранее не созданы. Сохраните весь каталог, _internal и ocr-runtime.
-Linux обоих CI с проверкой полноты успешен; Windows CI ещё завершаются.
+Linux обоих CI с проверкой полноты успешен; Windows обоих CI успешны.
 [Точный статус](stage-6-ci-groups-report.md), [вся ручная приёмка](manual-acceptance-full.md).
