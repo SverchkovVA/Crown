@@ -293,7 +293,8 @@ class OcrBatchDialog(QDialog):
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.rows: list[BatchRow] = []
-        self._row_widgets: dict[QObject, int] = {}
+        self._row_widgets: dict[QObject, tuple[int, int]] = {}
+        self._selecting_row = False
         defaults = OcrReviewDefaults(
             preferences.default_currency, preferences.year, preferences.confirm_fields
         )
@@ -347,7 +348,7 @@ class OcrBatchDialog(QDialog):
                 (include, occurred, amount, account_combo, kind, category, other)
             ):
                 self.table.setCellWidget(index, column, widget)
-                self._row_widgets[widget] = index
+                self._row_widgets[widget] = (index, column)
                 widget.installEventFilter(self)
             row = BatchRow(
                 include,
@@ -581,13 +582,25 @@ class OcrBatchDialog(QDialog):
             )
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        index = self._row_widgets.get(watched)
-        if index is not None and event.type() in (
-            QEvent.Type.FocusIn,
-            QEvent.Type.MouseButtonPress,
+        cell = self._row_widgets.get(watched)
+        if (
+            cell is not None
+            and not self._selecting_row
+            and event.type()
+            in (
+                QEvent.Type.FocusIn,
+                QEvent.Type.MouseButtonPress,
+            )
         ):
-            self.table.setCurrentCell(index, 0)
-            self._show_source()
+            # setCurrentCell сам присылает FocusIn; повторный вход менял фокус по кругу.
+            self._selecting_row = True
+            try:
+                index, column = cell
+                if (self.table.currentRow(), self.table.currentColumn()) != cell:
+                    self.table.setCurrentCell(index, column)
+                self._show_source()
+            finally:
+                self._selecting_row = False
         return super().eventFilter(watched, event)
 
     def edit_selected(self) -> None:

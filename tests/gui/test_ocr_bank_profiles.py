@@ -10,6 +10,8 @@ from personal_finance.application.ocr_cards import (
     OcrHistoryPreview,
 )
 from personal_finance.domain.ocr import LoadedOcrImage
+from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
+from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, GenericHistoryAdapter
 from personal_finance.infrastructure.ocr.images import load_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 from personal_finance.infrastructure.ocr.vtb import VtbCardAdapter
@@ -22,7 +24,7 @@ from tests.ocr_fixtures import document, png_image
 from tests.ocr_fixtures import vtb_history_document as history
 
 
-def test_explicit_bank_menu_routes_to_its_worker_and_disables_every_profile(
+def test_flat_menu_prefers_universal_profile_and_disables_while_working(
     qtbot, qapp, tmp_path, monkeypatch
 ):
     image = png_image()
@@ -41,9 +43,16 @@ def test_explicit_bank_menu_routes_to_its_worker_and_disables_every_profile(
     v = CardRecognition(
         ocr, load_ocr_image, VtbCardAdapter(), history_adapter=VtbHistoryAdapter(), bank_name="ВТБ"
     )
-    window = MainWindow(ocr_recognitions=(t, v))
+    universal = CardRecognition(
+        ocr,
+        load_ocr_image,
+        GenericCardAdapter(),
+        history_adapter=GenericHistoryAdapter(),
+        bank_name=UNIVERSAL_PROFILE,
+    )
+    window = MainWindow(ocr_recognitions=(t, v, universal))
     qtbot.addWidget(window)
-    assert len(window._ocr_actions) == 3
+    assert [a.text() for a in window._ocr_actions] == ["Карточка операции", "История операций"]
     titles = []
     monkeypatch.setattr(
         QFileDialog,
@@ -52,16 +61,16 @@ def test_explicit_bank_menu_routes_to_its_worker_and_disables_every_profile(
     )
 
     def show(dialog):
-        assert dialog.preview.bank_name == "ВТБ"
-        assert dialog.preview.card.adapter == "vtb-card-v1"
+        assert dialog.preview.bank_name == UNIVERSAL_PROFILE
+        assert dialog.preview.card.adapter == "generic-card-v5"
         assert QThread.currentThread() == qapp.thread() and not window._busy
         seen.append(True)
         return QDialog.DialogCode.Rejected
 
     monkeypatch.setattr(OcrPreviewDialog, "exec", show)
-    window._ocr_actions[1].trigger()
+    window._ocr_actions[0].trigger()
     qtbot.waitUntil(lambda: bool(seen), timeout=5000)
-    assert "ВТБ" in titles[0] and all(a.isEnabled() for a in window._ocr_actions)
+    assert UNIVERSAL_PROFILE in titles[0] and all(a.isEnabled() for a in window._ocr_actions)
     assert window.session is None and path.read_bytes() == image.png
 
 

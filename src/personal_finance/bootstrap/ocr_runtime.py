@@ -103,6 +103,7 @@ def recognitions_for_directory(directory: Path) -> tuple[CardRecognition, ...]:
             bank_name=UNIVERSAL_PROFILE,
             fallback_ocr=fallback,
             auto_history_hint=GenericHistoryAdapter.has_heading,
+            retry_missing_card=GenericCardAdapter.can_retry,
         ),
         CardRecognition(
             ocr,

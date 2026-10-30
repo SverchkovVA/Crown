@@ -51,7 +51,7 @@ _HISTORY = re.compile(
 )
 _HEADING = re.compile(
     r"^(?:детали операции|информация об операции|операция(?: выполнена)?|"
-    r"перевод(?:\s+.*)?|покупка|оплата(?:\s+.*)?|плат[её]ж|поступление|пополнение|"
+    r"переводы|перевод(?:\s+.*)?|покупка|оплата(?:\s+.*)?|плат[её]ж|поступление|пополнение|"
     r"зачисление|списание|чек)$",
     re.I,
 )
@@ -65,6 +65,14 @@ _MONEY_LABEL = re.compile(
     r"^(?:сумма(?: операции|платежа|перевода)?|списано|зачислено)\s*:?\s*", re.I
 )
 _DIRECTION_LABEL = re.compile(r"^(?P<label>списано|зачислено)\b", re.I)
+_ACCOUNT_SECTION = re.compile(
+    r"^(?:перевод со сч[её]та|списано со сч[её]та|зачислено на сч[её]т|"
+    r"сч[её]т (?:списания|зачисления|отправителя|получателя)|"
+    r"(?:с|со|на) сч[её]т(?:а)?|карта (?:списания|зачисления)|реквизиты|"
+    r"номер (?:телефона|карты|сч[её]та))\b",
+    re.I,
+)
+_MISSING_MAIN_AMOUNT = "Не выделена область основной суммы."
 
 
 @dataclass(frozen=True)
@@ -376,6 +384,10 @@ def _with_currency(card: OcrCardDraft, hint: tuple[str, tuple[int, ...]] | None)
 
 
 class GenericCardAdapter:
+    @staticmethod
+    def can_retry(card: OcrCardDraft) -> bool:
+        return card.amount.value is None and card.blocked_reason == _MISSING_MAIN_AMOUNT
+
     def parse(self, document: OcrDocument) -> OcrCardDraft:
         rows = visual_rows(document)
         candidates = []
@@ -386,6 +398,7 @@ class GenericCardAdapter:
         description_refs: tuple[int, ...] = ()
         blocked = ""
         direction = None
+        secondary = False
         for index, row in enumerate(rows):
             monies = _money(document, row)
             bound_amount = False
@@ -404,7 +417,18 @@ class GenericCardAdapter:
             hint = _currency_hint(row)
             if hint is not None:
                 hints.append(hint)
-            if _MONEY_LABEL.match(row.text) and len(monies) == 1 or bound_amount:
+            if _ACCOUNT_SECTION.match(row.text):
+                secondary = True
+            label_only = re.fullmatch(
+                r"(?:сумма(?: операции|платежа|перевода)?|списано|зачислено)\s*:?",
+                row.text,
+                re.I,
+            )
+            if not _ACCOUNT_SECTION.match(row.text) and (
+                bound_amount or _MONEY_LABEL.match(row.text) and (monies or label_only)
+            ):
+                secondary = False
+            if (_MONEY_LABEL.match(row.text) and len(monies) == 1) or bound_amount:
                 labelled.extend(monies)
             if _PENDING.search(row.text):
                 blocked = "Непроведённая или отменённая операция не принимается."
@@ -412,7 +436,12 @@ class GenericCardAdapter:
                 blocked = "Отдельная комиссия требует ручного финансового оформления."
             if _FOREIGN.search(row.text) and _money(document, row):
                 blocked = "Известная другая валюта: финансовый OCR пока поддерживает RUB."
-            if not bound_amount and not _DETAILS.match(row.text) and not _SUMMARY.match(row.text):
+            if (
+                not secondary
+                and not bound_amount
+                and not _DETAILS.match(row.text)
+                and not _SUMMARY.match(row.text)
+            ):
                 dates.extend(_dates(document, row))
             if re.match(
                 r"^(?:описание|назначение|получатель|отправитель|магазин)\s*:", row.text, re.I
@@ -420,7 +449,8 @@ class GenericCardAdapter:
                 description = row.text.split(":", 1)[1].strip()
                 description_refs = row.refs
             if (
-                _SUMMARY.match(row.text)
+                secondary
+                or _SUMMARY.match(row.text)
                 or _DETAILS.match(row.text)
                 or re.match(r"^(?:к[еэ]шб[еэ]к|бонусы)\b", row.text, re.I)
             ):
@@ -436,7 +466,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v4") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v5") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -471,7 +501,7 @@ class GenericCardAdapter:
             blocked = blocked or (
                 "Найдено несколько сумм. Выберите историю операций."
                 if candidates
-                else "Не выделена область основной суммы."
+                else _MISSING_MAIN_AMOUNT
             )
         if len(candidates) == 1:
             result = _draft(
@@ -480,14 +510,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v4",
+                "generic-card-v5",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return result
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v4")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v5")
         return replace(empty, blocked_reason=blocked)
 
 

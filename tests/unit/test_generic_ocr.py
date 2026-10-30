@@ -392,7 +392,7 @@ def test_card_exact_russian_currency_forms(currency):
         card.occurred_on.value,
         card.local_time.value,
     ) == (47315, "RUB", CashDirection.OUT, date(2026, 10, 22), time(9, 18))
-    assert card.adapter == "generic-card-v4"
+    assert card.adapter == "generic-card-v5"
     assert card.currency.word_indices and card.amount.word_indices
     assert any(currency in card.document.words[i].text for i in card.currency.word_indices)
 

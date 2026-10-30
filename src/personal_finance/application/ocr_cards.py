@@ -66,6 +66,7 @@ class CardRecognition:
         bank_name: str = "Т-Банк",
         fallback_ocr: Ocr | None = None,
         auto_history_hint: Callable[[OcrDocument], bool] | None = None,
+        retry_missing_card: Callable[[OcrCardDraft], bool] | None = None,
     ) -> None:
         require_bank_name(bank_name)
         self.bank_name = bank_name
@@ -73,6 +74,7 @@ class CardRecognition:
         self._history_adapter = history_adapter
         self._fallback_ocr = fallback_ocr
         self._auto_history_hint = auto_history_hint
+        self._retry_missing_card = retry_missing_card
 
     def preview(self, path: Path) -> OcrCardPreview:
         source = self._loader(path)
@@ -103,7 +105,11 @@ class CardRecognition:
         if card.document != document:
             raise ValidationError("Адаптер вернул поля другого OCR-документа.")
         if (
-            not card.blocked_reason
+            (
+                not card.blocked_reason
+                or self._retry_missing_card is not None
+                and self._retry_missing_card(card)
+            )
             and self._fallback_ocr is not None
             and (card.amount.value is None or not card.occurred_on.word_indices)
         ):

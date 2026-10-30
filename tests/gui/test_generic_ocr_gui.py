@@ -163,7 +163,7 @@ def test_auto_selects_list_or_card_without_a_bank_template():
     )
 
 
-def test_menu_automatic_action_uses_one_worker_and_no_book(qtbot, monkeypatch):
+def test_explicit_history_menu_uses_one_worker_and_no_book(qtbot, monkeypatch):
     recognition, engine = service(history_source().history.document)
     window = MainWindow(ocr_recognitions=(recognition,))
     qtbot.addWidget(window)
@@ -171,8 +171,9 @@ def test_menu_automatic_action_uses_one_worker_and_no_book(qtbot, monkeypatch):
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args: ("unused.png", ""))
     monkeypatch.setattr(window, "_show_ocr_preview", lambda result: seen.append(result))
     menu = window.menuBar().actions()[0].menu()
-    assert menu.actions()[0].text() == "Распознать изображение…"
-    menu.actions()[0].trigger()
+    assert [a.text() for a in menu.actions()] == ["Карточка операции", "История операций"]
+    assert all(a.menu() is None for a in menu.actions())
+    menu.actions()[1].trigger()
     qtbot.waitUntil(lambda: not window._busy and bool(seen), timeout=10000)
     assert isinstance(seen[0], OcrHistoryPreview) and engine.calls == 1
     assert window.session is None

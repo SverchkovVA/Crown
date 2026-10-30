@@ -3,7 +3,7 @@
 from decimal import Decimal
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QPen, QPixmap, QResizeEvent
+from PySide6.QtGui import QColor, QFocusEvent, QImage, QMouseEvent, QPen, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -51,12 +51,16 @@ class SourceImageView(QGraphicsView):
         super().__init__()
         self.document = document
         self._fit = True
+        self._fitting = False
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scene = QGraphicsScene(self)
+        self._scene = scene
         self.setScene(scene)
         decoded = QImage.fromData(image.png)
         if decoded.isNull() or (decoded.width(), decoded.height()) != (image.width, image.height):
             raise ValidationError("Не удалось показать исходное изображение.")
-        scene.addPixmap(QPixmap.fromImage(decoded))
+        self._pixmap_item = scene.addPixmap(QPixmap.fromImage(decoded))
         self.outline = QGraphicsRectItem()
         self.outline.setPen(QPen(QColor("#c93824"), 3))
         self.outline.setBrush(QColor(255, 190, 50, 45))
@@ -68,12 +72,22 @@ class SourceImageView(QGraphicsView):
 
     def fit_image(self) -> None:
         self._fit = True
-        self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        if self._fitting:
+            return
+        self._fitting = True
+        try:
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            self.fitInView(self.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        finally:
+            self._fitting = False
 
     def zoom(self, factor: float) -> None:
         target = self.transform().m11() * factor
         if 0.03 <= target <= 8:
             self._fit = False
+            self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
             self.scale(factor, factor)
 
     def resizeEvent(self, event: QResizeEvent) -> None:
@@ -92,7 +106,8 @@ class SourceImageView(QGraphicsView):
         bottom = min(self.document.height, max(b.top + b.height for b in boxes) + 16)
         self.outline.setRect(QRectF(left, top, right - left, bottom - top))
         self.outline.show()
-        self.centerOn(self.outline)
+        if not self._fit:
+            self.centerOn(self.outline.rect().center())
 
 
 class OptionalMaskedEdit(QLineEdit):
@@ -102,6 +117,21 @@ class OptionalMaskedEdit(QLineEdit):
         super().__init__(parent)
         self.setInputMask(mask)
         self.setClearButtonEnabled(True)
+
+    def focusInEvent(self, event: QFocusEvent) -> None:
+        super().focusInEvent(event)
+        self.deselect()
+        self.setCursorPosition(0)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        super().mousePressEvent(event)
+        self.deselect()
+        self.setCursorPosition(0)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        super().mouseDoubleClickEvent(event)
+        self.deselect()
+        self.setCursorPosition(0)
 
     def text(self) -> str:
         value = super().text()
