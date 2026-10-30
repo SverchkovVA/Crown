@@ -68,7 +68,9 @@ try {
     $outText = [System.IO.File]::ReadAllText((Join-Path $testRoot 'encoding.stdout.log'), [System.Text.Encoding]::UTF8)
     $errText = [System.IO.File]::ReadAllText((Join-Path $testRoot 'encoding.stderr.log'), [System.Text.Encoding]::UTF8)
     Assert-PfCondition ($outText.Trim() -ceq 'Проверка русского stdout') 'Искажена кириллица в stdout PowerShell.'
-    Assert-PfCondition ($errText.Contains('Проверка русского stderr')) 'Искажена кириллица в stderr PowerShell.'
+    # Write-Error переносит даже слово при длинном пути сценария.
+    $compactError = $errText -replace '\s', ''
+    Assert-PfCondition ($compactError.Contains('Проверкарусскогоstderr')) 'Искажена кириллица в stderr PowerShell.'
     $program = 'import sys; sys.stdout.write("x"*200000); sys.stderr.write("y"*200000)'
     $streams = Invoke-PfProcess -FilePath $python -ArgumentList @('-c', $program) `
         -WorkingDirectory $working -LogPrefix (Join-Path $testRoot 'streams') `
