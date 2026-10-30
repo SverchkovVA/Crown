@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "personal-finance-local"
-version = "0.2.0.dev32"
+version = "0.2.0.dev33"
 description = "Локальное приложение для личных финансов: основа Windows-версии"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"

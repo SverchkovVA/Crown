@@ -19,3 +19,16 @@ def session(tmp_path: Path) -> Iterator[VaultSession]:
         yield opened
     finally:
         opened.close()
+
+
+@pytest.fixture(autouse=True)
+def isolated_recent_books(tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+
+    from personal_finance.infrastructure import recent_books
+
+    monkeypatch.setattr(
+        recent_books,
+        "default_settings",
+        lambda: QSettings(str(tmp_path / "recent-books.ini"), QSettings.Format.IniFormat),
+    )

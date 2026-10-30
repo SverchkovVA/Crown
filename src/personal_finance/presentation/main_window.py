@@ -27,9 +27,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QTableView,
     QTreeWidget,
@@ -82,6 +84,7 @@ from personal_finance.infrastructure.backup.container import (
     verify_backup,
 )
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
+from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog, CashFlowPeriodDialog
 from personal_finance.presentation.analytics_comparison import (
@@ -275,12 +278,18 @@ def accept_named_form(dialog: QDialog, field: QLineEdit) -> None:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, *, ocr_recognitions: tuple[CardRecognition, ...] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        ocr_recognitions: tuple[CardRecognition, ...] = (),
+        recent_books: LocalRecentBooks | None = None,
+    ) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
         self.resize(1160, 760)
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
+        self._recent_books = recent_books if recent_books is not None else LocalRecentBooks()
         self._local_ocr_preferences = LocalOcrPreferences()
         self._ocr_preferences = self._local_ocr_preferences.load()
         self._ocr_recognitions = ocr_recognitions
@@ -308,22 +317,16 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
         if self._ocr_recognitions:
             menu = self.menuBar().addMenu("Распознавание")
-            for service in self._ocr_recognitions:
-                if service.bank_name == UNIVERSAL_PROFILE:
-                    automatic = menu.addAction("Распознать изображение…")
-                    automatic.triggered.connect(
-                        partial(self.review_ocr, service=service, auto_detect=True)
-                    )
-                    self._ocr_actions.append(automatic)
-                bank = menu.addMenu(service.bank_name)
-                for title, history in (("Карточка операции", False), ("История операций", True)):
-                    if history and not service.supports_history:
-                        continue
-                    action = bank.addAction(title)
-                    action.triggered.connect(
-                        partial(self.review_ocr, service=service, history=history)
-                    )
-                    self._ocr_actions.append(action)
+            service = next(
+                (value for value in self._ocr_recognitions if value.bank_name == UNIVERSAL_PROFILE),
+                self._ocr_recognitions[0],
+            )
+            for title, history in (("Карточка операции", False), ("История операций", True)):
+                if history and not service.supports_history:
+                    continue
+                action = menu.addAction(title)
+                action.triggered.connect(partial(self.review_ocr, service=service, history=history))
+                self._ocr_actions.append(action)
         settings_menu = self.menuBar().addMenu("Настройки")
         settings_menu.addAction("Распознавание и свои переводы", self.configure_ocr)
         reports_menu = self.menuBar().addMenu("Отчёты")
@@ -869,7 +872,22 @@ class MainWindow(QMainWindow):
         restore = button("Восстановить из резервной копии", self.restore_book)
         restore.setMaximumWidth(355)
         layout.addWidget(restore)
-        layout.addSpacing(32)
+        layout.addWidget(label("Недавние книги", "brand"))
+        self.recent_books_list = QListWidget()
+        self.recent_books_list.setAccessibleName("Недавние книги на этом компьютере")
+        self.recent_books_list.setMaximumHeight(190)
+        self.recent_books_list.itemDoubleClicked.connect(self._open_recent_item)
+        layout.addWidget(self.recent_books_list)
+        recent_actions = QHBoxLayout()
+        self.open_recent_button = button("Открыть выбранную", self.open_recent_book)
+        self.forget_recent_button = button("Убрать из списка", self.forget_recent_book)
+        recent_actions.addWidget(self.open_recent_button)
+        recent_actions.addWidget(self.forget_recent_button)
+        recent_actions.addStretch()
+        layout.addLayout(recent_actions)
+        self.recent_books_list.itemSelectionChanged.connect(self._recent_selection)
+        self._refresh_recent_books()
+        layout.addSpacing(20)
         layout.addWidget(
             label(
                 f"Предварительная сборка {__version__} · Используйте только проверочные данные",
@@ -877,7 +895,11 @@ class MainWindow(QMainWindow):
             )
         )
         layout.addStretch()
-        return page
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(page)
+        return scroll
 
     def _workspace(self) -> QWidget:
         page = QWidget()
@@ -1769,6 +1791,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(button("Проверить резервную копию", self.verify_copy))
         layout.addWidget(button("Восстановить в новую папку", self.restore_book))
         layout.addWidget(button("Проверить целостность книги", self.check_book))
+        self.remember_book_check = QCheckBox("Показывать эту книгу в недавних на этом компьютере")
+        self.remember_book_check.setToolTip(
+            "Сохраняются название и путь. Пароль и код восстановления не сохраняются. "
+            "Отключение убирает книгу из списка и запрещает её запоминание."
+        )
+        self.remember_book_check.toggled.connect(self._remember_book_changed)
+        layout.addWidget(self.remember_book_check)
         self.backup_status = label(self.last_backup, "muted")
         layout.addWidget(self.backup_status)
         layout.addSpacing(20)
@@ -1858,6 +1887,14 @@ class MainWindow(QMainWindow):
         if self.session and self.session is not session:
             self.session.close()
         self.session = session
+        try:
+            self._recent_books.remember(session.root, session.book_id, session.name)
+        except ValidationError:
+            self.statusBar().showMessage("Не удалось обновить список недавних книг.")
+        self.remember_book_check.blockSignals(True)
+        self.remember_book_check.setChecked(self._recent_books.enabled(session.book_id))
+        self.remember_book_check.blockSignals(False)
+        self._refresh_recent_books()
         self._update_report_action()
         stored = session.ocr_settings.load()[0] if session.ocr_settings is not None else None
         self._ocr_preferences = stored or self._local_ocr_preferences.load()
@@ -1887,7 +1924,12 @@ class MainWindow(QMainWindow):
         path = QFileDialog.getExistingDirectory(self, "Выберите папку книги (.pfvault)")
         if not path:
             return
-        dialog = OpenDialog(Path(path), self)
+        self._open_book_path(Path(path))
+
+    def _open_book_path(self, path: Path) -> None:
+        if self._busy:
+            return
+        dialog = OpenDialog(path, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         credential, recovery = dialog.credential.text(), dialog.recovery.isChecked()
@@ -1898,6 +1940,62 @@ class MainWindow(QMainWindow):
             self.activate_session,
             "Открытие и проверка книги…",
         )
+
+    def _refresh_recent_books(self) -> None:
+        self.recent_books_list.clear()
+        for record in self._recent_books.items():
+            item = QListWidgetItem(record.name + " · " + record.path)
+            item.setData(Qt.ItemDataRole.UserRole, record.path)
+            item.setToolTip(record.path)
+            self.recent_books_list.addItem(item)
+        self._recent_selection()
+
+    def _recent_selection(self) -> None:
+        selected = bool(self.recent_books_list.selectedItems())
+        self.open_recent_button.setEnabled(selected)
+        self.forget_recent_button.setEnabled(selected)
+
+    def _open_recent_item(self, item: QListWidgetItem) -> None:
+        self.open_recent_book()
+
+    def open_recent_book(self) -> None:
+        if self._busy:
+            return
+        items = self.recent_books_list.selectedItems()
+        if len(items) != 1:
+            return
+        path = Path(items[0].data(Qt.ItemDataRole.UserRole))
+        if not path.is_dir():
+            QMessageBox.information(
+                self,
+                "Книга недоступна",
+                "Папка книги недоступна. Выберите её через «Открыть книгу» "
+                "или уберите запись из списка.",
+            )
+            return
+        self._open_book_path(path)
+
+    def forget_recent_book(self) -> None:
+        items = self.recent_books_list.selectedItems()
+        if self._busy or len(items) != 1:
+            return
+        try:
+            self._recent_books.forget(items[0].data(Qt.ItemDataRole.UserRole))
+        except ValidationError as error:
+            QMessageBox.warning(self, "Настройка не сохранена", str(error))
+        self._refresh_recent_books()
+
+    def _remember_book_changed(self, checked: bool) -> None:
+        session = self.session
+        if self._busy or session is None:
+            return
+        try:
+            self._recent_books.set_enabled(session.book_id, checked)
+            if checked:
+                self._recent_books.remember(session.root, session.book_id, session.name)
+        except ValidationError as error:
+            QMessageBox.warning(self, "Настройка не сохранена", str(error))
+        self._refresh_recent_books()
 
     def restore_book(self) -> None:
         source, _ = QFileDialog.getOpenFileName(self, "Резервная копия", "", "Копия (*.pfbackup)")

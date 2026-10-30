@@ -14,7 +14,7 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from PySide6.QtCore import QCoreApplication, QDate, QEvent, Qt
+from PySide6.QtCore import QCoreApplication, QDate, QEvent, QSettings, Qt
 from PySide6.QtWidgets import QApplication, QDateEdit, QLineEdit
 
 from personal_finance.application.analytics import Analytics
@@ -58,6 +58,7 @@ from personal_finance.domain.query import OperationQuery
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
 from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
+from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
@@ -968,16 +969,32 @@ def self_test(
                                 restored_recovery,
                                 recovery=True,
                             ).result(timeout=15)
-                            window = MainWindow(ocr_recognitions=ocr_recognitions)
+                            window = MainWindow(
+                                ocr_recognitions=ocr_recognitions,
+                                recent_books=LocalRecentBooks(
+                                    QSettings(
+                                        str(root / "recent-books.ini"), QSettings.Format.IniFormat
+                                    )
+                                ),
+                            )
                             window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
                             try:
                                 window.activate_session(background)
+                                if len(window._recent_books.items()) != 1:
+                                    raise RuntimeError(
+                                        "Недавняя книга не сохранена в тестовом профиле."
+                                    )
+                                window.remember_book_check.setChecked(False)
+                                if window._recent_books.items():
+                                    raise RuntimeError("Отключённая книга осталась в недавних.")
+                                window.remember_book_check.setChecked(True)
+                                if len(window._recent_books.items()) != 1:
+                                    raise RuntimeError("Не удалось вернуть книгу в недавние.")
                                 if ocr_recognitions and not any(
-                                    action.text() == "Распознать изображение…"
-                                    and action.isEnabled()
+                                    action.text() == "Карточка операции" and action.isEnabled()
                                     for action in window._ocr_actions
                                 ):
-                                    raise RuntimeError("Команда автоматического OCR недоступна.")
+                                    raise RuntimeError("Команда карточки операции недоступна.")
                                 window.show()
                                 app.processEvents()
                                 if (
