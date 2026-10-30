@@ -96,6 +96,7 @@ from personal_finance.presentation.classification import (
     CategoryRuleHistoryDialog,
     CategoryRulePage,
 )
+from personal_finance.presentation.deposit_scenarios_workflow import DepositScenariosController
 from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
 from personal_finance.presentation.dialogs import (
     CreateDialog,
@@ -337,6 +338,10 @@ class MainWindow(QMainWindow):
         self.cash_flow_action = reports_menu.addAction("Движение средств…", self.request_cash_flow)
         self.cash_flow_action.setEnabled(False)
         self.deposit_action = reports_menu.addAction("Прогноз вклада…", self.request_deposit)
+        self.saved_deposits_action = reports_menu.addAction(
+            "Сохранённые сценарии вкладов…", self.request_saved_deposits
+        )
+        self.saved_deposits_action.setEnabled(False)
 
     def _update_report_action(self) -> None:
         enabled = not self._busy and self.session is not None and self.session.ledger is not None
@@ -344,6 +349,17 @@ class MainWindow(QMainWindow):
         self.compare_action.setEnabled(enabled)
         self.cash_flow_action.setEnabled(enabled)
         self.deposit_action.setEnabled(not self._busy)
+        saved_enabled = (
+            not self._busy
+            and self.session is not None
+            and self.session.deposit_scenarios is not None
+        )
+        self.saved_deposits_action.setEnabled(saved_enabled)
+        self.saved_deposits_action.setToolTip(
+            "Сохранение условий расчёта без фактических выплат."
+            if saved_enabled
+            else "Откройте новую книгу или восстановленную копию с поддержкой сценариев."
+        )
 
     def request_analytics(self) -> None:
         session = self.session
@@ -527,6 +543,12 @@ class MainWindow(QMainWindow):
             dialog.exec()
         finally:
             dialog.deleteLater()
+
+    def request_saved_deposits(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.deposit_scenarios is None:
+            return
+        DepositScenariosController(self, session).open()
 
     def request_deposit(self) -> None:
         if self._busy:

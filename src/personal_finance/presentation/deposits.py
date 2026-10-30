@@ -97,6 +97,7 @@ class DepositScenarioDialog(QDialog):
         _size(self, 820, 730)
         self.result_scenario: DepositScenario | None = None
         self.initial_rate_id = str(uuid4())
+        self._saved_payout_dates: tuple[date, ...] | None = None
         layout = QVBoxLayout(self)
         layout.addWidget(
             _label(
@@ -128,7 +129,7 @@ class DepositScenarioDialog(QDialog):
         ):
             editor.setDisplayFormat("dd.MM.yyyy")
             editor.setCalendarPopup(True)
-            editor.setMinimumDate(QDate(1, 1, 1))
+            editor.setMinimumDate(QDate(100, 1, 1))
             editor.setMaximumDate(QDate(9999, 12, 31))
             editor.setAccessibleName(name)
         self.frequency = _combo(
@@ -212,6 +213,101 @@ class DepositScenarioDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
+    def load_scenario(self, value: DepositScenario) -> None:
+        if not isinstance(value, DepositScenario) or value.initial.currency != RUB:
+            raise ValidationError("Эта форма редактирует сценарии только в RUB.")
+        if value.opened_on.year < 100:
+            raise ValidationError(
+                "Форма не поддерживает даты до 0100 года; доступен просмотр и расчёт."
+            )
+        if len(value.rates) - 1 > 1000 or len(value.movements) > 1000:
+            raise ValidationError(
+                "Для этой формы слишком много изменений; доступен просмотр и расчёт."
+            )
+        self.initial.setText(self._input_money(value.initial.minor))
+        self.minimum.setText(self._input_money(value.minimum.minor))
+        self.rate.setText(self._input_rate(value.rates[0].annual_percent))
+        self.initial_rate_id = value.rates[0].revision_id
+        self.start.setDate(QDate(value.opened_on.year, value.opened_on.month, value.opened_on.day))
+        self.end.setDate(QDate(value.matures_on.year, value.matures_on.month, value.matures_on.day))
+        for combo, policy in [
+            (self.boundary, value.boundary),
+            (self.balance_moment, value.balance_moment),
+            (self.day_count, value.day_count),
+            (self.rounding, value.rounding),
+            (self.rounding_stage, value.rounding_stage),
+        ]:
+            index = combo.findData(policy.value)
+            if index < 0:
+                raise ValidationError("Форма не поддерживает правило этого сценария.")
+            combo.setCurrentIndex(index)
+        self.capitalize.setChecked(value.capitalize)
+        self.allow_topups.setChecked(value.allow_topups)
+        self.allow_withdrawals.setChecked(value.allow_withdrawals)
+        self._saved_payout_dates = value.payout_dates
+        index = self.frequency.findData("saved")
+        if index < 0:
+            self.frequency.addItem("Сохранённые даты выплат", "saved")
+            index = self.frequency.count() - 1
+        self.frequency.setCurrentIndex(index)
+        self.frequency.setToolTip(
+            "Сохранённые даты не меняются автоматически. Для другого срока выберите новый график."
+        )
+        for table in (self.rate_table, self.movement_table):
+            table.setRowCount(0)
+        for item in value.rates[1:]:
+            self._add_event(self.rate_table)
+            row = self.rate_table.rowCount() - 1
+            editor = self.rate_table.cellWidget(row, 0)
+            field = self.rate_table.cellWidget(row, 1)
+            assert isinstance(editor, QDateEdit) and isinstance(field, QLineEdit)
+            editor.setDate(
+                QDate(item.effective_on.year, item.effective_on.month, item.effective_on.day)
+            )
+            editor.setProperty("recordId", item.revision_id)
+            field.setText(self._input_rate(item.annual_percent))
+        for movement in value.movements:
+            self._add_event(self.movement_table)
+            row = self.movement_table.rowCount() - 1
+            editor = self.movement_table.cellWidget(row, 0)
+            field = self.movement_table.cellWidget(row, 1)
+            assert isinstance(editor, QDateEdit) and isinstance(field, QLineEdit)
+            editor.setDate(
+                QDate(
+                    movement.occurred_on.year, movement.occurred_on.month, movement.occurred_on.day
+                )
+            )
+            editor.setProperty("recordId", movement.id)
+            field.setText(self._input_money(movement.amount.minor))
+        self.result_scenario = None
+        self.feedback.hide()
+
+    @staticmethod
+    def _input_money(minor: int) -> str:
+        whole, fraction = divmod(abs(minor), 100)
+        return ("-" if minor < 0 else "") + f"{whole},{fraction:02d}"
+
+    @staticmethod
+    def _input_rate(value: Decimal) -> str:
+        if not value:
+            return "0"
+        text = format(value, "f")
+        return (text.rstrip("0").rstrip(".") if "." in text else text).replace(".", ",")
+
+    def _payout_dates(self, start: date, end: date) -> tuple[date, ...]:
+        mode = self.frequency.currentData()
+        if mode == "monthly":
+            return monthly_payouts(start, end)
+        if mode == "maturity":
+            return (end,)
+        if mode == "saved" and self._saved_payout_dates is not None:
+            if self._saved_payout_dates[-1] != end or self._saved_payout_dates[0] <= start:
+                raise ValidationError(
+                    "Для другого срока выберите новый график выплат вместо сохранённых дат."
+                )
+            return self._saved_payout_dates
+        raise ValidationError("Выберите график выплаты процентов.")
+
     def _accept(self) -> None:
         try:
             start = date(
@@ -228,9 +324,7 @@ class DepositScenarioDialog(QDialog):
                 initial=amount,
                 rates=self._rates(start, rate),
                 movements=self._movements(),
-                payout_dates=monthly_payouts(start, end)
-                if self.frequency.currentData() == "monthly"
-                else (end,),
+                payout_dates=self._payout_dates(start, end),
                 boundary=AccrualBoundary(self.boundary.currentData()),
                 balance_moment=BalanceMoment(self.balance_moment.currentData()),
                 day_count=DayCount(self.day_count.currentData()),
@@ -294,7 +388,7 @@ class DepositScenarioDialog(QDialog):
         editor = QDateEdit(day)
         editor.setDisplayFormat("dd.MM.yyyy")
         editor.setCalendarPopup(True)
-        editor.setMinimumDate(QDate(1, 1, 1))
+        editor.setMinimumDate(QDate(100, 1, 1))
         editor.setMaximumDate(QDate(9999, 12, 31))
         editor.setProperty("recordId", str(uuid4()))
         editor.setAccessibleName(table.accessibleName() + ": дата")
@@ -369,7 +463,12 @@ class DepositScenarioDialog(QDialog):
 
 class DepositForecastDialog(QDialog):
     def __init__(
-        self, report: DepositForecast, parent: QWidget | None = None, *, allow_edit: bool = False
+        self,
+        report: DepositForecast,
+        parent: QWidget | None = None,
+        *,
+        allow_edit: bool = False,
+        conditions_saved: bool = False,
     ) -> None:
         super().__init__(parent)
         self.report = report
@@ -473,13 +572,16 @@ class DepositForecastDialog(QDialog):
         tabs.addTab(conditions, "Введённые условия")
         self.tabs = tabs
         layout.addWidget(tabs, 1)
-        layout.addWidget(
-            _label(
-                "Это сценарий, не фактическая банковская выплата. Отдельно выплаченные "
-                "проценты не входят в остаток вклада. Средства в книге не меняются. "
-                "Условия и расчёт на диске не сохраняются."
+        self.storage_note = _label(
+            "Это сценарий, не фактическая банковская выплата. Отдельно выплаченные "
+            "проценты не входят в остаток вклада. Средства в книге не меняются. "
+            + (
+                "Условия взяты из сохранённой версии. Новый расчёт не записывается в книгу."
+                if conditions_saved
+                else "Условия и расчёт на диске не сохраняются."
             )
         )
+        layout.addWidget(self.storage_note)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         if allow_edit:
             self.edit_button = buttons.addButton(

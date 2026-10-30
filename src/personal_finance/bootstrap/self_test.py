@@ -62,6 +62,7 @@ from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
+from personal_finance.presentation.deposit_scenarios import SavedScenariosDialog, ScenarioAction
 from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
 from personal_finance.presentation.main_window import MainWindow
 
@@ -782,6 +783,30 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Сохранение сценария изменило финансовые данные.")
+                    saved_items = scenario_service.items(include_archived=True)
+                    saved_dialog = SavedScenariosDialog(saved_items)
+                    loaded_dialog = DepositScenarioDialog()
+                    try:
+                        saved_dialog.table.selectRow(0)
+                        saved_dialog.choose(ScenarioAction.EDIT)
+                        request = saved_dialog.request
+                        if request is None or request.record != saved_items[0]:
+                            raise RuntimeError("Выбор сохранённых условий не подтверждён.")
+                        loaded_dialog.load_scenario(request.record.scenario)
+                        loaded_dialog._accept()
+                        if loaded_dialog.result_scenario != request.record.scenario:
+                            raise RuntimeError("Форма изменила сохранённые условия сценария.")
+                    finally:
+                        for widget in (loaded_dialog, saved_dialog):
+                            widget.reject()
+                            widget.deleteLater()
+                            QCoreApplication.sendPostedEvents(widget, QEvent.Type.DeferredDelete)
+                    if (
+                        ledger.operations(include_deleted=True) != before_deposit
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Просмотр сценария изменил финансовые данные.")
+
                 with _step(report, "render_income_expense_charts"):
                     chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
                     try:
