@@ -62,7 +62,7 @@ def _selection(session, currency="рублей"):
 def test_literal_currency_is_audited_and_repeat_never_adds_movement(session):
     value = _selection(session)
     data = json.loads(value.evidence.payload)
-    assert data["adapter"] == "generic-card-v4" and data["fields"]["currency"]["value"] == "RUB"
+    assert data["adapter"] == "generic-card-v5" and data["fields"]["currency"]["value"] == "RUB"
     assert any("рублей" in w["text"] for w in data["words"])
     assert OcrEvidence(value.evidence.payload) == value.evidence
     session.ocr_importing.confirm(value)
