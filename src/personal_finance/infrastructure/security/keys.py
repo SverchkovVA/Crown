@@ -42,8 +42,12 @@ def decode(value: object, size: int) -> bytes:
 
 
 def validate_password(password: str) -> None:
-    if len(password) < 12 or len(password.encode("utf-8")) > 1024:
-        raise ValidationError("Используйте парольную фразу от 12 символов (не более 1024 байт).")
+    if not isinstance(password, str) or not password:
+        raise ValidationError("Введите парольную фразу.")
+    try:
+        password.encode("utf-8")
+    except UnicodeError:
+        raise ValidationError("Парольная фраза содержит неподдерживаемые символы.") from None
 
 
 def kdf_settings() -> dict[str, object]:
@@ -71,8 +75,6 @@ def derive_key(password: str, settings: object) -> bytes:
         or settings["memlimit"] != KDF_MEMORY
     ):
         raise UnsupportedFormat("Параметры защиты не поддерживаются этой версией.")
-    if len(password.encode("utf-8")) > 1024:
-        raise InvalidCredentials("Не удалось открыть данные: проверьте пароль.")
     return pwhash.argon2id.kdf(
         KEY_BYTES,
         password.encode("utf-8"),

@@ -73,7 +73,7 @@ class CreateDialog(QDialog):
             form.addRow("Пароль резервной копии", self.backup_password)
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setPlaceholderText("Парольная фраза от 12 символов")
+        self.password.setPlaceholderText("Введите парольную фразу")
         self.confirm = QLineEdit()
         self.confirm.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("Новая парольная фраза" if restoring else "Парольная фраза", self.password)

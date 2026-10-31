@@ -7,9 +7,13 @@ permissions:
 
 jobs:
   linux:
-    name: Проверки Linux
+    name: Проверки Linux · группа ${{ matrix.group }}
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0, 1]
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 50
     env:
       QT_QPA_PLATFORM: offscreen
       PYTHONUNBUFFERED: '1'
@@ -27,17 +31,59 @@ jobs:
       - run: uv run --frozen ruff format --check src tests tools
       - run: uv run --frozen mypy src/personal_finance
       - name: Автоматические тесты
-        timeout-minutes: 20
-        run: uv run --frozen pytest -vv -o faulthandler_timeout=90 -o faulthandler_exit_on_timeout=true
+        timeout-minutes: 40
+        run: >-
+          uv run --frozen python tools/run_test_group.py
+          --index ${{ matrix.group }} --count 2
+          --manifest artifacts/linux-group-${{ matrix.group }}/manifest.json
+          -vv -o faulthandler_timeout=90 -o faulthandler_exit_on_timeout=true
+          --junitxml=artifacts/linux-group-${{ matrix.group }}/tests.xml tests
       - shell: pwsh
         run: ./packaging/windows/test_helpers.ps1 -PythonPath .venv/bin/python
       - name: Самопроверка исходников
         timeout-minutes: 3
         run: uv run --frozen python -m personal_finance.bootstrap.main --self-test
+      - name: Отчёт группы Linux
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-tests-${{ matrix.group }}
+          path: artifacts/linux-group-${{ matrix.group }}
+          if-no-files-found: error
+          retention-days: 14
+  linux-summary:
+    name: Полнота проверок Linux
+    needs: linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.12.23'
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: linux-tests-0
+          path: artifacts/linux-groups/0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: linux-tests-1
+          path: artifacts/linux-groups/1
+      - name: Проверить полное покрытие набора
+        run: >-
+          uv run --no-project --python "$(cat .python-version)"
+          python tools/verify_test_groups.py artifacts/linux-groups --count 2
+          > artifacts/linux-groups-summary.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-tests-summary
+          path: artifacts/linux-groups-summary.json
+          if-no-files-found: error
+          retention-days: 14
   windows:
     name: Проверки и сборка Windows
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7

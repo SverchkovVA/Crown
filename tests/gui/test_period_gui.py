@@ -66,7 +66,7 @@ def test_main_window_closes_reopens_in_worker_and_clears_state(qtbot, session, m
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.navigation.setCurrentRow(5)
+    window.navigation.setCurrentRow(4)
     window.show()
     window.period_page.month_edit.setDate(QDate(2026, 1, 1))
 

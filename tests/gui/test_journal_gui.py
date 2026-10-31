@@ -112,7 +112,7 @@ def test_gui_add_edit_delete_history_and_clear_book(
     window.activate_session(session)
     window.balance_date.setDate(QDate(2026, 10, 26))
     window.show()
-    window.navigation.setCurrentRow(2)
+    window.navigation.setCurrentRow(0)
     value = ["10,00"]
 
     def accept(dialog):
