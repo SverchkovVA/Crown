@@ -277,12 +277,13 @@ def test_integrity_checks_scenario_payload_through_vault(tmp_path, monkeypatch):
         session.close()
 
 
-def test_default_new_book_uses13(tmp_path):
+def test_default_new_book_uses14(tmp_path):
     session, _ = vault.create_vault(
-        tmp_path / "default13.pfvault", "Новая вымышленная книга", PASSWORD
+        tmp_path / "default14.pfvault", "Новая вымышленная книга", PASSWORD
     )
     try:
-        assert session.schema_revision == "0013" and session.deposit_scenarios is not None
+        assert session.schema_revision == "0014" and session.deposit_scenarios is not None
+        assert session.bonuses is not None and session.bonuses.entries() == []
         assert session.deposit_scenarios.items() == [] and session.catalog.institutions() == []
         session.check_integrity()
     finally:

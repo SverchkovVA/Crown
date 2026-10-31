@@ -52,7 +52,7 @@ from personal_finance.application.ocr_cards import (
     OcrCardPreview,
     OcrHistoryPreview,
 )
-from personal_finance.application.ocr_review import OcrReviewDefaults
+from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashFlowReport
@@ -91,6 +91,7 @@ from personal_finance.presentation.analytics_comparison import (
     ComparisonPeriodDialog,
     IncomeExpenseComparisonDialog,
 )
+from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -125,6 +126,7 @@ from personal_finance.presentation.ledger_dialogs import (
 from personal_finance.presentation.ocr_batch import OcrBatchDialog
 from personal_finance.presentation.ocr_confirmation import OcrConfirmationDialog, OcrOperationDialog
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
+from personal_finance.presentation.ocr_metadata import bank_category_match
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
 from personal_finance.presentation.ocr_settings import OcrSettingsDialog
 from personal_finance.presentation.organization import (
@@ -330,6 +332,10 @@ class MainWindow(QMainWindow):
                 self._ocr_actions.append(action)
         settings_menu = self.menuBar().addMenu("Настройки")
         settings_menu.addAction("Распознавание и свои переводы", self.configure_ocr)
+        bonus_menu = self.menuBar().addMenu("Бонусы")
+        self.bonuses_action = bonus_menu.addAction("Программы и журнал…")
+        self.bonuses_action.triggered.connect(lambda checked=False: self.request_bonuses())
+        self.bonuses_action.setEnabled(False)
         reports_menu = self.menuBar().addMenu("Отчёты")
         self.report_action = reports_menu.addAction("Доходы и расходы…", self.request_analytics)
         self.report_action.setEnabled(False)
@@ -344,6 +350,16 @@ class MainWindow(QMainWindow):
         self.saved_deposits_action.setEnabled(False)
 
     def _update_report_action(self) -> None:
+        self.bonuses_action.setEnabled(
+            not self._busy
+            and self.session is not None
+            and getattr(self.session, "bonuses", None) is not None
+        )
+        self.bonuses_action.setToolTip(
+            "Программы лояльности, отдельные остатки и отчёт по категориям"
+            if self.bonuses_action.isEnabled()
+            else "Для учёта бонусов создайте новую книгу или восстановите копию в новую папку."
+        )
         enabled = not self._busy and self.session is not None and self.session.ledger is not None
         self.report_action.setEnabled(enabled)
         self.compare_action.setEnabled(enabled)
@@ -600,6 +616,66 @@ class MainWindow(QMainWindow):
         if edit:
             self._run_deposit_form(input_dialog)
 
+    def request_bonuses(
+        self, seeds: tuple[BonusSeed, ...] = (), parent: QWidget | None = None
+    ) -> None:
+        session = self.session
+        if self._busy or session is None or session.bonuses is None:
+            return
+        dialog = BonusesDialog(self, session, parent, seeds)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+
+    def _attach_bonus_action(
+        self, dialog: QDialog, preview: OcrCardPreview | OcrHistoryPreview
+    ) -> None:
+        cards = preview.history.cards if isinstance(preview, OcrHistoryPreview) else (preview.card,)
+        if not any(card.metadata.bonuses for card in cards):
+            return
+        button = QPushButton("Учесть бонусы отдельно…")
+        session = self.session
+        button.setEnabled(session is not None and session.bonuses is not None)
+        button.setToolTip(
+            "Бонусные записи сохраняются отдельно от денежных операций."
+            if button.isEnabled()
+            else "Для учёта бонусов откройте новую или восстановленную книгу."
+        )
+
+        def open_bonuses() -> None:
+            if self.session is not session or session is None or session.bonuses is None:
+                return
+            categories = session.catalog.categories()
+            seeds = []
+            for index, card in enumerate(cards):
+                corrections = suggest_corrections(card, self._review_defaults())
+                occurred = corrections.occurred_on
+                category_id = bank_category_match(card.metadata, categories, OperationKind.EXPENSE)
+                if isinstance(dialog, OcrBatchDialog):
+                    occurred = dialog.rows[index].occurred_on.text()
+                    if dialog.rows[index].kind.currentData() == OperationKind.EXPENSE:
+                        category_id = dialog.rows[index].category.currentData() or category_id
+                elif isinstance(dialog, OcrPreviewDialog):
+                    occurred = dialog.occurred_on.text()
+                for bonus in card.metadata.bonuses:
+                    seeds.append(
+                        BonusSeed(
+                            bonus.units_minor,
+                            occurred,
+                            bonus.source_key,
+                            card.metadata.bank_category,
+                            category_id,
+                            corrections.description,
+                        )
+                    )
+            self.request_bonuses(tuple(seeds), dialog)
+
+        button.clicked.connect(open_bonuses)
+        layout = dialog.layout()
+        if layout is not None:
+            layout.addWidget(button)
+
     def configure_ocr(self) -> None:
         if self._busy:
             return
@@ -696,6 +772,7 @@ class MainWindow(QMainWindow):
             batch = OcrBatchDialog(preview, None, [], [], self._ocr_preferences, self)
             if schema_notice:
                 batch.notice.setText(batch.notice.text() + " " + schema_notice)
+            self._attach_bonus_action(batch, preview)
             try:
                 batch.exec()
             finally:
@@ -720,6 +797,7 @@ class MainWindow(QMainWindow):
                 if session.classification is not None
                 else None,
             )
+            self._attach_bonus_action(batch, preview)
             try:
                 batch.exec()
             finally:
@@ -740,6 +818,7 @@ class MainWindow(QMainWindow):
                 review_defaults=self._review_defaults(),
             )
         )
+        self._attach_bonus_action(dialog, preview)
         if schema_notice and isinstance(dialog, OcrPreviewDialog):
             dialog.notice.setText(dialog.notice.text() + " " + schema_notice)
         requested: tuple[OcrCardPreview, ReviewedOcrCard] | None = None

@@ -15,7 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication, QDate, QEvent, QSettings, Qt
-from PySide6.QtWidgets import QApplication, QDateEdit, QLineEdit
+from PySide6.QtWidgets import QApplication, QDateEdit, QDialog, QLineEdit
 
 from personal_finance.application.analytics import Analytics
 from personal_finance.application.importing import Importing
@@ -30,6 +30,7 @@ from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recogn
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashSourceKind, cash_flow_sources
 from personal_finance.domain.analytics_cashflow_months import cash_month_sources
+from personal_finance.domain.bonuses import BonusDraft, BonusKind
 from personal_finance.domain.classification import (
     CategoryRule,
     ClassificationInput,
@@ -62,6 +63,7 @@ from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog
 from personal_finance.presentation.analytics_comparison import IncomeExpenseComparisonDialog
+from personal_finance.presentation.bonuses import BonusEntryForm
 from personal_finance.presentation.deposit_scenarios import SavedScenariosDialog, ScenarioAction
 from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
 from personal_finance.presentation.main_window import MainWindow
@@ -807,6 +809,56 @@ def self_test(
                     ):
                         raise RuntimeError("Просмотр сценария изменил финансовые данные.")
 
+                with _step(report, "persist_bonuses"):
+                    bonus_service = source.bonuses
+                    if bonus_service is None:
+                        raise RuntimeError("Бонусный журнал недоступен в новой книге.")
+                    program = bonus_service.save_program("Синтетическая программа")
+                    bonus_draft = BonusDraft(program.id, today, BonusKind.ACCRUAL, 125, expense)
+                    bonus_command = str(uuid4())
+                    bonus_entry = bonus_service.save_entry(bonus_draft, command_id=bonus_command)
+                    bonus_service.save_entry(
+                        BonusDraft(program.id, today, BonusKind.SPENDING, -25, expense)
+                    )
+                    bonus_changed = bonus_service.save_entry(
+                        replace(bonus_draft, units_minor=225),
+                        identifier=bonus_entry.id,
+                        expected_revision_id=bonus_entry.revision_id,
+                    )
+                    bonus_history = bonus_service.history(bonus_entry.id)
+                    report_bonuses = bonus_service.category_report(today, today)
+                    if (
+                        bonus_service.balances()[program.id] != 200
+                        or len(bonus_history) != 2
+                        or len(report_bonuses) != 1
+                        or report_bonuses[0].accrued_minor != 225
+                        or report_bonuses[0].spent_minor != 25
+                        or bonus_service.save_entry(bonus_draft, command_id=bonus_command)
+                        != bonus_entry
+                    ):
+                        raise RuntimeError("Журнал, история или повтор бонусов не подтверждены.")
+                    bonus_parent = QDialog()
+                    bonus_form = BonusEntryForm(
+                        [program], source.catalog.categories(), bonus_parent, current=bonus_changed
+                    )
+                    try:
+                        bonus_form._accept()
+                        if bonus_form.value != bonus_changed.draft:
+                            raise RuntimeError("Форма изменила бонусную запись.")
+                    finally:
+                        bonus_form.reject()
+                        bonus_form.deleteLater()
+                        QCoreApplication.sendPostedEvents(bonus_form, QEvent.Type.DeferredDelete)
+                        bonus_parent.deleteLater()
+                        QCoreApplication.sendPostedEvents(bonus_parent, QEvent.Type.DeferredDelete)
+                    if (
+                        ledger.operations(include_deleted=True) != before_deposit
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Бонусы изменили денежный журнал.")
+                    expected_bonus_entries = bonus_service.entries(include_deleted=True)
+                    bonus_service.check_integrity()
+
                 with _step(report, "render_income_expense_charts"):
                     chart_dialog = IncomeExpenseDialog(expected_report, source.catalog.categories())
                     try:
@@ -853,6 +905,17 @@ def self_test(
                     )
                 try:
                     with _step(report, "check_restored_data"):
+                        restored_bonuses = restored.bonuses
+                        if (
+                            restored_bonuses is None
+                            or restored_bonuses.entries(include_deleted=True)
+                            != expected_bonus_entries
+                            or restored_bonuses.history(bonus_entry.id) != bonus_history
+                            or restored_bonuses.save_entry(bonus_draft, command_id=bonus_command)
+                            != bonus_entry
+                            or restored_bonuses.balances()[program.id] != 200
+                        ):
+                            raise RuntimeError("Бонусы или их история не восстановлены.")
                         restored_scenarios = restored.deposit_scenarios
                         if (
                             restored_scenarios is None

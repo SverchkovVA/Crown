@@ -305,3 +305,13 @@ sealed-неизменяемость, правильный тип/родител�
 это не самостоятельные версии реального банковского договора. Связи с фактическим
 финансовым счётом/выплатами в этом срезе нет. Деньги журнала не изменяются.
 [Порядок активации и доказательства](stage-6-deposit-storage-activation-report.md).
+
+## Бонусы — схема 0014
+
+Два общих типа entities: bonus_program и bonus_entry. bonus_program_revisions
+содержит name/name_key; bonus_entry_revisions — program_id, occurred_on, kind,
+units_minor, category_id, operation_id, note, source_key и bank_category.
+units_minor — целые сотые бонуса, не минимальные единицы RUB. Таблицы STRICT,
+sealed payload неизменяем, родители/команды/хеши используют общий журнал.
+Ссылки ограничены книгой и типом; категория только расходная. Финансовый журнал
+и закрытые финансовые периоды не изменяются. [Контракт](bonus-accounting-proposal.md).

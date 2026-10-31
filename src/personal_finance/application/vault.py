@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DatabaseError
 from sqlcipher3 import dbapi2 as sqlcipher
 
+from personal_finance.application.bonuses import Bonuses
 from personal_finance.application.catalog import Catalog, utc_now
 from personal_finance.application.classification import Classification
 from personal_finance.application.deposit_scenarios import DepositScenarios
@@ -24,6 +25,7 @@ from personal_finance.application.organization import Organization
 from personal_finance.application.periods import Periods
 from personal_finance.domain.errors import VaultError
 from personal_finance.domain.models import validate_name
+from personal_finance.infrastructure.persistence.bonus_repository import SqlBonusRepository
 from personal_finance.infrastructure.persistence.catalog_repository import SqlCatalogRepository
 from personal_finance.infrastructure.persistence.classification_repository import (
     SqlClassificationRepository,
@@ -133,13 +135,25 @@ class VaultSession:
                         "0011",
                         "0012",
                         "0013",
+                        "0014",
                     ),
                     supports_refunds=self.schema_revision
-                    in ("0005", "0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"),
+                    in (
+                        "0005",
+                        "0006",
+                        "0007",
+                        "0008",
+                        "0009",
+                        "0010",
+                        "0011",
+                        "0012",
+                        "0013",
+                        "0014",
+                    ),
                     supports_periods=self.schema_revision
-                    in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013"),
+                    in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014"),
                     supports_tags=self.schema_revision
-                    in ("0007", "0008", "0009", "0010", "0011", "0012", "0013"),
+                    in ("0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014"),
                 )
                 if self.schema_revision
                 in (
@@ -154,6 +168,7 @@ class VaultSession:
                     "0011",
                     "0012",
                     "0013",
+                    "0014",
                 )
                 else None
             )
@@ -171,21 +186,22 @@ class VaultSession:
             )
             self.importing = (
                 Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
-                if self.schema_revision in ("0008", "0009", "0010", "0011", "0012", "0013")
+                if self.schema_revision in ("0008", "0009", "0010", "0011", "0012", "0013", "0014")
                 and ledger_repository is not None
                 else None
             )
             self.periods = (
                 Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
                 if self.schema_revision
-                in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013")
+                in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014")
                 else None
             )
             self.organization = (
                 Organization(
                     SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision in ("0007", "0008", "0009", "0010", "0011", "0012", "0013")
+                if self.schema_revision
+                in ("0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014")
                 else None
             )
             self.classification = (
@@ -194,7 +210,7 @@ class VaultSession:
                     self.mutex,
                     self.ensure_open,
                 )
-                if self.schema_revision in ("0009", "0010", "0011", "0012", "0013")
+                if self.schema_revision in ("0009", "0010", "0011", "0012", "0013", "0014")
                 else None
             )
             ocr_repository = (
@@ -203,14 +219,15 @@ class VaultSession:
                     book_id,
                     self.mutex,
                     ledger_repository,
-                    supports_batches=self.schema_revision in ("0011", "0012", "0013"),
+                    supports_batches=self.schema_revision in ("0011", "0012", "0013", "0014"),
                     supports_universal=self.schema_revision
                     in (
                         "0012",
                         "0013",
+                        "0014",
                     ),
                 )
-                if self.schema_revision in ("0010", "0011", "0012", "0013")
+                if self.schema_revision in ("0010", "0011", "0012", "0013", "0014")
                 and ledger_repository is not None
                 else None
             )
@@ -219,14 +236,20 @@ class VaultSession:
             )
             self.ocr_settings = (
                 SqlOcrSettings(self.engine, book_id, self.mutex, ocr_repository)
-                if self.schema_revision in ("0011", "0012", "0013") and ocr_repository is not None
+                if self.schema_revision in ("0011", "0012", "0013", "0014")
+                and ocr_repository is not None
                 else None
             )
             self.deposit_scenarios = (
                 DepositScenarios(
                     SqlDepositScenariosRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision == "0013"
+                if self.schema_revision in ("0013", "0014")
+                else None
+            )
+            self.bonuses = (
+                Bonuses(SqlBonusRepository(self.engine, book_id, self.replica_id, self.mutex))
+                if self.schema_revision == "0014"
                 else None
             )
         except Exception:
@@ -275,6 +298,8 @@ class VaultSession:
                 self.ocr_settings.check_integrity()
             if self.deposit_scenarios is not None:
                 self.deposit_scenarios.check_integrity()
+            if self.bonuses is not None:
+                self.bonuses.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:

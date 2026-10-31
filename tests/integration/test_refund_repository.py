@@ -358,7 +358,7 @@ def test_schema4_source_unchanged_and_only_restored_book_supports_refunds(tmp_pa
         backup = create_backup(source, tmp_path / "old4.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0004"
         restored, _ = restore_backup(backup, tmp_path / "new5.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0013" and restored.ledger.supports_refunds
+        assert restored.schema_revision == "0014" and restored.ledger.supports_refunds
         assert restored.ledger.add(value, command_id=command) == purchase
         restored.ledger.add(refund_draft(purchase, 1000, categories[0]))
         assert restored.ledger.refund_candidates()[0].amount_remaining == Money(9000)

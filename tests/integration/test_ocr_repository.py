@@ -467,7 +467,7 @@ def test_backup_restore_keeps_audit_dedup_and_receipts_under_new_replica(
     command = str(uuid4())
     result = session.ocr_importing.confirm(value, command_id=command)
     backup = create_backup(session, tmp_path / "ocr.pfbackup", BACKUP_PASSWORD)
-    assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0013"
+    assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0014"
     restored, _ = restore_backup(
         backup, tmp_path / "restored-ocr.pfvault", BACKUP_PASSWORD, PASSWORD
     )

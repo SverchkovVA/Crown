@@ -58,7 +58,7 @@ def test_open_schema10_keeps_original_and_restore_adds_only_new_workflow(old10, 
         backup = create_backup(opened, tmp_path / "old.pfbackup", BACKUP_PASSWORD)
         restored, _ = restore_backup(backup, tmp_path / "new.pfvault", BACKUP_PASSWORD, PASSWORD)
         try:
-            assert restored.schema_revision == "0013" and restored.ocr_settings is not None
+            assert restored.schema_revision == "0014" and restored.ocr_settings is not None
             assert (
                 restored.ocr_importing.supports_batches and restored.catalog.institutions() == banks
             )
