@@ -348,6 +348,7 @@ class MainWindow(QMainWindow):
             "Сохранённые сценарии вкладов…", self.request_saved_deposits
         )
         self.saved_deposits_action.setEnabled(False)
+        self.menuBar().hide()
 
     def _update_report_action(self) -> None:
         self.bonuses_action.setEnabled(
@@ -2003,6 +2004,7 @@ class MainWindow(QMainWindow):
         self.book_title.setText(session.name)
         self.refresh()
         self.root_stack.setCurrentIndex(1)
+        self.menuBar().show()
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
 
     def _created(self, result: tuple[VaultSession, str]) -> None:
@@ -2153,6 +2155,7 @@ class MainWindow(QMainWindow):
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.backup_status.setText(self.last_backup)
         self.root_stack.setCurrentIndex(0)
+        self.menuBar().hide()
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
 
     @Slot()

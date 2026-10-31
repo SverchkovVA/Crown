@@ -13,8 +13,10 @@ def test_real_session_displayed_and_cleared_on_lock(qtbot, session) -> None:
     )
     window = MainWindow()
     qtbot.addWidget(window)
+    assert window.menuBar().isHidden()
     window.activate_session(session)
     window.show()
+    assert not window.menuBar().isHidden()
     assert window.book_title.text() == "Тестовая книга"
     assert window.account_model.item(0, 0).text() == "Проверочная карта"
     assert window.category_tree.topLevelItemCount() == 8
@@ -23,6 +25,7 @@ def test_real_session_displayed_and_cleared_on_lock(qtbot, session) -> None:
     assert window.account_model.rowCount() == 0
     assert window.category_tree.topLevelItemCount() == 0
     assert window.book_title.text() == ""
+    assert window.menuBar().isHidden()
 
 
 def test_background_job_returns_to_gui_thread(qtbot, session) -> None:
@@ -59,4 +62,5 @@ def test_invalid_password_job_does_not_activate_book(qtbot, session, monkeypatch
     )
     qtbot.waitUntil(lambda: not window._busy, timeout=10000)
     assert window.session is None
+    assert window.menuBar().isHidden()
     assert errors and "пароль" in errors[0]
