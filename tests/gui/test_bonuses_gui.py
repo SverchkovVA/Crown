@@ -170,6 +170,10 @@ def test_report_keeps_programs_separate_and_filters_clear_selection(context, qtb
     dialog.reload()
     loaded(qtbot, dialog, lambda: len(dialog._programs) == 2)
     assert dialog.report_table.model().rowCount() == 2
+    header = dialog.report_table.horizontalHeader()
+    for column in range(dialog.report_table.model().columnCount()):
+        title = dialog.report_table.model().headerData(column, m.Qt.Orientation.Horizontal)
+        assert header.sectionSize(column) >= header.fontMetrics().horizontalAdvance(title) + 12
     dialog.program_table.selectRow(0)
     assert dialog.edit.isEnabled()
     dialog.program_filter.setCurrentIndex(dialog.program_filter.findData(two.id))

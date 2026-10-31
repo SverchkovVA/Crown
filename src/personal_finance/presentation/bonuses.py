@@ -324,6 +324,7 @@ class BonusesDialog(QDialog):
             table.setSortingEnabled(False)
             table.setAlternatingRowColors(True)
             table.verticalHeader().hide()
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         buttons = QHBoxLayout()
         self.add_program = QPushButton("Новая программа")
         self.add_entry = QPushButton("Добавить бонусы")
@@ -654,6 +655,7 @@ class BonusesDialog(QDialog):
         replace_table(
             table, ["Сохранено · UTC", "Название / дата", "Вид", "Бонусы", "Состояние"], rows
         )
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(table)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
