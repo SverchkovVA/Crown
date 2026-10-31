@@ -1071,6 +1071,9 @@ class MainWindow(QMainWindow):
         self.settings_tabs.addTab(recognition, "Распознавание и переводы")
         self.settings_tabs.addTab(self._security(), "Защита и копии")
         layout.addWidget(self.settings_tabs, 1)
+        self.close_book_button = button("Закрыть книгу", self.lock_book)
+        self.close_book_button.setObjectName("closeBook")
+        layout.addWidget(self.close_book_button)
         return page
 
     def _workspace(self) -> QWidget:
@@ -1082,7 +1085,8 @@ class MainWindow(QMainWindow):
         sidebar.setFixedWidth(230)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(20, 28, 20, 20)
-        side.addWidget(label("Личные\nфинансы", "brand"))
+        self.book_title = label("", "brand")
+        side.addWidget(self.book_title)
         side.addSpacing(25)
         self.navigation = QListWidget()
         self.navigation.addItems(
@@ -1103,11 +1107,6 @@ class MainWindow(QMainWindow):
         self.sidebar = sidebar
         content = QVBoxLayout()
         content.setContentsMargins(32, 26, 32, 24)
-        top = QHBoxLayout()
-        self.book_title = label("", "heading")
-        top.addWidget(self.book_title, 1)
-        top.addWidget(button("Закрыть книгу", self.lock_book))
-        content.addLayout(top)
         self.pages = QStackedWidget()
         journal_page = self._journal()
         accounts_page = self._accounts()
@@ -2094,6 +2093,7 @@ class MainWindow(QMainWindow):
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.book_title.setText(session.name)
         self.refresh()
+        self.navigation.setCurrentRow(0)
         self.root_stack.setCurrentIndex(1)
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
 

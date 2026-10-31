@@ -83,7 +83,7 @@ jobs:
   windows:
     name: Проверки и сборка Windows
     runs-on: windows-latest
-    timeout-minutes: 50
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
