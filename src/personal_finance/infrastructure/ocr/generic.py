@@ -66,7 +66,8 @@ _MONEY_LABEL = re.compile(
 )
 _DIRECTION_LABEL = re.compile(r"^(?P<label>списано|зачислено)\b", re.I)
 _ACCOUNT_SECTION = re.compile(
-    r"^(?:перевод со сч[её]та|списано со сч[её]та|зачислено на сч[её]т|"
+    r"^(?:покупка по карт[её]|оплата по карт[её]|перевод со сч[её]та|"
+    r"списано со сч[её]та|зачислено на сч[её]т|"
     r"сч[её]т (?:списания|зачисления|отправителя|получателя)|"
     r"(?:с|со|на) сч[её]т(?:а)?|карта (?:списания|зачисления)|реквизиты|"
     r"номер (?:телефона|карты|сч[её]та))\b",
@@ -174,6 +175,8 @@ def _money(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...], 
     for match in _AMOUNT.finditer(row.text):
         prefix = row.text[: match.start()]
         suffix = row.text[match.end() :]
+        if re.match(r"\s*%", suffix):
+            continue
         signed = bool(re.match(r"[+\-−—–]", match["money"].lstrip()))
         if (
             not signed
@@ -383,6 +386,90 @@ def _with_currency(card: OcrCardDraft, hint: tuple[str, tuple[int, ...]] | None)
     )
 
 
+def _noncash_quantity(document: OcrDocument, row: Row) -> bool:
+    for token, _, _, end in _money(document, row):
+        if re.search(_CURRENCY + r"$", token, re.I):
+            continue
+        if re.match(
+            r"\s*[)\]]?\s*(?:балл(?:а|ов|ы)?|бонус(?:а|ов|ы)?|мил(?:я|и|ь))\b", row.text[end:], re.I
+        ):
+            return True
+        if re.match(r"^(?:бонусы|баллы|мили)\b", row.text, re.I):
+            return True
+    return False
+
+
+def history_subtitles(document: OcrDocument, rows: list[Row]) -> dict[int, int]:
+    """Мелкая подпись под основной строкой: категория/бонус, а не новое движение."""
+    result = {}
+    for index in range(1, len(rows)):
+        row, previous = rows[index], rows[index - 1]
+        amounts, before = _money(document, row), _money(document, previous)
+        if len(amounts) != 1 or len(before) != 1 or _dates(document, row):
+            continue
+        primary_boxes = [document.words[i].box for i in before[0][1]]
+        primary_bottom = max(box.top + box.height for box in primary_boxes)
+        primary_height = max(box.height for box in primary_boxes)
+        bonus_height = max(document.words[i].box.height for i in amounts[0][1])
+        left = min(document.words[i].box.left for i in amounts[0][1])
+        earlier_left = min(document.words[i].box.left for i in before[0][1])
+        if (
+            0 <= row.top - primary_bottom <= 2 * max(bonus_height, primary_height)
+            and 10 * bonus_height <= 9 * primary_height
+            and (left + 2 * primary_height < earlier_left or _noncash_quantity(document, row))
+            and row.text[: amounts[0][2]].strip()
+            and _residue(previous, before[0])
+        ):
+            result[index] = index - 1
+    return result
+
+
+def card_reward_rows(document: OcrDocument, rows: list[Row]) -> set[int]:
+    primary = [
+        row
+        for row in rows
+        if len(_money(document, row)) == 1
+        and not _residue(row, _money(document, row)[0])
+        and re.match(r"[+\-−—–]", _money(document, row)[0][0])
+    ]
+    if not primary:
+        return set()
+    prominent = max(primary, key=lambda row: row.height)
+    return {
+        index
+        for index, row in enumerate(rows)
+        if row.top > prominent.bottom
+        and row.height < prominent.height
+        and re.match(r"^(?:к[еэ]шб[еэ]к|бонус(?:ы|ов)?|балл(?:ы|ов)?|мили)\b", row.text, re.I)
+    }
+
+
+def _dated_prominent_card(document: OcrDocument, rows: list[Row], candidates: list) -> bool:
+    if len(candidates) != 1 or not any(_ACCOUNT_SECTION.match(row.text) for row in rows):
+        return False
+    refs = set(candidates[0][1])
+    main = next((row for row in rows if refs.intersection(row.refs)), None)
+    if main is None or _residue(main, candidates[0]):
+        return False
+    for row in rows:
+        dates = _dates(document, row)
+        if row.bottom >= main.top or row.height >= main.height or len(dates) != 1:
+            continue
+        try:
+            value = parse_date(dates[0][0])
+        except ValueError:
+            continue
+        if value is not None and value.local_time is not None:
+            return True
+    return False
+
+
+def _contextual(card: OcrCardDraft) -> OcrCardDraft:
+    from personal_finance.infrastructure.ocr.operation_context import with_operation_context
+
+    return with_operation_context(card)
+
+
 class GenericCardAdapter:
     @staticmethod
     def can_retry(card: OcrCardDraft) -> bool:
@@ -399,6 +486,7 @@ class GenericCardAdapter:
         blocked = ""
         direction = None
         secondary = False
+        reward_rows = card_reward_rows(document, rows)
         for index, row in enumerate(rows):
             monies = _money(document, row)
             bound_amount = False
@@ -450,6 +538,8 @@ class GenericCardAdapter:
                 description_refs = row.refs
             if (
                 secondary
+                or index in reward_rows
+                or _noncash_quantity(document, row)
                 or _SUMMARY.match(row.text)
                 or _DETAILS.match(row.text)
                 or re.match(r"^(?:к[еэ]шб[еэ]к|бонусы)\b", row.text, re.I)
@@ -466,7 +556,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v5") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v6") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -491,6 +581,7 @@ class GenericCardAdapter:
                             None,
                         )
         context = any(_HEADING.fullmatch(row.text) or _FIELD.match(row.text) for row in rows)
+        context = context or _dated_prominent_card(document, rows, candidates)
         if any(_HISTORY.fullmatch(row.text) for row in rows):
             blocked = "Это список операций: выберите распознавание истории."
         if not context:
@@ -510,14 +601,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v5",
+                "generic-card-v6",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
-            return result
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v5")
+            return _contextual(result)
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v6")
         return replace(empty, blocked_reason=blocked)
 
 
@@ -542,7 +633,10 @@ class GenericHistoryAdapter:
         date_count = 0
         planned = False
         unbound_fee = False
+        subtitles = history_subtitles(document, rows)
         for index, row in enumerate(rows):
+            if index in subtitles or _noncash_quantity(document, row):
+                continue
             dates = _dates(document, row)
             monies = _money(document, row)
             if row.text.casefold().strip() in ("запланировано", "ожидают", "черновики"):
@@ -640,14 +734,14 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v4",
+                "generic-history-v5",
                 blocked,
             )
             if index + 1 < len(rows):
                 following = rows[index + 1]
                 if 0 <= following.top - row.bottom <= 2 * max(row.height, following.height):
                     card = _with_currency(card, _currency_hint(following))
-            cards.append(card)
+            cards.append(_contextual(card))
             if len(cards) > 100:
                 return OcrHistoryDraft(
                     document, (), fragments, "На изображении более 100 денежных строк."

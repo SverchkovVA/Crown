@@ -62,7 +62,7 @@ def test_flat_menu_prefers_universal_profile_and_disables_while_working(
 
     def show(dialog):
         assert dialog.preview.bank_name == UNIVERSAL_PROFILE
-        assert dialog.preview.card.adapter == "generic-card-v5"
+        assert dialog.preview.card.adapter == "generic-card-v6"
         assert QThread.currentThread() == qapp.thread() and not window._busy
         seen.append(True)
         return QDialog.DialogCode.Rejected

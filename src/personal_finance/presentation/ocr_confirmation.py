@@ -27,6 +27,7 @@ from personal_finance.domain.organization import Tag
 from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.presentation.ledger_dialogs import OperationDialog, category_title
 from personal_finance.presentation.money import format_money
+from personal_finance.presentation.ocr_metadata import bank_category_match, context_note
 from personal_finance.presentation.ocr_preview import plain
 
 
@@ -77,6 +78,21 @@ class OcrOperationDialog(OperationDialog):
             buttons.button(QDialogButtonBox.StandardButton.Save).setText(
                 "Продолжить к подтверждению"
             )
+        self.bank_category_note = plain(context_note(preview.card.metadata))
+        self.form.addRow("Подсказки банка", self.bank_category_note)
+
+        def apply_bank_category() -> None:
+            if self.category.currentData() is not None:
+                return
+            try:
+                kind = OperationKind(self.kind.currentData())
+            except (ValueError, TypeError):
+                return
+            target = bank_category_match(preview.card.metadata, categories, kind)
+            if target is not None:
+                self.category.setCurrentIndex(self.category.findData(target))
+
+        self.kind.currentIndexChanged.connect(apply_bank_category)
         self.source_account = QComboBox()
         self.source_account.addItem("Выберите счёт на изображении", None)
         for account in rub_accounts:

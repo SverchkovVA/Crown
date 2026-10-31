@@ -38,7 +38,7 @@ def test_primary_operation_ignores_account_balance_and_phone(tail):
     )
     assert not card.blocked_reason
     assert card.amount.value == 7400 and card.direction.value == CashDirection.OUT
-    assert card.adapter == "generic-card-v5"
+    assert card.adapter == "generic-card-v6"
 
 
 def test_missing_primary_never_uses_account_balance_or_phone():

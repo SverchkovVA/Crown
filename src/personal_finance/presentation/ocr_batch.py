@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from personal_finance.application.ocr_cards import OcrCardPreview, OcrHistoryPreview
 from personal_finance.application.ocr_importing import OcrImporting
 from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
+from personal_finance.domain.bonuses import format_units
 from personal_finance.domain.classification import (
     ClassificationInput,
     ClassificationSnapshot,
@@ -49,6 +50,7 @@ from personal_finance.domain.ocr_imports import (
 )
 from personal_finance.domain.ocr_settings import OcrPreferences
 from personal_finance.presentation.jobs import Job
+from personal_finance.presentation.ocr_metadata import bank_category_match, context_note
 from personal_finance.presentation.ocr_preview import (
     OcrPreviewDialog,
     OptionalMaskedEdit,
@@ -273,7 +275,7 @@ class OcrBatchDialog(QDialog):
         split = QSplitter(Qt.Orientation.Horizontal)
         self.image = SourceImageView(preview.source.image, preview.history.document)
         split.addWidget(self.image)
-        self.table = QTableWidget(len(preview.history.cards), 8)
+        self.table = QTableWidget(len(preview.history.cards), 10)
         self.table.setHorizontalHeaderLabels(
             [
                 "Включить",
@@ -284,6 +286,8 @@ class OcrBatchDialog(QDialog):
                 "Категория",
                 "Второй свой счёт",
                 "Состояние",
+                "Категория в банке",
+                "Бонусные подписи (не доход)",
             ]
         )
         if importing is None:
@@ -335,6 +339,22 @@ class OcrBatchDialog(QDialog):
             state = QTableWidgetItem(card.blocked_reason or "Предложение")
             state.setToolTip("<p>" + escape(corrections.description) + "</p>")
             self.table.setItem(index, 7, state)
+            metadata = preview.history.cards[index].metadata
+            for column, value in (
+                (8, metadata.bank_category),
+                (
+                    9,
+                    ", ".join(
+                        ("+" if b.units_minor > 0 else "") + format_units(b.units_minor)
+                        for b in metadata.bonuses
+                    ),
+                ),
+            ):
+                hint = QTableWidgetItem(value)
+                hint.setFlags(hint.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                hint.setToolTip(context_note(metadata))
+                self.table.setItem(index, column, hint)
+
             for editor_widget, title in (
                 (occurred, "Дата"),
                 (amount, "Сумма"),
@@ -490,8 +510,13 @@ class OcrBatchDialog(QDialog):
         if row.manual_category and row.category.currentData() is not None:
             row.state.setText("Категория выбрана вручную")
             return
-        identifier = self._default_category(row)
-        state = "Предложение"
+        bank_match = bank_category_match(
+            self.preview.history.cards[index].metadata,
+            self.categories,
+            OperationKind(row.kind.currentData()),
+        )
+        identifier = bank_match or self._default_category(row)
+        state = "Категория банка: точное совпадение названия" if bank_match else "Предложение"
         if (
             self._classification is not None
             and self.use_rules is not None
@@ -516,7 +541,8 @@ class OcrBatchDialog(QDialog):
                 row.category_conflict = True
                 state = "Конфликт правил: выберите категорию вручную"
             else:
-                state = "Нет совпадения: общая категория"
+                if bank_match is None:
+                    state = "Нет совпадения: общая категория"
         with QSignalBlocker(row.category):
             row.category.setCurrentIndex(row.category.findData(identifier))
         if (

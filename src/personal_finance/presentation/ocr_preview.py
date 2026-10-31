@@ -37,6 +37,7 @@ from personal_finance.domain.ocr_cards import (
     ReviewedOcrCard,
     review_card,
 )
+from personal_finance.presentation.ocr_metadata import context_note
 
 
 def plain(text: str) -> QLabel:
@@ -174,6 +175,9 @@ class OcrPreviewDialog(QDialog):
             f"{self.review_defaults.reference_year}. Сверьте предложения с изображением. "
             "Исходные данные OCR сохраняются без изменений."
         )
+        metadata_note = context_note(preview.card.metadata)
+        if metadata_note:
+            self.defaults_note.setText(self.defaults_note.text() + "\n" + metadata_note)
         layout.addWidget(self.defaults_note)
         split = QSplitter(Qt.Orientation.Horizontal)
         image_panel = QWidget()

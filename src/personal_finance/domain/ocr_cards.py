@@ -9,6 +9,7 @@ from enum import StrEnum
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import MAX_MINOR, Money
 from personal_finance.domain.ocr import OcrDocument
+from personal_finance.domain.ocr_metadata import OcrOperationContext
 
 
 class OcrIssue(StrEnum):
@@ -54,6 +55,9 @@ class OcrCardDraft:
     local_time: OcrField[time]
     description: OcrField[str]
     blocked_reason: str = ""
+    metadata: OcrOperationContext = field(
+        default_factory=OcrOperationContext, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if (
@@ -62,6 +66,13 @@ class OcrCardDraft:
             or re.fullmatch(r"[a-z][a-z0-9-]{2,79}", self.adapter) is None
         ):
             raise ValidationError("Некорректный результат разбора карточки.")
+        if not isinstance(self.metadata, OcrOperationContext):
+            raise ValidationError("Некорректные подсказки OCR.")
+        extra_refs = self.metadata.category_indices + tuple(
+            i for bonus in self.metadata.bonuses for i in bonus.word_indices
+        )
+        if any(type(i) is not int or not 0 <= i < len(self.document.words) for i in extra_refs):
+            raise ValidationError("Подсказка OCR относится к другому изображению.")
         for value in self.fields():
             if (
                 not isinstance(value, OcrField)
