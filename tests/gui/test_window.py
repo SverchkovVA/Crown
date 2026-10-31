@@ -16,7 +16,7 @@ def test_real_session_displayed_and_cleared_on_lock(qtbot, session) -> None:
     assert window.menuBar().isHidden()
     window.activate_session(session)
     window.show()
-    assert not window.menuBar().isHidden()
+    assert window.menuBar().isHidden()
     assert window.book_title.text() == "Тестовая книга"
     assert window.account_model.item(0, 0).text() == "Проверочная карта"
     assert window.category_tree.topLevelItemCount() == 8

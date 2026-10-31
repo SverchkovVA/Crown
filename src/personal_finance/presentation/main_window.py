@@ -29,11 +29,13 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
     QTableView,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -316,10 +318,14 @@ class MainWindow(QMainWindow):
         self.root_stack = QStackedWidget()
         self.setCentralWidget(self.root_stack)
         self.root_stack.addWidget(self._welcome())
-        self.root_stack.addWidget(self._workspace())
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
+
+        def command(title: str, callback: Callable[..., Any]) -> QAction:
+            action = QAction(title, self)
+            action.triggered.connect(callback)
+            return action
+
         if self._ocr_recognitions:
-            menu = self.menuBar().addMenu("Распознавание")
             service = next(
                 (value for value in self._ocr_recognitions if value.bank_name == UNIVERSAL_PROFILE),
                 self._ocr_recognitions[0],
@@ -327,27 +333,29 @@ class MainWindow(QMainWindow):
             for title, history in (("Карточка операции", False), ("История операций", True)):
                 if history and not service.supports_history:
                     continue
-                action = menu.addAction(title)
-                action.triggered.connect(partial(self.review_ocr, service=service, history=history))
-                self._ocr_actions.append(action)
-        settings_menu = self.menuBar().addMenu("Настройки")
-        settings_menu.addAction("Распознавание и свои переводы", self.configure_ocr)
-        bonus_menu = self.menuBar().addMenu("Бонусы")
-        self.bonuses_action = bonus_menu.addAction("Программы и журнал…")
-        self.bonuses_action.triggered.connect(lambda checked=False: self.request_bonuses())
+                self._ocr_actions.append(
+                    command(title, partial(self.review_ocr, service=service, history=history))
+                )
+        self.ocr_settings_action = command("Распознавание и свои переводы", self.configure_ocr)
+        self.bonuses_action = command(
+            "Программы и журнал…", lambda checked=False: self.request_bonuses()
+        )
         self.bonuses_action.setEnabled(False)
-        reports_menu = self.menuBar().addMenu("Отчёты")
-        self.report_action = reports_menu.addAction("Доходы и расходы…", self.request_analytics)
-        self.report_action.setEnabled(False)
-        self.compare_action = reports_menu.addAction("Сравнить периоды…", self.request_comparison)
-        self.compare_action.setEnabled(False)
-        self.cash_flow_action = reports_menu.addAction("Движение средств…", self.request_cash_flow)
-        self.cash_flow_action.setEnabled(False)
-        self.deposit_action = reports_menu.addAction("Прогноз вклада…", self.request_deposit)
-        self.saved_deposits_action = reports_menu.addAction(
+        self.report_action = command("Доходы и расходы…", self.request_analytics)
+        self.compare_action = command("Сравнить периоды…", self.request_comparison)
+        self.cash_flow_action = command("Движение средств…", self.request_cash_flow)
+        self.deposit_action = command("Прогноз вклада…", self.request_deposit)
+        self.saved_deposits_action = command(
             "Сохранённые сценарии вкладов…", self.request_saved_deposits
         )
-        self.saved_deposits_action.setEnabled(False)
+        for action in (
+            self.report_action,
+            self.compare_action,
+            self.cash_flow_action,
+            self.saved_deposits_action,
+        ):
+            action.setEnabled(False)
+        self.root_stack.addWidget(self._workspace())
         self.menuBar().hide()
 
     def _update_report_action(self) -> None:
@@ -1003,6 +1011,68 @@ class MainWindow(QMainWindow):
         scroll.setWidget(page)
         return scroll
 
+    def _action_button(self, action: QAction) -> QPushButton:
+        result = button(action.text(), action.trigger)
+
+        def update() -> None:
+            result.setEnabled(action.isEnabled())
+            result.setToolTip(action.toolTip())
+
+        action.changed.connect(update)
+        update()
+        return result
+
+    def _bonuses_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addWidget(label("Бонусы", "heading"))
+        layout.addWidget(
+            label(
+                "Программы лояльности, отдельные остатки и начисления по категориям. "
+                "Бонусы не изменяют денежные остатки."
+            )
+        )
+        self.bonuses_button = self._action_button(self.bonuses_action)
+        layout.addWidget(self.bonuses_button)
+        layout.addStretch()
+        return page
+
+    def _reports_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addWidget(label("Отчёты", "heading"))
+        layout.addWidget(label("Выберите отчёт или сценарий расчёта."))
+        self.report_buttons: list[QPushButton] = []
+        for action in (
+            self.report_action,
+            self.compare_action,
+            self.cash_flow_action,
+            self.deposit_action,
+            self.saved_deposits_action,
+        ):
+            widget = self._action_button(action)
+            self.report_buttons.append(widget)
+            layout.addWidget(widget)
+        layout.addStretch()
+        return page
+
+    def _settings(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.addWidget(label("Настройки", "heading"))
+        self.settings_tabs = QTabWidget()
+        recognition = QWidget()
+        settings = QVBoxLayout(recognition)
+        settings.addWidget(
+            label("Валюта, год, подтверждения распознавания и участники своих переводов.")
+        )
+        settings.addWidget(self._action_button(self.ocr_settings_action))
+        settings.addStretch()
+        self.settings_tabs.addTab(recognition, "Распознавание и переводы")
+        self.settings_tabs.addTab(self._security(), "Защита и копии")
+        layout.addWidget(self.settings_tabs, 1)
+        return page
+
     def _workspace(self) -> QWidget:
         page = QWidget()
         layout = QHBoxLayout(page)
@@ -1018,17 +1088,19 @@ class MainWindow(QMainWindow):
         self.navigation.addItems(
             [
                 "Операции",
+                "Бонусы",
+                "Отчёты",
                 "Счета",
                 "Теги и фильтры",
                 "Категории",
                 "Периоды",
                 "Правила категорий",
-                "Защита и копии",
+                "Настройки",
             ]
         )
         side.addWidget(self.navigation, 1)
         side.addWidget(label("Локальная книга\nЗашифрованное хранение", "muted"))
-        layout.addWidget(sidebar)
+        self.sidebar = sidebar
         content = QVBoxLayout()
         content.setContentsMargins(32, 26, 32, 24)
         top = QHBoxLayout()
@@ -1040,7 +1112,7 @@ class MainWindow(QMainWindow):
         journal_page = self._journal()
         accounts_page = self._accounts()
         categories_page = self._categories()
-        security_page = self._security()
+        settings_page = self._settings()
         self.period_page = PeriodPage()
         self.period_page.closeRequested.connect(self.close_period)
         self.period_page.reopenRequested.connect(self.reopen_period)
@@ -1080,18 +1152,21 @@ class MainWindow(QMainWindow):
         self.rule_page.historyRequested.connect(lambda: self.rule_action("history"))
         for section in (
             journal_page,
+            self._bonuses_page(),
+            self._reports_page(),
             accounts_page,
             self.organization_page,
             categories_page,
             self.period_page,
             self.rule_page,
-            security_page,
+            settings_page,
         ):
             self.pages.addWidget(section)
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
         layout.addLayout(content, 1)
+        layout.addWidget(sidebar)
         return page
 
     def _accounts(self) -> QWidget:
@@ -1144,6 +1219,22 @@ class MainWindow(QMainWindow):
             "muted",
         )
         layout.addWidget(self.journal_notice)
+        recognition = QHBoxLayout()
+        recognition.addStretch()
+        self.ocr_button = button("Распознать снимок", lambda: None)
+        self.ocr_button.setAccessibleName("Распознать карточку или историю операций")
+        self.ocr_button.setEnabled(bool(self._ocr_actions))
+        self.ocr_button.setToolTip(
+            "Выберите карточку одной операции или историю"
+            if self._ocr_actions
+            else "В каталоге приложения нет проверенного OCR-модуля."
+        )
+        if self._ocr_actions:
+            ocr_menu = QMenu(self.ocr_button)
+            ocr_menu.addActions(self._ocr_actions)
+            self.ocr_button.setMenu(ocr_menu)
+        recognition.addWidget(self.ocr_button)
+        layout.addLayout(recognition)
         actions = QHBoxLayout()
         self.add_operation_button = button(
             "Добавить операцию", self.add_default_operation, primary=True
@@ -2004,7 +2095,6 @@ class MainWindow(QMainWindow):
         self.book_title.setText(session.name)
         self.refresh()
         self.root_stack.setCurrentIndex(1)
-        self.menuBar().show()
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
 
     def _created(self, result: tuple[VaultSession, str]) -> None:

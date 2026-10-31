@@ -51,7 +51,7 @@ def test_main_action_runs_in_worker_and_keeps_ledger_unchanged(qtbot, session, m
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.navigation.setCurrentRow(1)
+    window.navigation.setCurrentRow(3)
     window.balance_date.setDate(QDate(2026, 1, 15))
     window.show()
     results = []
