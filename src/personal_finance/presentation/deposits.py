@@ -6,7 +6,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
-from PySide6.QtCore import QDate, QEvent, QObject
+from PySide6.QtCore import QDate, QEvent, QObject, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -608,7 +608,11 @@ class DepositForecastDialog(QDialog):
         table.setEditTriggers(QTableView.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QTableView.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
-        table.verticalHeader().hide()
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        vertical = QHeaderView(Qt.Orientation.Vertical, table)
+        table.setVerticalHeader(vertical)
+        vertical.hide()
+        horizontal = QHeaderView(Qt.Orientation.Horizontal, table)
+        table.setHorizontalHeader(horizontal)
+        horizontal.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         replace_table(table, headers, rows, right_columns=(1,))
         return table
