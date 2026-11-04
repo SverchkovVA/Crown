@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QLabel,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 
 class InlineForms(QWidget):
@@ -49,6 +51,7 @@ class InlineForms(QWidget):
         dispose: bool = True,
     ) -> None:
         self.message("")
+        trigger = QApplication.focusWidget()
         owner = dialog.parentWidget()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -70,10 +73,20 @@ class InlineForms(QWidget):
             scroll.deleteLater()
             self.stack.setCurrentIndex(self.stack.count() - 1)
             self._update_page()
+            if (
+                not self.clearing
+                and trigger is not None
+                and isValid(trigger)
+                and trigger.isVisible()
+                and trigger.isEnabled()
+            ):
+                trigger.setFocus(Qt.FocusReason.OtherFocusReason)
             finished(result)
 
         dialog.finished.connect(complete)
         dialog.show()
+        if dialog.isVisible():
+            _focus_form(dialog)
 
     def _update_page(self) -> None:
         scroll = self.stack.currentWidget()
@@ -96,6 +109,23 @@ class InlineForms(QWidget):
             self._update_page()
         finally:
             self.clearing = False
+
+
+def _focus_form(dialog: QDialog) -> None:
+    focused = QApplication.focusWidget()
+    if focused is not None and (focused is dialog or dialog.isAncestorOf(focused)):
+        return
+    target = dialog.nextInFocusChain()
+    while target is not None and dialog.isAncestorOf(target):
+        if (
+            target.isVisible()
+            and target.isEnabled()
+            and target.focusPolicy() & Qt.FocusPolicy.TabFocus
+        ):
+            target.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        target = target.nextInFocusChain()
+    dialog.setFocus(Qt.FocusReason.OtherFocusReason)
 
 
 def present_form(

@@ -1,9 +1,18 @@
 """Пользовательская навигация и границы экрана закрытой книги."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QLineEdit, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QLineEdit,
+    QPushButton,
+)
 
+from personal_finance.domain.models import AccountKind
 from personal_finance.presentation.dialogs import PasswordDialog
+from personal_finance.presentation.ledger_dialogs import OperationDialog
 from personal_finance.presentation.main_window import MainWindow
 
 ORDER = [
@@ -176,3 +185,39 @@ def test_backup_and_integrity_run_from_settings_without_action_windows(
     assert "Целостность базы" in panel.page_notice.text()
     window.lock_book()
     assert not panel.page_notice.text()
+
+
+def test_journal_keyboard_focus_returns_from_each_inline_form(qtbot, session):
+    session.catalog.add_account("Тестовый счёт", AccountKind.CASH)
+    session.organization.add_tag("Проверочный тег")
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.activate_session(session)
+    window.show()
+    window.activateWindow()
+    panel = window._journal_forms
+    add = next(b for b in panel.page.findChildren(QPushButton) if b.text() == "Добавить операцию")
+    add.setFocus()
+    qtbot.waitUntil(lambda: QApplication.focusWidget() is add)
+    qtbot.keyClick(add, Qt.Key.Key_Space)
+
+    def focused_form():
+        dialog = panel.stack.currentWidget().widget()
+        focus = QApplication.focusWidget()
+        assert focus is not None and (focus is dialog or dialog.isAncestorOf(focus))
+        return dialog, focus
+
+    operation, _ = focused_form()
+    assert isinstance(operation, OperationDialog) and not operation.isWindow()
+    tag_button = operation.tag_selector.choose
+    tag_button.setFocus()
+    qtbot.keyClick(tag_button, Qt.Key.Key_Space)
+    nested, focus = focused_form()
+    assert nested is not operation and panel.stack.count() == 2
+
+    qtbot.keyClick(focus, Qt.Key.Key_Escape)
+    assert focused_form() == (operation, tag_button)
+    qtbot.keyClick(tag_button, Qt.Key.Key_Escape)
+    assert panel.stack.count() == 0 and QApplication.focusWidget() is add
+    assert not session.ledger.operations()
+    window.lock_book()
