@@ -1,6 +1,7 @@
 """Согласованный снимок текущего журнала для отчёта без изменения книги."""
 
 from collections.abc import Callable
+from datetime import date
 from threading import RLock
 
 from personal_finance.application.ledger import Ledger
@@ -12,7 +13,10 @@ from personal_finance.domain.analytics import (
 )
 from personal_finance.domain.analytics_cashflow import CashFlowReport, cash_flow_report
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison, compare_periods
+from personal_finance.domain.deposit_plan_fact import DepositPlanFact, deposit_plan_fact
+from personal_finance.domain.deposits import DepositScenario
 from personal_finance.domain.ledger import Operation
+from personal_finance.domain.models import Account, Category
 
 
 class Analytics:
@@ -29,6 +33,11 @@ class Analytics:
 
     def cash_flow(self, period: ReportPeriod, scope: ReportScope | None = None) -> CashFlowReport:
         return cash_flow_report(self._snapshot(), period, scope)
+
+    def deposit_plan_fact(
+        self, scenario: DepositScenario, account: Account, category: Category, through: date
+    ) -> DepositPlanFact:
+        return deposit_plan_fact(scenario, self._snapshot(), account, category, through)
 
     def _snapshot(self) -> tuple[Operation, ...]:
         with self._mutex:
