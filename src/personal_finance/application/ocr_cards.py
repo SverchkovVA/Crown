@@ -139,6 +139,8 @@ class CardRecognition:
         return self._history_adapter is not None
 
     def history(self, path: Path) -> OcrHistoryPreview:
+        if self._history_adapter is None:
+            raise ValidationError("Адаптер истории ещё не подключён.")
         return self.history_image(self._loader(path))
 
     def history_image(self, source: LoadedOcrImage) -> OcrHistoryPreview:

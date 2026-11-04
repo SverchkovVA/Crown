@@ -1227,8 +1227,8 @@ class MainWindow(QMainWindow):
         self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
-        layout.addLayout(content, 1)
         layout.addWidget(sidebar)
+        layout.addLayout(content, 1)
         return page
 
     def _accounts(self) -> QWidget:

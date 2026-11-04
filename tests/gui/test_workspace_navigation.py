@@ -28,15 +28,15 @@ def test_closed_book_has_only_welcome_and_no_top_commands(qtbot):
     assert not any(b.isVisible() for b in window.report_buttons)
 
 
-def test_right_navigation_order_and_security_inside_last_settings(qtbot, session):
+def test_left_navigation_order_and_security_inside_last_settings(qtbot, session):
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
     window.show()
     assert [window.navigation.item(i).text() for i in range(window.navigation.count())] == ORDER
     assert (
-        window.sidebar.geometry().left()
-        > window.pages.mapTo(window, window.pages.rect().topLeft()).x()
+        window.sidebar.geometry().right()
+        < window.pages.mapTo(window, window.pages.rect().topLeft()).x()
     )
     assert window.navigation.currentRow() == 0
     window.navigation.setCurrentRow(8)
