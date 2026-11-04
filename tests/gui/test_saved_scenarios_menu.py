@@ -34,20 +34,20 @@ def test_saved_scenarios_request_never_opens_for_unsupported_or_busy_book(qtbot,
     qtbot.addWidget(window)
     controller = Mock()
     monkeypatch.setattr(module, "DepositScenariosController", controller)
-    window.request_saved_deposits()
+    window.request_saved_deposits(panel=window._report_forms)
     controller.assert_not_called()
     session = SimpleNamespace(ledger=None, deposit_scenarios=None, close=Mock())
     try:
         window.session = session
-        window.request_saved_deposits()
+        window.request_saved_deposits(panel=window._report_forms)
         controller.assert_not_called()
         session.deposit_scenarios = Mock()
         window._busy = True
-        window.request_saved_deposits()
+        window.request_saved_deposits(panel=window._report_forms)
         controller.assert_not_called()
         window._busy = False
-        window.request_saved_deposits()
-        controller.assert_called_once_with(window, session)
+        window.request_saved_deposits(panel=window._report_forms)
+        controller.assert_called_once_with(window, session, window._report_forms)
         controller.return_value.open.assert_called_once_with()
     finally:
         window.session = None
