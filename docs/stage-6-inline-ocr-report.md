@@ -43,14 +43,12 @@ Windows 11 x64 и Windows PowerShell 5.1: 2018 тестов, сборка, 28 ш
 `artifacts/start-checked-ocr-dev37.cmd`. Результат сохранён в
 `artifacts/dev37-background-verification.json`.
 
-В [CI ветки](https://github.com/SverchkovVA/Crown/actions/runs/41802132909)
-успешны все четыре задания. По JUnit Linux проверено покрытие 2018 тестов
-двумя непересекающимися группами. В Windows CI прошли 2018 тестов, сборка,
-по 28 шагов самопроверки исходников и EXE. Для
-[CI PR](https://github.com/SverchkovVA/Crown/actions/runs/41802141658)
-подтверждены обе группы Linux и полнота набора. Задание Windows PR на момент
-записи результата ещё выполнялось. SHA-256 скачанных технических архивов
-сверен с GitHub перед чтением.
+В [CI ветки](https://github.com/SverchkovVA/Crown/actions/runs/41802132909) и
+[CI PR](https://github.com/SverchkovVA/Crown/actions/runs/41802141658) успешны
+все восемь заданий. По JUnit Linux в каждом запуске подтверждено покрытие
+2018 тестов двумя непересекающимися группами. В каждом Windows CI прошли
+2018 тестов, сборка и по 28 шагов самопроверки исходников и EXE.
+SHA-256 всех восьми технических архивов сверены с GitHub перед чтением.
 
 Ручная приёмка, масштабы 100/125/150% и запуск на чистой Windows
 остаются открытыми.
