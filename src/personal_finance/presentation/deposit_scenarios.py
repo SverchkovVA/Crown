@@ -30,6 +30,7 @@ from personal_finance.presentation.tables import replace_table
 class ScenarioAction(StrEnum):
     CREATE = "create"
     CALCULATE = "calculate"
+    PLAN_FACT = "plan_fact"
     EDIT = "edit"
     COPY = "copy"
     RENAME = "rename"
@@ -97,6 +98,7 @@ class SavedScenariosDialog(QDialog):
             [
                 (ScenarioAction.CREATE, "Создать"),
                 (ScenarioAction.CALCULATE, "Рассчитать"),
+                (ScenarioAction.PLAN_FACT, "План и факт"),
                 (ScenarioAction.EDIT, "Изменить условия"),
                 (ScenarioAction.COPY, "Создать копию"),
                 (ScenarioAction.RENAME, "Переименовать"),

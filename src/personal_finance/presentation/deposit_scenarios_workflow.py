@@ -16,12 +16,19 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
+from personal_finance.domain.deposit_plan_fact import DepositPlanFact
 from personal_finance.domain.deposit_scenarios import SavedDepositScenario
 from personal_finance.domain.deposits import DepositForecast, DepositScenario, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
+from personal_finance.domain.models import Account, Category
 from personal_finance.presentation.analytics import _label
 from personal_finance.presentation.analytics_cashflow import _size
+from personal_finance.presentation.deposit_plan_fact import (
+    DepositPlanFactDialog,
+    DepositPlanFactOptions,
+)
 from personal_finance.presentation.deposit_scenarios import (
     SavedScenariosDialog,
     ScenarioAction,
@@ -260,6 +267,8 @@ class DepositScenariosController:
                 self._failed,
                 "Расчёт сохранённой версии без изменения книги…",
             )
+        elif action is ScenarioAction.PLAN_FACT:
+            self._plan_fact(record)
         elif action in (ScenarioAction.EDIT, ScenarioAction.COPY):
             self.edit(record, copy=action is ScenarioAction.COPY)
         elif action is ScenarioAction.RENAME:
@@ -296,6 +305,49 @@ class DepositScenariosController:
     def _view(self, report: DepositForecast) -> None:
         dialog = DepositForecastDialog(report, self.window, conditions_saved=True)
         present_form(dialog, self.panel, lambda _: self.open())
+
+    def _plan_fact(self, record: SavedDepositScenario) -> None:
+        if self.session.ledger is None:
+            return
+        catalog = self.session.catalog
+        self._job(
+            lambda: (catalog.accounts(), catalog.categories()),
+            lambda values: self._plan_fact_options(record, *values),
+            self._failed,
+            "Подготовка сравнения процентов…",
+        )
+
+    def _plan_fact_options(
+        self, record: SavedDepositScenario, accounts: list[Account], categories: list[Category]
+    ) -> None:
+        ledger = self.session.ledger
+        if ledger is None:
+            return
+        options = DepositPlanFactOptions(record, accounts, categories, self.window)
+        analytics = Analytics(ledger, self.session.mutex, self.session.ensure_open)
+
+        def completed(code: int) -> None:
+            selection = options.result_selection
+            if code != QDialog.DialogCode.Accepted or selection is None:
+                self.open()
+                return
+
+            def show(report: DepositPlanFact) -> None:
+                dialog = DepositPlanFactDialog(
+                    report, record, selection, accounts, categories, self.window
+                )
+                present_form(dialog, self.panel, lambda _: self.open())
+
+            self._job(
+                lambda: analytics.deposit_plan_fact(
+                    record.scenario, selection.account, selection.category, selection.through
+                ),
+                show,
+                self._failed,
+                "Сравнение прогноза с журналом…",
+            )
+
+        present_form(options, self.panel, completed)
 
     def _history(self, records: list[SavedDepositScenario]) -> None:
         dialog = ScenarioHistoryDialog(records, self.window)
