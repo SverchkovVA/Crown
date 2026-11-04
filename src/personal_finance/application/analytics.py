@@ -13,10 +13,12 @@ from personal_finance.domain.analytics import (
 )
 from personal_finance.domain.analytics_cashflow import CashFlowReport, cash_flow_report
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison, compare_periods
+from personal_finance.domain.budget import MonthlyBudget, monthly_budget
 from personal_finance.domain.deposit_plan_fact import DepositPlanFact, deposit_plan_fact
 from personal_finance.domain.deposits import DepositScenario
 from personal_finance.domain.ledger import Operation
-from personal_finance.domain.models import Account, Category
+from personal_finance.domain.models import Account, Category, Money
+from personal_finance.domain.periods import AccountingMonth
 
 
 class Analytics:
@@ -38,6 +40,11 @@ class Analytics:
         self, scenario: DepositScenario, account: Account, category: Category, through: date
     ) -> DepositPlanFact:
         return deposit_plan_fact(scenario, self._snapshot(), account, category, through)
+
+    def monthly_budget(
+        self, month: AccountingMonth, limit: Money, scope: ReportScope | None = None
+    ) -> MonthlyBudget:
+        return monthly_budget(self._snapshot(), month, limit, scope)
 
     def _snapshot(self) -> tuple[Operation, ...]:
         with self._mutex:
