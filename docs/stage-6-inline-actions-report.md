@@ -39,8 +39,10 @@
   прошли 28 обычных и 30 OCR-шагов EXE. Локальный запуск
   `artifacts/start-checked-ocr-dev38.cmd`. Отчёт
   `artifacts/dev38-background-verification.json`.
-- [CI ветки](https://github.com/SverchkovVA/Crown/actions/runs/41807343353)
+- В [CI ветки](https://github.com/SverchkovVA/Crown/actions/runs/41807343353)
   и [CI PR](https://github.com/SverchkovVA/Crown/actions/runs/41807355599)
-  запущены.
+  успешны все восемь заданий. В каждом запуске сверены 2020 тестов Windows
+  и покрытие 2020 тестов двумя группами Linux. SHA-256 восьми технических
+  архивов сверены перед чтением JUnit и отчётов сборки.
 
 В проверках использовались синтетические книги и снимки.
