@@ -4,11 +4,10 @@ from uuid import uuid4
 
 import pytest
 from PySide6.QtCore import QDate, QPoint, Qt
-from PySide6.QtWidgets import QDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox
 
 from personal_finance.domain.ledger import Operation, OperationDraft, OperationKind, OperationPart
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
-from personal_finance.presentation import main_window as window_module
 from personal_finance.presentation.ledger_dialogs import (
     OperationDialog,
     OperationHistoryDialog,
@@ -124,8 +123,11 @@ def test_gui_add_edit_delete_history_and_clear_book(
         dialog._validate()
         return dialog.result()
 
-    monkeypatch.setattr(OperationDialog, "exec", accept)
+    monkeypatch.setattr(QDialog, "exec", lambda self: pytest.fail("Открыт отдельный диалог"))
     qtbot.mouseClick(window.add_operation_button, Qt.MouseButton.LeftButton)
+    dialog = window._journal_forms.stack.currentWidget().widget()
+    assert isinstance(dialog, OperationDialog) and not dialog.isWindow()
+    accept(dialog)
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert not errors
     assert window.operation_model.rowCount() == 1
@@ -134,23 +136,25 @@ def test_gui_add_edit_delete_history_and_clear_book(
     assert window.edit_operation_button.isEnabled()
     value[0] = "20,00"
     qtbot.mouseClick(window.edit_operation_button, Qt.MouseButton.LeftButton)
+    dialog = window._journal_forms.stack.currentWidget().widget()
+    assert isinstance(dialog, OperationDialog) and not dialog.isWindow()
+    accept(dialog)
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert window.account_model.item(0, 4).text() == "-20,00"
     window.operation_table.selectRow(0)
-    seen = []
-
-    class HistoryProbe:
-        def __init__(self, versions, parent, **kwargs):
-            seen.append(versions)
-
-        def exec(self):
-            return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(window_module, "OperationHistoryDialog", HistoryProbe)
     qtbot.mouseClick(window.history_operation_button, Qt.MouseButton.LeftButton)
-    assert len(seen[-1]) == 2
-    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
+    history = window._journal_forms.stack.currentWidget().widget()
+    assert isinstance(history, OperationHistoryDialog) and not history.isWindow()
+    assert history.table.rowCount() == 2
+    history.reject()
     qtbot.mouseClick(window.delete_operation_button, Qt.MouseButton.LeftButton)
+    question = window._journal_forms.stack.currentWidget().widget()
+    question.reject()
+    assert window.operation_model.rowCount() == 1
+    qtbot.mouseClick(window.delete_operation_button, Qt.MouseButton.LeftButton)
+    question = window._journal_forms.stack.currentWidget().widget()
+    assert not question.isWindow()
+    question.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok).click()
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert window.operation_model.rowCount() == 0
     assert window.account_model.item(0, 4).text() == "0,00"
@@ -162,7 +166,9 @@ def test_gui_add_edit_delete_history_and_clear_book(
     assert not window.delete_operation_button.isEnabled()
     assert window.history_operation_button.isEnabled()
     qtbot.mouseClick(window.history_operation_button, Qt.MouseButton.LeftButton)
-    assert len(seen[-1]) == 3
+    history = window._journal_forms.stack.currentWidget().widget()
+    assert history.table.rowCount() == 3
+    history.reject()
     session.check_integrity()
     window.lock_book()
     assert window.session is None

@@ -132,21 +132,23 @@ def test_rule_page_literal_names_and_selection_actions(qtbot, session, configure
     assert page.toggle.text() == "Включить"
 
 
-def test_main_rule_actions_use_worker_versions_and_keep_financial_state(
-    qtbot, session, configured, monkeypatch
-):
+def test_main_rule_actions_use_worker_versions_and_keep_financial_state(qtbot, session, configured):
     _, _, expense, _ = configured
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
     before = session.ledger.operations(), session.ledger.balances()
-    monkeypatch.setattr(CategoryRuleDialog, "exec", lambda dialog: fill_rule(dialog, expense[1]))
-    window.rule_action("add")
+    window.navigation.setCurrentRow(7)
+    window.show()
+    qtbot.mouseClick(window.rule_page.add, Qt.MouseButton.LeftButton)
+    dialog = window._rule_forms.findChild(CategoryRuleDialog)
+    assert dialog is not None and dialog.isVisible() and not dialog.isWindow()
+    fill_rule(dialog, expense[1])
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     created = next(v for v in session.classification.rules() if v.rule.name == "Правило из формы")
     index = next(i for i, v in enumerate(window.rule_page._records) if v.rule.id == created.rule.id)
     window.rule_page.table.selectRow(index)
-    window.rule_action("toggle")
+    qtbot.mouseClick(window.rule_page.toggle, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert len(session.classification.history(created.rule.id)) == 2
     assert not session.classification.history(created.rule.id)[-1].rule.enabled
@@ -311,7 +313,7 @@ def test_main_import_pipeline_matches_rules_in_worker_before_explicit_confirmati
 ):
     import threading
 
-    from PySide6.QtWidgets import QFileDialog
+    from PySide6.QtWidgets import QDialog, QFileDialog
 
     from personal_finance.presentation import main_window as main_module
 
@@ -320,25 +322,8 @@ def test_main_import_pipeline_matches_rules_in_worker_before_explicit_confirmati
     path.write_bytes(SOURCE)
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args: (str(path), ""))
 
-    def options(dialog):
-        dialog.account.setCurrentIndex(dialog.account.findData(account.id))
-        assert dialog.use_rules.isChecked()
-        dialog._validate()
-        return dialog.result()
+    monkeypatch.setattr(QDialog, "exec", lambda self: pytest.fail("Открыт отдельный диалог"))
 
-    monkeypatch.setattr(ImportOptionsDialog, "exec", options)
-    reviewed = []
-
-    def preview(dialog):
-        assert "Правило:" in dialog.table.item(0, 6).text()
-        assert dialog._drafts[1].category_id == expense[0]
-        dialog._validate()
-        reviewed.append(dialog.selections)
-        return dialog.result()
-
-    monkeypatch.setattr(ImportPreviewDialog, "exec", preview)
-    completed = []
-    monkeypatch.setattr(QMessageBox, "information", lambda *args: completed.append(args[-1]))
     matching_threads = []
     prepare = main_module.prepare_import_categories
 
@@ -350,9 +335,33 @@ def test_main_import_pipeline_matches_rules_in_worker_before_explicit_confirmati
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.import_statement()
-    qtbot.waitUntil(lambda: bool(completed) and not window._busy, timeout=20000)
-    assert reviewed and len(session.ledger.operations()) == 1
+    window.show()
+
+    def current():
+        scroll = window._journal_forms.stack.currentWidget()
+        return scroll.widget() if scroll is not None else None
+
+    window.import_button.click()
+    qtbot.waitUntil(lambda: isinstance(current(), ImportOptionsDialog), timeout=20000)
+    options = current()
+    assert not options.isWindow()
+    options.account.setCurrentIndex(options.account.findData(account.id))
+    assert options.use_rules.isChecked()
+    options._validate()
+    qtbot.waitUntil(lambda: isinstance(current(), ImportPreviewDialog), timeout=20000)
+    preview = current()
+    assert not preview.isWindow() and not session.ledger.operations()
+    assert "Правило:" in preview.table.item(0, 6).text()
+    assert preview._drafts[1].category_id == expense[0]
+    preview.table.selectRow(0)
+    preview.edit_selected()
+    edit = current()
+    assert edit is not preview and not edit.isWindow()
+    edit.reject()
+    assert current() is preview
+    preview._validate()
+    qtbot.waitUntil(lambda: window.journal_feedback.isVisible() and not window._busy, timeout=20000)
+    assert len(session.ledger.operations()) == 1
     assert matching_threads and all(
         identifier != threading.get_ident() for identifier in matching_threads
     )

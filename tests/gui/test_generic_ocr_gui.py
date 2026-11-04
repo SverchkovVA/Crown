@@ -184,14 +184,14 @@ def test_explicit_history_button_uses_one_worker(qtbot, session, monkeypatch):
     window.ocr_input.choose_files()
     assert window.ocr_input.files.count() == 2
     window.ocr_input.recognize.click()
-    qtbot.waitUntil(lambda: not window._busy and window._ocr_forms.isVisible(), timeout=10000)
-    batch = window._ocr_forms.stack.currentWidget().widget()
+    qtbot.waitUntil(lambda: not window._busy and window._journal_forms.isVisible(), timeout=10000)
+    batch = window._journal_forms.stack.currentWidget().widget()
     assert isinstance(batch, OcrBatchDialog) and not batch.isWindow()
     assert len(batch.rows) == 2 and engine.calls == 1
     batch.reject()
     assert window.ocr_input.isVisible() and window.ocr_input.files.count() == 2
     window.lock_book()
-    assert window.ocr_input.files.count() == 0 and window._ocr_forms.stack.count() == 0
+    assert window.ocr_input.files.count() == 0 and window._journal_forms.stack.count() == 0
 
 
 def test_drop_batch_review_cancel_confirm_and_repeat_stay_in_page(qtbot, session, monkeypatch):
@@ -220,11 +220,13 @@ def test_drop_batch_review_cancel_confirm_and_repeat_stay_in_page(qtbot, session
     assert drop.isAccepted() and window.ocr_input.files.count() == 1
 
     def current():
-        return window._ocr_forms.stack.currentWidget().widget()
+        return window._journal_forms.stack.currentWidget().widget()
 
     def read_batch():
         window.ocr_input.recognize.click()
-        qtbot.waitUntil(lambda: not window._busy and window._ocr_forms.isVisible(), timeout=10000)
+        qtbot.waitUntil(
+            lambda: not window._busy and window._journal_forms.isVisible(), timeout=10000
+        )
         batch = current()
         assert isinstance(batch, OcrBatchDialog) and not batch.isWindow()
         batch.common_account.setCurrentIndex(batch.common_account.findData(account.id))
@@ -259,7 +261,7 @@ def test_drop_batch_review_cancel_confirm_and_repeat_stay_in_page(qtbot, session
     repeated.prepare()
     qtbot.waitUntil(lambda: isinstance(current(), BatchDecisionDialog), timeout=10000)
     current()._save()
-    assert "Выберите" in window._ocr_forms.notice.text()
+    assert "Выберите" in window._journal_forms.notice.text()
     assert len(session.ledger.operations()) == 2
     session.check_integrity()
     window.lock_book()
@@ -281,19 +283,21 @@ def test_clipboard_image_stays_in_memory_and_opens_card(qtbot, qapp, session, mo
         window.ocr_input.paste()
         assert window.ocr_input.files.currentText() == "Изображение из буфера"
         window.ocr_input.recognize.click()
-        qtbot.waitUntil(lambda: not window._busy and window._ocr_forms.isVisible(), timeout=10000)
-        card = window._ocr_forms.stack.currentWidget().widget()
+        qtbot.waitUntil(
+            lambda: not window._busy and window._journal_forms.isVisible(), timeout=10000
+        )
+        card = window._journal_forms.stack.currentWidget().widget()
         assert isinstance(card, OcrPreviewDialog) and not card.isWindow()
         assert card.preview.source.source_sha256 == card.preview.source.image.sha256
         assert card.preview.card.amount.value == 1200 and engine.calls == 1
         card._request_financial()
-        operation = window._ocr_forms.stack.currentWidget().widget()
+        operation = window._journal_forms.stack.currentWidget().widget()
         assert isinstance(operation, OcrOperationDialog) and not operation.isWindow()
         choose_expense(operation, session.catalog.accounts(), session.catalog.categories())
         operation._validate()
 
         def current():
-            scroll = window._ocr_forms.stack.currentWidget()
+            scroll = window._journal_forms.stack.currentWidget()
             return scroll.widget() if scroll is not None else None
 
         qtbot.waitUntil(lambda: isinstance(current(), OcrConfirmationDialog), timeout=10000)

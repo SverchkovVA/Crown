@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.domain.organization import Tag
+from personal_finance.presentation.inline_forms import present_form
 
 
 class CheckList(QListWidget):
@@ -105,5 +106,9 @@ class TagSelector(QWidget):
 
     def _choose(self) -> None:
         dialog = TagDialog(self._tags, self._selected, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.set_values(dialog.choices.values())
+
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted:
+                self.set_values(dialog.choices.values())
+
+        present_form(dialog, None, completed)

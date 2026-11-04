@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QTableView,
@@ -26,6 +25,7 @@ from personal_finance.domain.classification import CategoryRule, CategoryRuleVer
 from personal_finance.domain.errors import FinanceError
 from personal_finance.domain.ledger import OPERATION_LABELS, OperationKind
 from personal_finance.domain.models import Account, Category
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.periods import local_time
 from personal_finance.presentation.tables import replace_table
@@ -132,7 +132,7 @@ class CategoryRuleDialog(QDialog):
                 self._existing.enabled if self._existing else True,
             )
         except FinanceError as error:
-            QMessageBox.warning(self, "Проверьте правило", str(error))
+            form_warning(self, "Проверьте правило", str(error))
             return
         self.accept()
 

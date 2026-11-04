@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QTableView,
     QVBoxLayout,
     QWidget,
@@ -22,6 +21,7 @@ from personal_finance.domain.errors import FinanceError
 from personal_finance.domain.ledger import OPERATION_LABELS
 from personal_finance.domain.models import Account, Money
 from personal_finance.domain.reconciliation import Reconciliation
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.money import format_minor, format_money
 from personal_finance.presentation.tables import replace_table
 
@@ -88,7 +88,7 @@ class ReconciliationInputDialog(QDialog):
                 Money.parse(self.statement.text()),
             )
         except FinanceError as exc:
-            QMessageBox.warning(self, "Проверьте сверку", str(exc))
+            form_warning(self, "Проверьте сверку", str(exc))
             return
         self.accept()
 

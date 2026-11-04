@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 from personal_finance.domain.errors import FinanceError
 from personal_finance.domain.models import Account
 from personal_finance.domain.ocr_settings import OcrPreferences, TransferParty
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.ocr_preview import plain
 
 
@@ -225,7 +225,7 @@ class OcrSettingsDialog(QDialog):
                 transfer_parties=parties,
             )
         except FinanceError as error:
-            QMessageBox.warning(self, "Проверьте настройки распознавания", str(error))
+            form_warning(self, "Проверьте настройки распознавания", str(error))
             return
         self.accept()
 

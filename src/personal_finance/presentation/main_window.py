@@ -58,6 +58,7 @@ from personal_finance.application.vault import VaultSession, create_vault, open_
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
+from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
@@ -118,7 +119,12 @@ from personal_finance.presentation.import_dialogs import (
     ImportOptionsDialog,
     ImportPreviewDialog,
 )
-from personal_finance.presentation.inline_forms import InlineForms, present_form
+from personal_finance.presentation.inline_forms import (
+    InlineForms,
+    confirm_form,
+    form_warning,
+    present_form,
+)
 from personal_finance.presentation.jobs import Job, JobSignals
 from personal_finance.presentation.ledger_dialogs import (
     OperationDialog,
@@ -279,7 +285,7 @@ def accept_named_form(dialog: QDialog, field: QLineEdit) -> None:
     try:
         validate_name(field.text())
     except ValidationError as exc:
-        QMessageBox.warning(dialog, "Проверьте название", str(exc))
+        form_warning(dialog, "Проверьте название", str(exc))
         return
     dialog.accept()
 
@@ -321,6 +327,7 @@ class MainWindow(QMainWindow):
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
         self._busy = False
+        self._action_panels: list[InlineForms] = []
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.root_stack = QStackedWidget()
         self.setCentralWidget(self.root_stack)
@@ -339,15 +346,26 @@ class MainWindow(QMainWindow):
                 self._ocr_actions.append(
                     command(title, partial(self.review_ocr, service=service, history=history))
                 )
-        self.ocr_settings_action = command("Распознавание и свои переводы", self.configure_ocr)
+        self.ocr_settings_action = command(
+            "Распознавание и свои переводы", lambda: self.configure_ocr(panel=self._settings_forms)
+        )
         self.bonuses_action = command(
-            "Программы и журнал…", lambda checked=False: self.request_bonuses()
+            "Программы и журнал…",
+            lambda checked=False: self.request_bonuses(panel=self._bonus_forms),
         )
         self.bonuses_action.setEnabled(False)
-        self.report_action = command("Доходы и расходы…", self.request_analytics)
-        self.compare_action = command("Сравнить периоды…", self.request_comparison)
-        self.cash_flow_action = command("Движение средств…", self.request_cash_flow)
-        self.deposit_action = command("Прогноз вклада…", self.request_deposit)
+        self.report_action = command(
+            "Доходы и расходы…", lambda: self.request_analytics(panel=self._report_forms)
+        )
+        self.compare_action = command(
+            "Сравнить периоды…", lambda: self.request_comparison(panel=self._report_forms)
+        )
+        self.cash_flow_action = command(
+            "Движение средств…", lambda: self.request_cash_flow(panel=self._report_forms)
+        )
+        self.deposit_action = command(
+            "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
+        )
         self.saved_deposits_action = command(
             "Сохранённые сценарии вкладов…", self.request_saved_deposits
         )
@@ -389,7 +407,7 @@ class MainWindow(QMainWindow):
             else "Откройте новую книгу или восстановленную копию с поддержкой сценариев."
         )
 
-    def request_analytics(self) -> None:
+    def request_analytics(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -401,17 +419,25 @@ class MainWindow(QMainWindow):
         dialog = ReportPeriodDialog(
             self, accounts=accounts, categories=categories, institutions=institutions
         )
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_period is None:
-                return
-            period = dialog.result_period
-            scope = dialog.result_scope
-        finally:
-            dialog.deleteLater()
-        if self.session is session:
-            self.build_analytics(period, scope)
 
-    def build_analytics(self, period: ReportPeriod, scope: ReportScope | None = None) -> None:
+        def completed(code: int) -> None:
+            if (
+                code != QDialog.DialogCode.Accepted
+                or self.session is not session
+                or dialog.result_period is None
+            ):
+                return
+            self.build_analytics(dialog.result_period, dialog.result_scope, panel=panel)
+
+        present_form(dialog, panel, completed)
+
+    def build_analytics(
+        self,
+        period: ReportPeriod,
+        scope: ReportScope | None = None,
+        *,
+        panel: InlineForms | None = None,
+    ) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -425,28 +451,30 @@ class MainWindow(QMainWindow):
                     session.catalog.accounts(),
                 )
 
-        self._job(
+        self._panel_job(
+            panel,
             build,
-            lambda data: self._show_analytics(session, data),
+            lambda data: (
+                self._show_analytics(session, data)
+                if panel is None
+                else self._show_analytics(session, data, panel=panel)
+            ),
             "Расчёт доходов и расходов…",
-            defer_success=True,
         )
 
     def _show_analytics(
         self,
         session: VaultSession,
         result: tuple[IncomeExpenseReport, list[Category], list[Account]],
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         if self.session is not session:
             return
         dialog = IncomeExpenseDialog(result[0], result[1], self, accounts=result[2])
-        try:
-            dialog.exec()
-        finally:
-            dialog.charts.dispose()
-            dialog.deleteLater()
+        present_form(dialog, panel, lambda _: dialog.charts.dispose())
 
-    def request_comparison(self) -> None:
+    def request_comparison(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -458,26 +486,29 @@ class MainWindow(QMainWindow):
         dialog = ComparisonPeriodDialog(
             self, accounts=accounts, categories=categories, institutions=institutions
         )
-        try:
+
+        def completed(code: int) -> None:
             if (
-                dialog.exec() != QDialog.DialogCode.Accepted
+                code != QDialog.DialogCode.Accepted
+                or self.session is not session
                 or dialog.result_period is None
-                or dialog.result_second_period is None
                 or dialog.result_scope is None
+                or dialog.result_second_period is None
             ):
                 return
-            before, after, scope = (
-                dialog.result_period,
-                dialog.result_second_period,
-                dialog.result_scope,
+            self.build_comparison(
+                dialog.result_period, dialog.result_second_period, dialog.result_scope, panel=panel
             )
-        finally:
-            dialog.deleteLater()
-        if self.session is session:
-            self.build_comparison(before, after, scope)
+
+        present_form(dialog, panel, completed)
 
     def build_comparison(
-        self, before: ReportPeriod, after: ReportPeriod, scope: ReportScope | None = None
+        self,
+        before: ReportPeriod,
+        after: ReportPeriod,
+        scope: ReportScope | None = None,
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
@@ -492,31 +523,34 @@ class MainWindow(QMainWindow):
                     session.catalog.accounts(),
                 )
 
-        self._job(
+        self._panel_job(
+            panel,
             build,
-            lambda data: self._show_comparison(session, data),
+            lambda data: (
+                self._show_comparison(session, data)
+                if panel is None
+                else self._show_comparison(session, data, panel=panel)
+            ),
             "Сравнение доходов и расходов…",
-            defer_success=True,
         )
 
     def _show_comparison(
         self,
         session: VaultSession,
         result: tuple[IncomeExpenseComparison, list[Category], list[Account]],
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         if self.session is not session:
             return
         dialog = IncomeExpenseComparisonDialog(result[0], result[1], self, accounts=result[2])
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, panel)
 
     def _review_defaults(self) -> OcrReviewDefaults:
         value = self._ocr_preferences
         return OcrReviewDefaults(value.default_currency, value.year, value.confirm_fields)
 
-    def request_cash_flow(self) -> None:
+    def request_cash_flow(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -525,20 +559,26 @@ class MainWindow(QMainWindow):
             accounts = session.catalog.accounts()
             institutions = session.catalog.institutions()
         dialog = CashFlowPeriodDialog(self, accounts=accounts, institutions=institutions)
-        try:
+
+        def completed(code: int) -> None:
             if (
-                dialog.exec() != QDialog.DialogCode.Accepted
+                code != QDialog.DialogCode.Accepted
+                or self.session is not session
                 or dialog.result_period is None
                 or dialog.result_scope is None
             ):
                 return
-            period, scope = dialog.result_period, dialog.result_scope
-        finally:
-            dialog.deleteLater()
-        if self.session is session:
-            self.build_cash_flow(period, scope)
+            self.build_cash_flow(dialog.result_period, dialog.result_scope, panel=panel)
 
-    def build_cash_flow(self, period: ReportPeriod, scope: ReportScope | None = None) -> None:
+        present_form(dialog, panel, completed)
+
+    def build_cash_flow(
+        self,
+        period: ReportPeriod,
+        scope: ReportScope | None = None,
+        *,
+        panel: InlineForms | None = None,
+    ) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -552,25 +592,28 @@ class MainWindow(QMainWindow):
                     session.catalog.categories(),
                 )
 
-        self._job(
+        self._panel_job(
+            panel,
             build,
-            lambda data: self._show_cash_flow(session, data),
+            lambda data: (
+                self._show_cash_flow(session, data)
+                if panel is None
+                else self._show_cash_flow(session, data, panel=panel)
+            ),
             "Расчёт движения средств…",
-            defer_success=True,
         )
 
     def _show_cash_flow(
         self,
         session: VaultSession,
         result: tuple[CashFlowReport, list[Account], list[Category]],
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         if self.session is not session:
             return
         dialog = CashFlowDialog(result[0], result[1], self, categories=result[2])
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, panel)
 
     def request_saved_deposits(self) -> None:
         session = self.session
@@ -578,55 +621,71 @@ class MainWindow(QMainWindow):
             return
         DepositScenariosController(self, session).open()
 
-    def request_deposit(self) -> None:
-        if self._busy:
-            return
-        self._run_deposit_form(DepositScenarioDialog(self))
+    def request_deposit(self, *, panel: InlineForms | None = None) -> None:
+        if not self._busy:
+            self._run_deposit_form(DepositScenarioDialog(self), panel=panel)
 
-    def _run_deposit_form(self, dialog: DepositScenarioDialog) -> None:
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_scenario is None:
-            dialog.deleteLater()
-            return
-        scenario = dialog.result_scenario
+    def _run_deposit_form(
+        self, dialog: DepositScenarioDialog, *, panel: InlineForms | None = None
+    ) -> None:
+        session = self.session
 
-        def calculate() -> DepositForecast | str:
-            try:
-                return forecast_deposit(scenario)
-            except ValidationError as error:
-                return str(error)
-            except Exception:
-                # Ввод остаётся в прежней форме, технические данные не показываются.
-                return "Не удалось рассчитать прогноз. Проверьте условия и повторите попытку."
+        def completed(code: int) -> None:
+            scenario = dialog.result_scenario
+            if (
+                code != QDialog.DialogCode.Accepted
+                or scenario is None
+                or self.session is not session
+            ):
+                dialog.deleteLater()
+                return
 
-        self._job(
-            calculate,
-            lambda result: self._show_deposit(dialog, result),
-            "Расчёт прогнозных процентов без записи в книгу…",
-            defer_success=True,
-        )
+            def calculate() -> DepositForecast | str:
+                try:
+                    return forecast_deposit(scenario)
+                except ValidationError as error:
+                    return str(error)
+                except Exception:
+                    return "Не удалось рассчитать прогноз. Проверьте условия и повторите попытку."
+
+            self._panel_job(
+                panel,
+                calculate,
+                lambda result: self._show_deposit(dialog, result, panel=panel),
+                "Расчёт прогнозных процентов без записи в книгу…",
+            )
+
+        present_form(dialog, panel, completed, dispose=False)
 
     def _show_deposit(
         self,
         input_dialog: DepositScenarioDialog,
         result: DepositForecast | str,
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         if isinstance(result, str):
             input_dialog.feedback.setText(result)
             input_dialog.feedback.show()
-            self._run_deposit_form(input_dialog)
+            self._run_deposit_form(input_dialog, panel=panel)
             return
-        edit = False
-        dialog: DepositForecastDialog | None = None
         try:
             dialog = DepositForecastDialog(result, self, allow_edit=True)
-            edit = dialog.exec() == QDialog.DialogCode.Accepted and dialog.edit_requested
-        finally:
-            if dialog is not None:
-                dialog.deleteLater()
-            if not edit:
+        except Exception:
+            input_dialog.deleteLater()
+            raise
+
+        def completed(code: int) -> None:
+            if code == QDialog.DialogCode.Accepted and dialog.edit_requested:
+                self._run_deposit_form(input_dialog, panel=panel)
+            else:
                 input_dialog.deleteLater()
-        if edit:
-            self._run_deposit_form(input_dialog)
+
+        try:
+            present_form(dialog, panel, completed)
+        except Exception:
+            input_dialog.deleteLater()
+            raise
 
     def request_bonuses(
         self,
@@ -695,7 +754,7 @@ class MainWindow(QMainWindow):
         elif layout is not None:
             layout.addWidget(button)
 
-    def configure_ocr(self) -> None:
+    def configure_ocr(self, *, panel: InlineForms | None = None) -> None:
         if self._busy:
             return
         session = self.session
@@ -706,23 +765,29 @@ class MainWindow(QMainWindow):
         dialog = OcrSettingsDialog(
             self._ocr_preferences, self._account_records, self, allow_parties=service is not None
         )
-        try:
-            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_preferences is None:
-                return
+
+        def completed(code: int) -> None:
             value = dialog.result_preferences
-        finally:
-            dialog.deleteLater()
+            if code != QDialog.DialogCode.Accepted or value is None or self.session is not session:
+                return
 
-        def applied(_: object = None) -> None:
-            if self.session is session:
-                self._ocr_preferences = value
-                self._local_ocr_preferences.save(value)
-                self.statusBar().showMessage("Настройки распознавания сохранены")
+            def applied(_: object = None) -> None:
+                if self.session is session:
+                    self._ocr_preferences = value
+                    self._local_ocr_preferences.save(value)
+                    self.statusBar().showMessage("Настройки распознавания сохранены")
 
-        if service is None:
-            applied()
-        else:
-            self._job(lambda: service.save(value, revision), applied, "Сохранение настроек OCR…")
+            if service is None:
+                applied()
+            else:
+                self._panel_job(
+                    panel,
+                    lambda: service.save(value, revision),
+                    applied,
+                    "Сохранение настроек OCR…",
+                )
+
+        present_form(dialog, panel, completed)
 
     def _ocr_batch_busy(self, busy: bool) -> None:
         self._busy = busy
@@ -792,7 +857,7 @@ class MainWindow(QMainWindow):
         def show(preview: OcrCardPreview | OcrHistoryPreview) -> None:
             if self.session is session:
                 self.ocr_input.notice.setText("Снимок обработан. Можно выбрать следующий.")
-                self._show_ocr_preview(preview, panel=self._ocr_forms)
+                self._show_ocr_preview(preview, panel=self._journal_forms)
 
         self._job(
             recognize,
@@ -1172,55 +1237,80 @@ class MainWindow(QMainWindow):
         content.setContentsMargins(32, 26, 32, 24)
         self.pages = QStackedWidget()
         journal_page = self._journal()
-        accounts_page = self._accounts()
-        categories_page = self._categories()
-        settings_page = self._settings()
+        accounts_page, self._account_forms = self._wrap_actions(self._accounts())
+        categories_page, self._category_forms = self._wrap_actions(self._categories())
+        settings_page, self._settings_forms = self._wrap_actions(self._settings())
+        bonus_page, self._bonus_forms = self._wrap_actions(self._bonuses_page())
+        reports_page, self._report_forms = self._wrap_actions(self._reports_page())
         self.period_page = PeriodPage()
-        self.period_page.closeRequested.connect(self.close_period)
-        self.period_page.reopenRequested.connect(self.reopen_period)
-        self.period_page.historyRequested.connect(self.period_history)
+        periods_page, self._period_forms = self._wrap_actions(self.period_page)
+        self.period_page.closeRequested.connect(
+            lambda: self._change_period(True, panel=self._period_forms)
+        )
+        self.period_page.reopenRequested.connect(
+            lambda: self._change_period(False, panel=self._period_forms)
+        )
+        self.period_page.historyRequested.connect(
+            lambda: self.period_history(panel=self._period_forms)
+        )
         self.organization_page = OrganizationPage()
+        organization_page, self._organization_forms = self._wrap_actions(self.organization_page)
         self.organization_page.changedArchive.connect(self.refresh)
-        self.organization_page.addTagRequested.connect(lambda: self.definition_action("tag", "add"))
+        self.organization_page.addTagRequested.connect(
+            lambda: self.definition_action("tag", "add", panel=self._organization_forms)
+        )
         self.organization_page.renameTagRequested.connect(
-            lambda: self.definition_action("tag", "rename")
+            lambda: self.definition_action("tag", "rename", panel=self._organization_forms)
         )
         self.organization_page.archiveTagRequested.connect(
-            lambda: self.definition_action("tag", "archive")
+            lambda: self.definition_action("tag", "archive", panel=self._organization_forms)
         )
         self.organization_page.restoreTagRequested.connect(
-            lambda: self.definition_action("tag", "restore")
+            lambda: self.definition_action("tag", "restore", panel=self._organization_forms)
         )
         self.organization_page.tagHistoryRequested.connect(
-            lambda: self.definition_action("tag", "history")
+            lambda: self.definition_action("tag", "history", panel=self._organization_forms)
         )
         self.organization_page.renameFilterRequested.connect(
-            lambda: self.definition_action("saved_filter", "rename")
+            lambda: self.definition_action("saved_filter", "rename", panel=self._organization_forms)
         )
         self.organization_page.archiveFilterRequested.connect(
-            lambda: self.definition_action("saved_filter", "archive")
+            lambda: self.definition_action(
+                "saved_filter", "archive", panel=self._organization_forms
+            )
         )
         self.organization_page.restoreFilterRequested.connect(
-            lambda: self.definition_action("saved_filter", "restore")
+            lambda: self.definition_action(
+                "saved_filter", "restore", panel=self._organization_forms
+            )
         )
         self.organization_page.filterHistoryRequested.connect(
-            lambda: self.definition_action("saved_filter", "history")
+            lambda: self.definition_action(
+                "saved_filter", "history", panel=self._organization_forms
+            )
         )
         self.rule_page = CategoryRulePage()
+        rules_page, self._rule_forms = self._wrap_actions(self.rule_page)
         self.rule_page.changedFilter.connect(self.refresh)
-        self.rule_page.addRequested.connect(lambda: self.rule_action("add"))
-        self.rule_page.editRequested.connect(lambda: self.rule_action("edit"))
-        self.rule_page.toggleRequested.connect(lambda: self.rule_action("toggle"))
-        self.rule_page.historyRequested.connect(lambda: self.rule_action("history"))
+        self.rule_page.addRequested.connect(lambda: self.rule_action("add", panel=self._rule_forms))
+        self.rule_page.editRequested.connect(
+            lambda: self.rule_action("edit", panel=self._rule_forms)
+        )
+        self.rule_page.toggleRequested.connect(
+            lambda: self.rule_action("toggle", panel=self._rule_forms)
+        )
+        self.rule_page.historyRequested.connect(
+            lambda: self.rule_action("history", panel=self._rule_forms)
+        )
         for section in (
             journal_page,
-            self._bonuses_page(),
-            self._reports_page(),
+            bonus_page,
+            reports_page,
             accounts_page,
-            self.organization_page,
+            organization_page,
             categories_page,
-            self.period_page,
-            self.rule_page,
+            periods_page,
+            rules_page,
             settings_page,
         ):
             self.pages.addWidget(section)
@@ -1231,14 +1321,35 @@ class MainWindow(QMainWindow):
         layout.addLayout(content, 1)
         return page
 
+    def _wrap_actions(self, page: QWidget) -> tuple[QWidget, InlineForms]:
+        wrapper = QWidget()
+        layout = QVBoxLayout(wrapper)
+        layout.setContentsMargins(0, 0, 0, 0)
+        panel = InlineForms(page, wrapper)
+        panel.page_notice = label("", "muted")
+        panel.page_notice.hide()
+        layout.addWidget(panel.page_notice)
+        layout.addWidget(page)
+        layout.addWidget(panel)
+        self._action_panels.append(panel)
+        return wrapper, panel
+
+    def _clear_action_panels(self) -> None:
+        for panel in self._action_panels:
+            panel.clear()
+
     def _accounts(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
         row = QHBoxLayout()
         row.addWidget(label("Банки, наличные и ваши счета", "muted"), 1)
-        row.addWidget(button("Добавить банк", self.add_bank))
-        row.addWidget(button("Добавить счёт", self.add_account, primary=True))
+        row.addWidget(button("Добавить банк", lambda: self.add_bank(panel=self._account_forms)))
+        row.addWidget(
+            button(
+                "Добавить счёт", lambda: self.add_account(panel=self._account_forms), primary=True
+            )
+        )
         layout.addLayout(row)
         balance_row = QHBoxLayout()
         balance_row.addWidget(label("Остаток на дату"))
@@ -1249,9 +1360,13 @@ class MainWindow(QMainWindow):
         self.balance_date.dateChanged.connect(self.refresh)
         balance_row.addWidget(self.balance_date)
         balance_row.addStretch()
-        self.opening_button = button("Начальный остаток", self.add_opening_balance)
+        self.opening_button = button(
+            "Начальный остаток", lambda: self.add_opening_balance(panel=self._account_forms)
+        )
         balance_row.addWidget(self.opening_button)
-        self.reconcile_button = button("Сверить остаток", self.reconcile_account)
+        self.reconcile_button = button(
+            "Сверить остаток", lambda: self.reconcile_account(panel=self._account_forms)
+        )
         balance_row.addWidget(self.reconcile_button)
         layout.addLayout(balance_row)
         self.balance_notice = label("", "muted")
@@ -1277,8 +1392,9 @@ class MainWindow(QMainWindow):
         outer.setContentsMargins(0, 0, 0, 0)
         page = QWidget()
         outer.addWidget(page)
-        self._ocr_forms = InlineForms(page, wrapper)
-        outer.addWidget(self._ocr_forms)
+        self._journal_forms = InlineForms(page, wrapper)
+        self._action_panels.append(self._journal_forms)
+        outer.addWidget(self._journal_forms)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
         self.journal_notice = label(
@@ -1287,6 +1403,10 @@ class MainWindow(QMainWindow):
             "muted",
         )
         layout.addWidget(self.journal_notice)
+        self.journal_feedback = label("", "muted")
+        self._journal_forms.page_notice = self.journal_feedback
+        self.journal_feedback.hide()
+        layout.addWidget(self.journal_feedback)
         recognition = QHBoxLayout()
         recognition.addStretch()
         self.ocr_button = button("Распознать снимок", self._toggle_ocr_input)
@@ -1307,11 +1427,17 @@ class MainWindow(QMainWindow):
         self.ocr_input.hide()
         actions = QHBoxLayout()
         self.add_operation_button = button(
-            "Добавить операцию", self.add_default_operation, primary=True
+            "Добавить операцию", lambda: self.add_operation(panel=self._journal_forms), primary=True
         )
-        self.edit_operation_button = button("Исправить", self.edit_operation)
-        self.delete_operation_button = button("Удалить", self.delete_operation)
-        self.history_operation_button = button("История", self.operation_history)
+        self.edit_operation_button = button(
+            "Исправить", lambda: self.edit_operation(panel=self._journal_forms)
+        )
+        self.delete_operation_button = button(
+            "Удалить", lambda: self.delete_operation(panel=self._journal_forms)
+        )
+        self.history_operation_button = button(
+            "История", lambda: self.operation_history(panel=self._journal_forms)
+        )
         for action in (
             self.add_operation_button,
             self.edit_operation_button,
@@ -1323,16 +1449,22 @@ class MainWindow(QMainWindow):
         self.show_deleted.toggled.connect(self.refresh)
         layout.addLayout(actions)
         refund_row = QHBoxLayout()
-        self.refund_button = button("Оформить возврат", self.add_refund)
+        self.refund_button = button(
+            "Оформить возврат", lambda: self.add_refund(panel=self._journal_forms)
+        )
         refund_row.addWidget(self.refund_button)
-        self.import_button = button("Импорт CSV/OFX…", self.import_statement)
+        self.import_button = button(
+            "Импорт CSV/OFX…", lambda: self.import_statement(panel=self._journal_forms)
+        )
         refund_row.addWidget(self.import_button)
-        self.export_button = button("Экспорт…", self.export_journal)
+        self.export_button = button(
+            "Экспорт…", lambda: self.export_journal(panel=self._journal_forms)
+        )
         refund_row.addWidget(self.export_button)
         refund_row.addStretch()
         layout.addLayout(refund_row)
         filter_row = QHBoxLayout()
-        self.filter_button = button("Фильтр…", self.edit_query)
+        self.filter_button = button("Фильтр…", lambda: self.edit_query(panel=self._journal_forms))
         self.reset_filter_button = button("Сбросить фильтр", self.reset_query)
         filter_row.addWidget(self.filter_button)
         filter_row.addWidget(self.reset_filter_button)
@@ -1342,8 +1474,12 @@ class MainWindow(QMainWindow):
         saved_row = QHBoxLayout()
         self.saved_filter_combo = QComboBox()
         self.apply_filter_button = button("Применить", self.apply_saved_filter)
-        self.save_filter_button = button("Сохранить как…", self.save_query)
-        self.update_filter_button = button("Обновить", self.update_saved_filter)
+        self.save_filter_button = button(
+            "Сохранить как…", lambda: self.save_query(panel=self._journal_forms)
+        )
+        self.update_filter_button = button(
+            "Обновить", lambda: self.update_saved_filter(panel=self._journal_forms)
+        )
         saved_row.addWidget(self.saved_filter_combo, 1)
         for widget in (
             self.apply_filter_button,
@@ -1371,7 +1507,9 @@ class MainWindow(QMainWindow):
             )
             self.operation_table.setColumnWidth(column, width)
         self.operation_table.selectionModel().selectionChanged.connect(self._update_journal_actions)
-        self.operation_table.doubleClicked.connect(self.edit_operation)
+        self.operation_table.doubleClicked.connect(
+            lambda _: self.edit_operation(panel=self._journal_forms)
+        )
         self.journal_empty = label("Операций пока нет.", "emptyState")
         layout.addWidget(self.journal_empty)
         layout.addWidget(self.operation_table, 1)
@@ -1434,20 +1572,16 @@ class MainWindow(QMainWindow):
         )
 
     @Slot()
-    def add_default_operation(self) -> None:
-        self.add_operation()
-
-    @Slot()
-    def add_refund(self) -> None:
+    def add_refund(self, *, panel: InlineForms | None = None) -> None:
         if (
             self.session is not None
             and self.session.ledger is not None
             and self.session.ledger.supports_refunds
         ):
-            self.add_operation(OperationKind.REFUND)
+            self.add_operation(OperationKind.REFUND, panel=panel)
 
     @Slot()
-    def reconcile_account(self) -> None:
+    def reconcile_account(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.ledger is None:
             return
@@ -1465,23 +1599,39 @@ class MainWindow(QMainWindow):
             self,
             account_id=account_id,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_request is None:
-            return
-        identifier, as_of, statement = dialog.result_request
         ledger = session.ledger
         names = {account.id: account.name for account in self._account_records}
 
-        def show(result: Reconciliation) -> None:
-            ReconciliationResultDialog(result, names.get(identifier, "Счёт"), self).exec()
+        def completed(code: int) -> None:
+            request = dialog.result_request
+            if (
+                code != QDialog.DialogCode.Accepted
+                or request is None
+                or self.session is not session
+            ):
+                return
+            identifier, as_of, statement = request
 
-        self._job(lambda: ledger.reconcile(identifier, as_of, statement), show, "Сверка остатка…")
+            def show(result: Reconciliation) -> None:
+                if self.session is session:
+                    output = ReconciliationResultDialog(result, names.get(identifier, "Счёт"), self)
+                    present_form(output, panel)
+
+            self._panel_job(
+                panel,
+                lambda: ledger.reconcile(identifier, as_of, statement),
+                show,
+                "Сверка остатка…",
+            )
+
+        present_form(dialog, panel, completed)
 
     @Slot()
-    def add_opening_balance(self) -> None:
-        self.add_operation(OperationKind.OPENING)
+    def add_opening_balance(self, *, panel: InlineForms | None = None) -> None:
+        self.add_operation(OperationKind.OPENING, panel=panel)
 
     @Slot()
-    def export_journal(self) -> None:
+    def export_journal(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.exporting is None or session.ledger is None:
             return
@@ -1494,56 +1644,74 @@ class MainWindow(QMainWindow):
             allow_tags=session.ledger.supports_tags,
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
-            return
-        options, service = dialog.options, session.exporting
-        self._job(
-            lambda: service.preview(options.settings),
-            lambda preview: self._show_export_preview(session, options, preview),
-            "Подготовка снимка экспорта…",
-            defer_success=True,
-        )
+        service = session.exporting
+
+        def completed(result: int) -> None:
+            options = dialog.options
+            if (
+                result != QDialog.DialogCode.Accepted
+                or options is None
+                or self.session is not session
+            ):
+                return
+            self._panel_job(
+                panel,
+                lambda: service.preview(options.settings),
+                lambda preview: self._show_export_preview(session, options, preview, panel=panel),
+                "Подготовка снимка экспорта…",
+            )
+
+        present_form(dialog, panel, completed)
 
     def _show_export_preview(
-        self, session: VaultSession, options: ExportOptions, preview: ExportPreview
+        self,
+        session: VaultSession,
+        options: ExportOptions,
+        preview: ExportPreview,
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
-        if self.session is not session or session.exporting is None:
+        service = session.exporting
+        if self.session is not session or service is None:
             return
         dialog = ExportPreviewDialog(preview, options.format, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        base = Path(user_data_dir("PersonalFinance", appauthor=False))
-        folder = base / "exports"
-        if folder.resolve().is_relative_to(session.root.resolve()):
-            folder = session.root.parent
-        try:
-            folder.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            folder = base.parent
-        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        filename, _ = QFileDialog.getSaveFileName(
-            self,
-            "Новый файл экспорта",
-            str(folder / f"crown-journal-{stamp}-{uuid4().hex[:4]}.{options.format.value}"),
-            f"{options.format.value.upper()} (*.{options.format.value})",
-            options=QFileDialog.Option.DontConfirmOverwrite,
-        )
-        if not filename or self.session is not session:
-            return
-        destination = Path(filename)
-        if not destination.suffix:
-            destination = destination.with_suffix("." + options.format.value)
-        service = session.exporting
-        self._job(
-            lambda: service.save(destination, preview, options.format),
-            lambda path: QMessageBox.information(
-                self, "Экспорт сохранён", f"Файл сохранён:\n{path}"
-            ),
-            "Сохранение нового файла экспорта…",
-            defer_success=True,
-        )
 
-    def rule_action(self, action: str) -> None:
+        def completed(result: int) -> None:
+            if result != QDialog.DialogCode.Accepted or self.session is not session:
+                return
+            base = Path(user_data_dir("PersonalFinance", appauthor=False))
+            folder = base / "exports"
+            if folder.resolve().is_relative_to(session.root.resolve()):
+                folder = session.root.parent
+            try:
+                folder.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                folder = base.parent
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "Новый файл экспорта",
+                str(folder / f"crown-journal-{stamp}-{uuid4().hex[:4]}.{options.format.value}"),
+                f"{options.format.value.upper()} (*.{options.format.value})",
+                options=QFileDialog.Option.DontConfirmOverwrite,
+            )
+            if not filename or self.session is not session:
+                return
+            destination = Path(filename)
+            if not destination.suffix:
+                destination = destination.with_suffix("." + options.format.value)
+            self._panel_job(
+                panel,
+                lambda: service.save(destination, preview, options.format),
+                lambda path: self._panel_notice(
+                    panel, "Экспорт сохранён", f"Файл сохранён:\n{path}"
+                ),
+                "Сохранение нового файла экспорта…",
+            )
+
+        present_form(dialog, panel, completed)
+
+    def rule_action(self, action: str, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.classification is None:
             return
@@ -1552,32 +1720,44 @@ class MainWindow(QMainWindow):
             return
         categories = session.catalog.categories()
         if action == "history" and selected is not None:
-            CategoryRuleHistoryDialog(
+            history = CategoryRuleHistoryDialog(
                 service.history(selected.rule.id), self._account_records, categories, self
-            ).exec()
-            return
-        if action == "toggle" and selected is not None:
-            rule = replace(selected.rule, enabled=not selected.rule.enabled)
-        else:
-            dialog = CategoryRuleDialog(
-                self._account_records,
-                categories,
-                self,
-                existing=selected.rule if action == "edit" and selected is not None else None,
             )
-            if dialog.exec() != QDialog.DialogCode.Accepted or dialog.rule is None:
-                return
-            rule = dialog.rule
+            present_form(history, panel)
+            return
         expected = selected.revision_id if action != "add" and selected is not None else None
-        command = str(uuid4())
-        self._job(
-            lambda: service.save(rule, expected_revision_id=expected, command_id=command),
-            lambda _: self.refresh(),
-            "Сохранение версии правила…",
+
+        def save(rule: CategoryRule) -> None:
+            command = str(uuid4())
+            self._panel_job(
+                panel,
+                lambda: service.save(rule, expected_revision_id=expected, command_id=command),
+                lambda _: self.refresh(),
+                "Сохранение версии правила…",
+            )
+
+        if action == "toggle" and selected is not None:
+            save(replace(selected.rule, enabled=not selected.rule.enabled))
+            return
+        dialog = CategoryRuleDialog(
+            self._account_records,
+            categories,
+            self,
+            existing=selected.rule if action == "edit" and selected is not None else None,
         )
 
+        def completed(result: int) -> None:
+            if (
+                result == QDialog.DialogCode.Accepted
+                and dialog.rule is not None
+                and self.session is session
+            ):
+                save(dialog.rule)
+
+        present_form(dialog, panel, completed)
+
     @Slot()
-    def import_statement(self) -> None:
+    def import_statement(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.importing is None:
             return
@@ -1587,16 +1767,23 @@ class MainWindow(QMainWindow):
         if not filename:
             return
         path = Path(filename)
-        self._job(
+        self._panel_job(
+            panel,
             lambda: read_statement(path),
             lambda contents: self._configure_import(
-                session, path.suffix.lower() == ".csv", contents
+                session, path.suffix.lower() == ".csv", contents, panel=panel
             ),
             "Чтение локального файла…",
-            defer_success=True,
         )
 
-    def _configure_import(self, session: VaultSession, is_csv: bool, contents: bytes) -> None:
+    def _configure_import(
+        self,
+        session: VaultSession,
+        is_csv: bool,
+        contents: bytes,
+        *,
+        panel: InlineForms | None = None,
+    ) -> None:
         if self.session is not session or session.importing is None:
             return
         dialog = ImportOptionsDialog(
@@ -1607,39 +1794,51 @@ class MainWindow(QMainWindow):
             allow_rules=session.classification is not None,
             parent=self,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.options is None:
-            return
-        options, service = dialog.options, session.importing
+        service = session.importing
 
-        def prepare() -> tuple[ImportPreview, PreparedImportCategories | None]:
-            document = (
-                service.parse_csv(contents, options.mapping)
-                if options.mapping is not None
-                else service.parse_ofx(contents)
-            )
-            preview = service.preview(document, options.account_id)
-            classification = (
-                session.classification.snapshot()
-                if options.use_rules and session.classification is not None
-                else None
-            )
-            prepared = (
-                prepare_import_categories(
-                    classification, preview, options.expense_category_id, options.income_category_id
+        def completed(result: int) -> None:
+            options = dialog.options
+            if (
+                result != QDialog.DialogCode.Accepted
+                or options is None
+                or self.session is not session
+            ):
+                return
+
+            def prepare() -> tuple[ImportPreview, PreparedImportCategories | None]:
+                document = (
+                    service.parse_csv(contents, options.mapping)
+                    if options.mapping is not None
+                    else service.parse_ofx(contents)
                 )
-                if classification is not None
-                else None
-            )
-            return preview, prepared
+                preview = service.preview(document, options.account_id)
+                classification = (
+                    session.classification.snapshot()
+                    if options.use_rules and session.classification is not None
+                    else None
+                )
+                prepared = (
+                    prepare_import_categories(
+                        classification,
+                        preview,
+                        options.expense_category_id,
+                        options.income_category_id,
+                    )
+                    if classification is not None
+                    else None
+                )
+                return preview, prepared
 
-        self._job(
-            prepare,
-            lambda prepared: self._preview_import(
-                session, options, prepared[0], classification=prepared[1]
-            ),
-            "Подготовка предпросмотра без записи…",
-            defer_success=True,
-        )
+            self._panel_job(
+                panel,
+                prepare,
+                lambda prepared: self._preview_import(
+                    session, options, prepared[0], classification=prepared[1], panel=panel
+                ),
+                "Подготовка предпросмотра без записи…",
+            )
+
+        present_form(dialog, panel, completed)
 
     def _preview_import(
         self,
@@ -1648,6 +1847,7 @@ class MainWindow(QMainWindow):
         preview: ImportPreview,
         *,
         classification: PreparedImportCategories | None = None,
+        panel: InlineForms | None = None,
     ) -> None:
         if self.session is not session or session.importing is None or session.ledger is None:
             return
@@ -1662,37 +1862,43 @@ class MainWindow(QMainWindow):
             self,
             classification=classification,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selections:
-            return
-        service, selected, command = session.importing, dialog.selections, str(uuid4())
-        self._job(
-            lambda: service.confirm(
-                preview.document, options.account_id, selected, command_id=command
-            ),
-            self._import_complete,
-            "Сохранение всей группы импорта…",
-            defer_success=True,
-        )
+        service = session.importing
 
-    def _import_complete(self, result: ImportResult) -> None:
+        def completed(result: int) -> None:
+            selected = dialog.selections
+            if result != QDialog.DialogCode.Accepted or not selected or self.session is not session:
+                return
+            command = str(uuid4())
+            self._panel_job(
+                panel,
+                lambda: service.confirm(
+                    preview.document, options.account_id, selected, command_id=command
+                ),
+                lambda imported: self._import_complete(imported, panel=panel),
+                "Сохранение всей группы импорта…",
+            )
+
+        present_form(dialog, panel, completed)
+
+    def _import_complete(self, result: ImportResult, *, panel: InlineForms | None = None) -> None:
         self.refresh()
         self.navigation.setCurrentRow(0)
-        QMessageBox.information(
-            self,
+        self._panel_notice(
+            panel,
             "Импорт подтверждён",
             f"Создано операций: {len(result.operations) - result.linked_count}. "
             f"Связано с существующими: {result.linked_count}. "
             "Связи не создают повторного движения. Текущий фильтр может скрывать строки.",
         )
 
-    def add_operation(self, kind: OperationKind = OperationKind.EXPENSE) -> None:
+    def add_operation(
+        self, kind: OperationKind = OperationKind.EXPENSE, *, panel: InlineForms | None = None
+    ) -> None:
         session = self.session
         if session is None or session.ledger is None:
             return
         if not self._account_records:
-            QMessageBox.information(
-                self, "Сначала добавьте счёт", "Создайте счёт в разделе «Счета»."
-            )
+            self._panel_notice(panel, "Сначала добавьте счёт", "Создайте счёт в разделе «Счета».")
             return
         selected = self.account_table.currentIndex().row()
         account_id = (
@@ -1724,17 +1930,28 @@ class MainWindow(QMainWindow):
             tags=self._tag_records,
             allow_tags=session.ledger.supports_tags,
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
-            return
-        draft, ledger, command_id = dialog.result_draft, session.ledger, str(uuid4())
-        self._job(
-            lambda: ledger.add(draft, command_id=command_id),
-            lambda _: self.refresh(),
-            "Сохранение операции и проводок…",
-        )
+        ledger = session.ledger
+
+        def completed(result: int) -> None:
+            draft = dialog.result_draft
+            if (
+                result != QDialog.DialogCode.Accepted
+                or draft is None
+                or self.session is not session
+            ):
+                return
+            command_id = str(uuid4())
+            self._panel_job(
+                panel,
+                lambda: ledger.add(draft, command_id=command_id),
+                lambda _: self.refresh(),
+                "Сохранение операции и проводок…",
+            )
+
+        present_form(dialog, panel, completed)
 
     @Slot()
-    def edit_operation(self) -> None:
+    def edit_operation(self, *, panel: InlineForms | None = None) -> None:
         session, selected = self.session, self._selected_operation()
         if session is None or session.ledger is None or selected is None or selected.is_deleted:
             return
@@ -1756,43 +1973,63 @@ class MainWindow(QMainWindow):
             if session.ledger.supports_refunds
             else [],
         )
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_draft is None:
-            return
-        draft, ledger, command_id = dialog.result_draft, session.ledger, str(uuid4())
-        self._job(
-            lambda: ledger.replace(
-                selected.id,
-                selected.revision_id,
-                draft,
-                command_id=command_id,
-            ),
-            lambda _: self.refresh(),
-            "Сохранение новой версии операции…",
-        )
+        ledger = session.ledger
+
+        def completed(result: int) -> None:
+            draft = dialog.result_draft
+            if (
+                result != QDialog.DialogCode.Accepted
+                or draft is None
+                or self.session is not session
+            ):
+                return
+            command_id = str(uuid4())
+            self._panel_job(
+                panel,
+                lambda: ledger.replace(
+                    selected.id, selected.revision_id, draft, command_id=command_id
+                ),
+                lambda _: self.refresh(),
+                "Сохранение новой версии операции…",
+            )
+
+        present_form(dialog, panel, completed)
 
     @Slot()
-    def delete_operation(self) -> None:
+    def delete_operation(self, *, panel: InlineForms | None = None) -> None:
         session, selected = self.session, self._selected_operation()
         if session is None or session.ledger is None or selected is None or selected.is_deleted:
             return
-        answer = QMessageBox.question(
-            self,
-            "Удалить финансовую операцию",
-            "Убрать операцию из расчёта остатков? Её прежние версии останутся в истории.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        ledger, command_id = session.ledger, str(uuid4())
-        self._job(
-            lambda: ledger.delete(selected.id, selected.revision_id, command_id=command_id),
-            lambda _: self.refresh(),
-            "Удаление операции с сохранением истории…",
-        )
+        ledger = session.ledger
+        title = "Удалить финансовую операцию"
+        question = "Убрать операцию из расчёта остатков? Её прежние версии останутся в истории."
+
+        def remove() -> None:
+            if self.session is not session:
+                return
+            command_id = str(uuid4())
+            self._panel_job(
+                panel,
+                lambda: ledger.delete(selected.id, selected.revision_id, command_id=command_id),
+                lambda _: self.refresh(),
+                "Удаление операции с сохранением истории…",
+            )
+
+        if panel is None:
+            answer = QMessageBox.question(
+                self,
+                title,
+                question,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer == QMessageBox.StandardButton.Yes:
+                remove()
+        else:
+            confirm_form(panel, self, title, question, "Удалить", remove)
 
     @Slot()
-    def operation_history(self) -> None:
+    def operation_history(self, *, panel: InlineForms | None = None) -> None:
         session, selected = self.session, self._selected_operation()
         if session is None or session.ledger is None or selected is None:
             return
@@ -1806,19 +2043,20 @@ class MainWindow(QMainWindow):
             }:
                 related_versions.extend(session.ledger.history(identifier))
         except FinanceError as exc:
-            QMessageBox.warning(self, "Действие не выполнено", str(exc))
+            self._panel_notice(panel, "Действие не выполнено", str(exc))
             return
-        OperationHistoryDialog(
+        dialog = OperationHistoryDialog(
             versions,
             self,
             accounts=self._account_records,
             categories=session.catalog.categories(),
             related_versions=related_versions,
             tags=self._tag_records,
-        ).exec()
+        )
+        present_form(dialog, panel)
 
     @Slot()
-    def edit_query(self) -> None:
+    def edit_query(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.ledger is None:
             return
@@ -1830,8 +2068,39 @@ class MainWindow(QMainWindow):
             self._tag_records,
             self,
         )
-        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_query is not None:
-            self._set_query(dialog.result_query)
+
+        def completed(result: int) -> None:
+            if (
+                result == QDialog.DialogCode.Accepted
+                and dialog.result_query is not None
+                and self.session is session
+            ):
+                self._set_query(dialog.result_query)
+
+        present_form(dialog, panel, completed)
+
+    def _panel_notice(self, panel: InlineForms | None, title: str, message: str) -> None:
+        if panel is None:
+            QMessageBox.information(self, title, message)
+        else:
+            panel.message(message)
+
+    def _panel_job(
+        self,
+        panel: InlineForms | None,
+        action: Callable[[], object],
+        success: Callable[[Any], object],
+        message: str,
+    ) -> None:
+        if panel is not None:
+            panel.message("")
+        self._job(
+            action,
+            success,
+            message,
+            defer_success=True,
+            on_error=panel.message if panel is not None else None,
+        )
 
     def _set_query(self, query: OperationQuery) -> None:
         self._active_query = query
@@ -1863,7 +2132,7 @@ class MainWindow(QMainWindow):
             self._set_query(selected.query)
 
     @Slot()
-    def save_query(self) -> None:
+    def save_query(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.organization is None:
             return
@@ -1872,28 +2141,30 @@ class MainWindow(QMainWindow):
         dialog.setLabelText("Название фильтра")
         dialog.setOkButtonText("Сохранить")
         dialog.setCancelButtonText("Отмена")
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        organization, query, name, command = (
-            session.organization,
-            self._active_query,
-            dialog.textValue(),
-            str(uuid4()),
-        )
-        self._job(
-            lambda: organization.save_filter(name, query, command_id=command),
-            lambda _: self.refresh(),
-            "Сохранение фильтра…",
-        )
+        organization, query = session.organization, self._active_query
+
+        def completed(result: int) -> None:
+            if result != QDialog.DialogCode.Accepted or self.session is not session:
+                return
+            name, command = dialog.textValue(), str(uuid4())
+            self._panel_job(
+                panel,
+                lambda: organization.save_filter(name, query, command_id=command),
+                lambda _: self.refresh(),
+                "Сохранение фильтра…",
+            )
+
+        present_form(dialog, panel, completed)
 
     @Slot()
-    def update_saved_filter(self) -> None:
+    def update_saved_filter(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         selected = self._selected_saved_filter()
         if session is None or session.organization is None or selected is None:
             return
         organization, query, command = session.organization, self._active_query, str(uuid4())
-        self._job(
+        self._panel_job(
+            panel,
             lambda: organization.save_filter(
                 selected.name,
                 query,
@@ -1905,7 +2176,9 @@ class MainWindow(QMainWindow):
             "Сохранение новой версии фильтра…",
         )
 
-    def definition_action(self, kind: str, action: str) -> None:
+    def definition_action(
+        self, kind: str, action: str, *, panel: InlineForms | None = None
+    ) -> None:
         session = self.session
         if session is None or session.organization is None:
             return
@@ -1919,66 +2192,82 @@ class MainWindow(QMainWindow):
         organization = session.organization
         if action == "history":
             assert selected is not None
-            DefinitionHistoryDialog(
+            dialog = DefinitionHistoryDialog(
                 organization.history(kind, selected.id),
                 self,
                 accounts=self._account_records,
                 categories=session.catalog.categories(),
                 institutions=session.catalog.institutions(),
                 tags=self._tag_records,
-            ).exec()
-            return
-        name = ""
-        if action in ("add", "rename"):
-            dialog = NameDialog(self)
-            dialog.setWindowTitle("Создать тег" if action == "add" else "Переименовать")
-            dialog.setLabelText("Название")
-            dialog.setOkButtonText("Сохранить")
-            dialog.setCancelButtonText("Отмена")
-            if selected is not None:
-                dialog.setTextValue(selected.name)
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-            name = dialog.textValue()
-        if (
-            action == "archive"
-            and QMessageBox.question(
-                self,
-                "Переместить в архив",
-                "Убрать запись из активного списка? История и прежние назначения сохранятся.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
             )
-            != QMessageBox.StandardButton.Yes
-        ):
+            present_form(dialog, panel)
             return
-        command = str(uuid4())
 
-        def save() -> object:
-            if kind == "tag":
-                if action == "add":
-                    return organization.add_tag(name, command_id=command)
+        def apply(name: str = "") -> None:
+            if self.session is not session:
+                return
+            command = str(uuid4())
+
+            def save() -> object:
+                if kind == "tag":
+                    if action == "add":
+                        return organization.add_tag(name, command_id=command)
+                    assert selected is not None
+                    if action == "rename":
+                        return organization.rename_tag(
+                            selected.id, selected.revision_id, name, command_id=command
+                        )
+                    return organization.archive_tag(
+                        selected.id,
+                        selected.revision_id,
+                        archived=action == "archive",
+                        command_id=command,
+                    )
                 assert selected is not None
                 if action == "rename":
-                    return organization.rename_tag(
+                    return organization.rename_filter(
                         selected.id, selected.revision_id, name, command_id=command
                     )
-                return organization.archive_tag(
+                return organization.archive_filter(
                     selected.id,
                     selected.revision_id,
                     archived=action == "archive",
                     command_id=command,
                 )
-            assert selected is not None
-            if action == "rename":
-                return organization.rename_filter(
-                    selected.id, selected.revision_id, name, command_id=command
-                )
-            return organization.archive_filter(
-                selected.id, selected.revision_id, archived=action == "archive", command_id=command
-            )
 
-        self._job(save, lambda _: self.refresh(), "Сохранение тега или фильтра…")
+            self._panel_job(panel, save, lambda _: self.refresh(), "Сохранение тега или фильтра…")
+
+        if action in ("add", "rename"):
+            dialog_name = NameDialog(self)
+            dialog_name.setWindowTitle("Создать тег" if action == "add" else "Переименовать")
+            dialog_name.setLabelText("Название")
+            dialog_name.setOkButtonText("Сохранить")
+            dialog_name.setCancelButtonText("Отмена")
+            if selected is not None:
+                dialog_name.setTextValue(selected.name)
+
+            def completed(result: int) -> None:
+                if result == QDialog.DialogCode.Accepted:
+                    apply(dialog_name.textValue())
+
+            present_form(dialog_name, panel, completed)
+            return
+        if action == "archive":
+            title = "Переместить в архив"
+            question = "Убрать запись из активного списка? История и прежние назначения сохранятся."
+            if panel is not None:
+                confirm_form(panel, self, title, question, "В архив", apply)
+                return
+            answer = QMessageBox.question(
+                self,
+                title,
+                question,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        apply()
 
     @Slot()
     def close_period(self) -> None:
@@ -1988,41 +2277,54 @@ class MainWindow(QMainWindow):
     def reopen_period(self) -> None:
         self._change_period(False)
 
-    def _change_period(self, is_closed: bool) -> None:
+    def _change_period(self, is_closed: bool, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.periods is None:
             return
         month = self.period_page.month()
         current = self.period_page.selected_state()
-        dialog = PeriodChangeDialog(month, is_closed, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_reason is None:
-            return
-        periods, reason, command = session.periods, dialog.result_reason, str(uuid4())
+        periods = session.periods
         expected = current.revision_id if current is not None else None
         if not is_closed and expected is None:
             return
+        dialog = PeriodChangeDialog(month, is_closed, self)
 
-        def save() -> object:
-            if is_closed:
-                return periods.close(
-                    month, expected_revision_id=expected, reason=reason, command_id=command
-                )
-            assert expected is not None
-            return periods.reopen(month, expected, reason=reason, command_id=command)
+        def completed(result: int) -> None:
+            reason = dialog.result_reason
+            if (
+                result != QDialog.DialogCode.Accepted
+                or reason is None
+                or self.session is not session
+            ):
+                return
+            command = str(uuid4())
 
-        self._job(save, lambda _: self.refresh(), "Сохранение состояния периода…")
+            def save() -> object:
+                if is_closed:
+                    return periods.close(
+                        month, expected_revision_id=expected, reason=reason, command_id=command
+                    )
+                assert expected is not None
+                return periods.reopen(month, expected, reason=reason, command_id=command)
+
+            self._panel_job(panel, save, lambda _: self.refresh(), "Сохранение состояния периода…")
+
+        present_form(dialog, panel, completed)
 
     @Slot()
-    def period_history(self) -> None:
+    def period_history(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session is None or session.periods is None:
             return
         try:
             versions = session.periods.history(self.period_page.month())
         except FinanceError as exc:
-            QMessageBox.warning(self, "Действие не выполнено", str(exc))
+            if panel is not None:
+                panel.message(str(exc))
+            else:
+                QMessageBox.warning(self, "Действие не выполнено", str(exc))
             return
-        PeriodHistoryDialog(versions, self).exec()
+        present_form(PeriodHistoryDialog(versions, self), panel)
 
     def _categories(self) -> QWidget:
         page = QWidget()
@@ -2030,7 +2332,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 20, 0, 0)
         row = QHBoxLayout()
         row.addWidget(label("Доходы, расходы и подкатегории", "muted"), 1)
-        row.addWidget(button("Добавить категорию", self.add_category, primary=True))
+        row.addWidget(
+            button(
+                "Добавить категорию",
+                lambda: self.add_category(panel=self._category_forms),
+                primary=True,
+            )
+        )
         layout.addLayout(row)
         self.category_tree = QTreeWidget()
         self.category_tree.setHeaderLabels(["Категория", "Тип"])
@@ -2050,10 +2358,24 @@ class MainWindow(QMainWindow):
             )
         )
         layout.addSpacing(20)
-        layout.addWidget(button("Создать зашифрованную копию", self.backup_book, primary=True))
-        layout.addWidget(button("Проверить резервную копию", self.verify_copy))
+        layout.addWidget(
+            button(
+                "Создать зашифрованную копию",
+                lambda: self.backup_book(panel=self._settings_forms),
+                primary=True,
+            )
+        )
+        layout.addWidget(
+            button(
+                "Проверить резервную копию", lambda: self.verify_copy(panel=self._settings_forms)
+            )
+        )
         layout.addWidget(button("Восстановить в новую папку", self.restore_book))
-        layout.addWidget(button("Проверить целостность книги", self.check_book))
+        layout.addWidget(
+            button(
+                "Проверить целостность книги", lambda: self.check_book(panel=self._settings_forms)
+            )
+        )
         self.remember_book_check = QCheckBox("Показывать эту книгу в недавних на этом компьютере")
         self.remember_book_check.setToolTip(
             "Сохраняются название и путь. Пароль и код восстановления не сохраняются. "
@@ -2156,7 +2478,7 @@ class MainWindow(QMainWindow):
             callback(result)
 
     def activate_session(self, session: VaultSession) -> None:
-        self._ocr_forms.clear()
+        self._clear_action_panels()
         self.ocr_input.reset()
         if self.session and self.session is not session:
             self.session.close()
@@ -2289,7 +2611,7 @@ class MainWindow(QMainWindow):
         self._job(restore, self._created, "Проверка и восстановление в новую папку…")
 
     def lock_book(self) -> None:
-        self._ocr_forms.clear()
+        self._clear_action_panels()
         self.ocr_input.reset()
         if self.session:
             self.session.close()
@@ -2527,7 +2849,7 @@ class MainWindow(QMainWindow):
         self._update_journal_actions()
         self.backup_status.setText(self.last_backup)
 
-    def add_bank(self) -> None:
+    def add_bank(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if not session:
             return
@@ -2536,15 +2858,20 @@ class MainWindow(QMainWindow):
         dialog.setLabelText("Название банка или организации")
         dialog.setOkButtonText("Добавить")
         dialog.setCancelButtonText("Отмена")
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            name = dialog.textValue()
-            self._job(
-                lambda: session.catalog.add_institution(name),
-                lambda _: self.refresh(),
-                "Сохранение банка…",
-            )
 
-    def add_account(self) -> None:
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and self.session is session:
+                name = dialog.textValue()
+                self._panel_job(
+                    panel,
+                    lambda: session.catalog.add_institution(name),
+                    lambda _: self.refresh(),
+                    "Сохранение банка…",
+                )
+
+        present_form(dialog, panel, completed)
+
+    def add_account(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if not session:
             return
@@ -2575,16 +2902,21 @@ class MainWindow(QMainWindow):
         buttons.accepted.connect(lambda: accept_named_form(dialog, name))
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            title, account_kind = name.text(), AccountKind(kind.currentData())
-            bank_id = None if account_kind == AccountKind.CASH else institution.currentData()
-            self._job(
-                lambda: session.catalog.add_account(title, account_kind, bank_id),
-                lambda _: self.refresh(),
-                "Сохранение счёта…",
-            )
 
-    def add_category(self) -> None:
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and self.session is session:
+                title, account_kind = name.text(), AccountKind(kind.currentData())
+                bank_id = None if account_kind == AccountKind.CASH else institution.currentData()
+                self._panel_job(
+                    panel,
+                    lambda: session.catalog.add_account(title, account_kind, bank_id),
+                    lambda _: self.refresh(),
+                    "Сохранение счёта…",
+                )
+
+        present_form(dialog, panel, completed)
+
+    def add_category(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if not session:
             return
@@ -2617,21 +2949,26 @@ class MainWindow(QMainWindow):
         buttons.accepted.connect(lambda: accept_named_form(dialog, name))
         buttons.rejected.connect(dialog.reject)
         form.addRow(buttons)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            title, category_kind, parent_id = (
-                name.text(),
-                CategoryKind(kind.currentData()),
-                parent.currentData(),
-            )
-            self._job(
-                lambda: session.catalog.add_category(title, category_kind, parent_id),
-                lambda _: self.refresh(),
-                "Сохранение категории…",
-            )
 
-    def backup_book(self) -> None:
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and self.session is session:
+                title, category_kind, parent_id = (
+                    name.text(),
+                    CategoryKind(kind.currentData()),
+                    parent.currentData(),
+                )
+                self._panel_job(
+                    panel,
+                    lambda: session.catalog.add_category(title, category_kind, parent_id),
+                    lambda _: self.refresh(),
+                    "Сохранение категории…",
+                )
+
+        present_form(dialog, panel, completed)
+
+    def backup_book(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
-        if not session:
+        if session is None:
             return
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         folder = Path(user_data_dir("PersonalFinance", appauthor=False)) / "backups"
@@ -2643,45 +2980,58 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        destination = Path(path)
         dialog = PasswordDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        password, destination = dialog.password.text(), Path(path)
+        dialog.setWindowTitle("Пароль новой резервной копии")
 
-        def backup() -> object:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            return create_backup(session, destination, password)
+        def submit(result: int) -> None:
+            if result != QDialog.DialogCode.Accepted or self.session is not session:
+                return
+            password = dialog.password.text()
 
-        def completed(result: Path) -> None:
-            self.last_backup = f"Копия создана и проверена: {result.name}"
-            self.refresh()
-            QMessageBox.information(self, "Копия готова", f"Создана и проверена копия:\n{result}")
+            def backup() -> Path:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                return create_backup(session, destination, password)
 
-        self._job(backup, completed, "Создание и полная проверка копии…")
+            def completed(saved: Path) -> None:
+                self.last_backup = f"Копия создана и проверена: {saved.name}"
+                self.refresh()
+                self._panel_notice(panel, "Копия готова", f"Создана и проверена копия:\n{saved}")
 
-    def verify_copy(self) -> None:
+            self._panel_job(panel, backup, completed, "Создание и полная проверка копии…")
+
+        present_form(dialog, panel, submit)
+
+    def verify_copy(self, *, panel: InlineForms | None = None) -> None:
         source, _ = QFileDialog.getOpenFileName(self, "Проверить копию", "", "Копия (*.pfbackup)")
         if not source:
             return
         dialog = PasswordDialog(self, confirm=False)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        password = dialog.password.text()
-        self._job(
-            lambda: verify_backup(Path(source), password),
-            lambda _: QMessageBox.information(
-                self, "Проверка завершена", "Все блоки резервной копии прочитаны и проверены."
-            ),
-            "Проверка резервной копии…",
-        )
+        dialog.setWindowTitle("Пароль резервной копии")
 
-    def check_book(self) -> None:
+        def completed(result: int) -> None:
+            if result != QDialog.DialogCode.Accepted:
+                return
+            password = dialog.password.text()
+            self._panel_job(
+                panel,
+                lambda: verify_backup(Path(source), password),
+                lambda _: self._panel_notice(
+                    panel, "Проверка завершена", "Все блоки резервной копии прочитаны и проверены."
+                ),
+                "Проверка резервной копии…",
+            )
+
+        present_form(dialog, panel, completed)
+
+    def check_book(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if session:
-            self._job(
+            self._panel_job(
+                panel,
                 session.check_integrity,
-                lambda _: QMessageBox.information(
-                    self, "Проверка завершена", "Целостность базы, связей и истории подтверждена."
+                lambda _: self._panel_notice(
+                    panel, "Проверка завершена", "Целостность базы, связей и истории подтверждена."
                 ),
                 "Проверка книги…",
             )

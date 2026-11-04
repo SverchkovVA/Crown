@@ -1,7 +1,7 @@
 import hashlib
 from datetime import date
 
-from PySide6.QtCore import QDate, QThread
+from PySide6.QtCore import QDate, Qt, QThread
 from PySide6.QtWidgets import QDialog
 
 from personal_finance.application.analytics import Analytics
@@ -80,29 +80,31 @@ def test_empty_report_is_explicit_and_tables_are_readonly(qtbot):
     )
 
 
-def test_report_worker_is_readonly_and_released_before_showing(qtbot, session, monkeypatch):
+def test_report_worker_is_readonly_and_released_before_showing(qtbot, session):
     populate(session)
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
+    window.navigation.setCurrentRow(2)
+    window.show()
     before = fingerprints(session)
-    seen = []
-
-    def show(dialog):
-        assert QThread.currentThread() == window.thread()
-        assert not window._busy and not window._jobs
-        seen.append(dialog.report)
-        return QDialog.DialogCode.Rejected
-
-    monkeypatch.setattr(IncomeExpenseDialog, "exec", show)
-    window.build_analytics(PERIOD)
+    qtbot.mouseClick(window.report_buttons[0], Qt.MouseButton.LeftButton)
+    form = window._report_forms.findChild(ReportPeriodDialog)
+    assert form is not None and form.isVisible() and not form.isWindow()
+    form.start.setDate(QDate(2026, 10, 1))
+    form.end.setDate(QDate(2026, 10, 31))
+    form._accept()
     assert window._busy and not window.report_action.isEnabled()
-    qtbot.waitUntil(lambda: not window._busy and bool(seen), timeout=15000)
-    assert seen[0].totals[0].difference_minor == 1020
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+    dialog = window._report_forms.findChild(IncomeExpenseDialog)
+    assert dialog is not None and dialog.isVisible() and not dialog.isWindow()
+    assert QThread.currentThread() == dialog.thread() and not window._jobs
+    assert dialog.report.totals[0].difference_minor == 1020
     assert fingerprints(session) == before
     assert window.report_action.isEnabled()
     window.lock_book()
     assert not window.report_action.isEnabled()
+    assert window._report_forms.stack.count() == 0
 
 
 def test_report_snapshot_stays_unchanged_after_edit_and_closed_session_is_refused(session):

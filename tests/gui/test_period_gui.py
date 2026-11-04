@@ -57,7 +57,7 @@ def test_page_tracks_selected_month_and_history(qtbot, session):
     assert history.model.item(1, 3).text() == opened.reason
 
 
-def test_main_window_closes_reopens_in_worker_and_clears_state(qtbot, session, monkeypatch):
+def test_main_window_closes_reopens_in_worker_and_clears_state(qtbot, session):
     account = session.catalog.add_account("Тестовый счёт", AccountKind.CASH)
     category = next(c.id for c in session.catalog.categories() if c.kind == CategoryKind.EXPENSE)
     session.ledger.add(
@@ -70,13 +70,14 @@ def test_main_window_closes_reopens_in_worker_and_clears_state(qtbot, session, m
     window.show()
     window.period_page.month_edit.setDate(QDate(2026, 1, 1))
 
-    def accept(dialog):
+    def submit():
+        dialog = window._period_forms.findChild(PeriodChangeDialog)
+        assert dialog is not None and dialog.isVisible() and not dialog.isWindow()
         dialog.reason.setPlainText("Синтетическая проверка")
         dialog._validate()
-        return dialog.result()
 
-    monkeypatch.setattr(PeriodChangeDialog, "exec", accept)
     qtbot.mouseClick(window.period_page.close_button, Qt.MouseButton.LeftButton)
+    submit()
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert MONTH in window._closed_months
     assert window.period_page.reopen_button.isEnabled()
@@ -85,6 +86,7 @@ def test_main_window_closes_reopens_in_worker_and_clears_state(qtbot, session, m
     assert not window.delete_operation_button.isEnabled()
     assert window.history_operation_button.isEnabled()
     qtbot.mouseClick(window.period_page.reopen_button, Qt.MouseButton.LeftButton)
+    submit()
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     window.operation_table.selectRow(0)
     assert MONTH not in window._closed_months and window.edit_operation_button.isEnabled()

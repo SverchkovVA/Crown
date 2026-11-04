@@ -1,7 +1,9 @@
 """Пользовательская навигация и границы экрана закрытой книги."""
 
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFileDialog, QLineEdit, QPushButton
 
+from personal_finance.presentation.dialogs import PasswordDialog
 from personal_finance.presentation.main_window import MainWindow
 
 ORDER = [
@@ -53,8 +55,8 @@ def test_left_navigation_order_and_security_inside_last_settings(qtbot, session)
 
 def test_reports_and_bonuses_buttons_dispatch_existing_actions(qtbot, session, monkeypatch):
     seen = []
-    monkeypatch.setattr(MainWindow, "request_analytics", lambda self: seen.append("report"))
-    monkeypatch.setattr(MainWindow, "request_bonuses", lambda self: seen.append("bonuses"))
+    monkeypatch.setattr(MainWindow, "request_analytics", lambda self, *, panel: seen.append(panel))
+    monkeypatch.setattr(MainWindow, "request_bonuses", lambda self, *, panel: seen.append(panel))
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
@@ -63,7 +65,7 @@ def test_reports_and_bonuses_buttons_dispatch_existing_actions(qtbot, session, m
     qtbot.mouseClick(window.report_buttons[0], Qt.MouseButton.LeftButton)
     window.navigation.setCurrentRow(1)
     qtbot.mouseClick(window.bonuses_button, Qt.MouseButton.LeftButton)
-    assert seen == ["report", "bonuses"]
+    assert seen == [window._report_forms, window._bonus_forms]
 
 
 def test_close_from_settings_clears_workspace_and_reopen_starts_operations(qtbot, session):
@@ -87,3 +89,79 @@ def test_close_from_settings_clears_workspace_and_reopen_starts_operations(qtbot
         assert window.menuBar().isHidden()
     finally:
         window.lock_book()
+
+
+def test_catalog_add_actions_open_in_their_pages_and_save(qtbot, session):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.activate_session(session)
+    window.show()
+
+    def open_form(page, panel, button_text):
+        button = next(b for b in page.findChildren(QPushButton) if b.text() == button_text)
+        button.click()
+        form = panel.stack.currentWidget().widget()
+        assert isinstance(form, QDialog) and not form.isWindow()
+        return form
+
+    window.navigation.setCurrentRow(3)
+    bank = open_form(window.pages.currentWidget(), window._account_forms, "Добавить банк")
+    bank.setTextValue("Проверочный банк")
+    bank.accept()
+    qtbot.waitUntil(lambda: not window._busy, timeout=10000)
+    assert [v.name for v in session.catalog.institutions()] == ["Проверочный банк"]
+
+    account = open_form(window.pages.currentWidget(), window._account_forms, "Добавить счёт")
+    account.findChild(QLineEdit).setText("Проверочный счёт")
+    account.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=10000)
+    assert [v.name for v in session.catalog.accounts()] == ["Проверочный счёт"]
+
+    window.navigation.setCurrentRow(5)
+    category = open_form(window.pages.currentWidget(), window._category_forms, "Добавить категорию")
+    category.findChild(QLineEdit).setText("Синтетическая категория")
+    category.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=10000)
+    assert any(v.name == "Синтетическая категория" for v in session.catalog.categories())
+    window.lock_book()
+
+
+def test_backup_and_integrity_run_from_settings_without_action_windows(
+    qtbot, session, tmp_path, monkeypatch
+):
+    backup = tmp_path / "synthetic-copy.pfbackup"
+    password = "Синтетический пароль копии"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **kw: (str(backup), ""))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **kw: (str(backup), ""))
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.activate_session(session)
+    window.navigation.setCurrentRow(8)
+    window.settings_tabs.setCurrentIndex(1)
+    window.show()
+    panel = window._settings_forms
+    page = window.settings_tabs.currentWidget()
+
+    def click(text):
+        next(b for b in page.findChildren(QPushButton) if b.text() == text).click()
+
+    def submit(confirm=False):
+        dialog = panel.stack.currentWidget().widget()
+        assert isinstance(dialog, PasswordDialog) and not dialog.isWindow()
+        dialog.password.setText(password)
+        if confirm:
+            dialog.confirm.setText(password)
+        dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok).click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+
+    click("Создать зашифрованную копию")
+    submit(confirm=True)
+    assert backup.is_file() and "Создана и проверена" in panel.page_notice.text()
+    click("Проверить резервную копию")
+    submit()
+    assert "прочитаны и проверены" in panel.page_notice.text()
+    click("Проверить целостность книги")
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+    assert "Целостность базы" in panel.page_notice.text()
+    window.lock_book()
+    assert not panel.page_notice.text()

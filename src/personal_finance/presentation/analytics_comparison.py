@@ -26,6 +26,7 @@ from personal_finance.presentation.analytics import (
     format_report_amount,
     scope_captions,
 )
+from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.ledger_dialogs import category_title
 
 
@@ -315,9 +316,5 @@ class IncomeExpenseComparisonDialog(QDialog):
         dialog = IncomeExpenseDialog(
             self._report(second), self._categories, self, accounts=self._accounts
         )
-        try:
-            dialog._select_sources(*target)
-            dialog.exec()
-        finally:
-            dialog.charts.dispose()
-            dialog.deleteLater()
+        dialog._select_sources(*target)
+        present_form(dialog, None, lambda _: dialog.charts.dispose())

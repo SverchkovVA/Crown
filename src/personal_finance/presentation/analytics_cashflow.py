@@ -33,6 +33,7 @@ from personal_finance.presentation.analytics import (
     format_report_amount,
 )
 from personal_finance.presentation.analytics_cashflow_months import CashFlowMonths
+from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tables import replace_table
 
@@ -176,10 +177,7 @@ class CashFlowSourcesDialog(QDialog):
         if line is None:
             return
         dialog = OperationSourceDialog(line, self.categories, self.accounts, self)
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, None)
 
 
 class CashFlowDialog(QDialog):
@@ -375,10 +373,7 @@ class CashFlowDialog(QDialog):
         dialog = CashFlowSourcesDialog(
             lines, currency, title, self.account_names, self.category_names, self
         )
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, None)
 
     def _show_month_sources(
         self, currency: Currency, lines: tuple[CashMovement, ...], title: str
@@ -388,7 +383,4 @@ class CashFlowDialog(QDialog):
         dialog = CashFlowSourcesDialog(
             lines, currency, title, self.account_names, self.category_names, self
         )
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, None)

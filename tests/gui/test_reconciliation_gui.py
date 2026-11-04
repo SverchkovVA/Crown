@@ -54,7 +54,6 @@ def test_main_action_runs_in_worker_and_keeps_ledger_unchanged(qtbot, session, m
     window.navigation.setCurrentRow(3)
     window.balance_date.setDate(QDate(2026, 1, 15))
     window.show()
-    results = []
     threads = []
     reconcile = session.ledger.reconcile
 
@@ -64,20 +63,19 @@ def test_main_action_runs_in_worker_and_keeps_ledger_unchanged(qtbot, session, m
 
     monkeypatch.setattr(session.ledger, "reconcile", record)
 
-    def accept(dialog):
-        dialog.statement.setText("90,00")
-        dialog._validate()
-        return dialog.result()
+    def current():
+        scroll = window._account_forms.stack.currentWidget()
+        return scroll.widget() if scroll is not None else None
 
-    def show(dialog):
-        results.append(dialog.result_snapshot)
-        return 0
-
-    monkeypatch.setattr(ReconciliationInputDialog, "exec", accept)
-    monkeypatch.setattr(ReconciliationResultDialog, "exec", show)
     qtbot.mouseClick(window.reconcile_button, Qt.MouseButton.LeftButton)
-    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
-    assert len(results) == 1 and results[0].difference_minor == -1000
+    dialog = current()
+    assert isinstance(dialog, ReconciliationInputDialog) and not dialog.isWindow()
+    dialog.statement.setText("90,00")
+    dialog._validate()
+    qtbot.waitUntil(lambda: isinstance(current(), ReconciliationResultDialog), timeout=15000)
+    result = current()
+    assert not result.isWindow() and result.result_snapshot.difference_minor == -1000
+    result.reject()
     assert threads and threads[0] != QApplication.instance().thread()
     assert session.ledger.operations() == [opening]
     session.check_integrity()

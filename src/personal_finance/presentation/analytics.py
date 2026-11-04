@@ -34,6 +34,7 @@ from personal_finance.domain.analytics_cashflow import CashMovement
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import OPERATION_LABELS
 from personal_finance.domain.models import Account, Category, CategoryKind, Currency, Institution
+from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tables import replace_table
 
@@ -571,10 +572,7 @@ class IncomeExpenseDialog(QDialog):
         dialog = OperationSourceDialog(
             self._source_rows[index.row()], self._names, self._accounts, self
         )
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, None)
 
     @staticmethod
     def _total_row(value: FlowTotals) -> list[str]:

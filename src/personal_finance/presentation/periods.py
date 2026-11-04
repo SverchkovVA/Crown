@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTableView,
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from personal_finance.domain.errors import FinanceError
 from personal_finance.domain.periods import AccountingMonth, PeriodRevision, validate_period_change
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.tables import replace_table
 
 
@@ -71,7 +71,7 @@ class PeriodChangeDialog(QDialog):
                 self._month, self._is_closed, self.reason.toPlainText()
             )
         except FinanceError as exc:
-            QMessageBox.warning(self, "Проверьте причину", str(exc))
+            form_warning(self, "Проверьте причину", str(exc))
             return
         self.accept()
 
