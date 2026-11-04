@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QMessageBox,
     QRadioButton,
     QScrollArea,
     QVBoxLayout,
@@ -25,6 +24,7 @@ from personal_finance.domain.ocr_cards import CashDirection, ReviewedOcrCard
 from personal_finance.domain.ocr_imports import OcrImportPreview, OcrImportStatus, OcrSelection
 from personal_finance.domain.organization import Tag
 from personal_finance.domain.refunds import RefundCandidate
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.ledger_dialogs import OperationDialog, category_title
 from personal_finance.presentation.money import format_money
 from personal_finance.presentation.ocr_metadata import bank_category_match, context_note
@@ -141,7 +141,7 @@ class OcrOperationDialog(OperationDialog):
             )
         except FinanceError as error:
             self.result_draft = None
-            QMessageBox.warning(self, "Проверьте операцию OCR", str(error))
+            form_warning(self, "Проверьте операцию OCR", str(error))
             return
         super().accept()
 
@@ -351,7 +351,7 @@ class OcrConfirmationDialog(QDialog):
                 raise ValidationError("Подтвердите проверку финансовой операции.")
             self.result_selection = self._choice()
         except FinanceError as error:
-            QMessageBox.warning(self, "Проверьте подтверждение OCR", str(error))
+            form_warning(self, "Проверьте подтверждение OCR", str(error))
             return
         self.accept()
 

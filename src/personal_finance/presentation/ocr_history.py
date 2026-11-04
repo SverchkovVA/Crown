@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from personal_finance.application.ocr_cards import OcrCardPreview, OcrHistoryPreview
 from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
 from personal_finance.domain.ocr_cards import CashDirection, ReviewedOcrCard
+from personal_finance.presentation.inline_forms import InlineForms, present_form
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog, SourceImageView, plain
 from personal_finance.presentation.tables import replace_table
 
@@ -29,10 +30,12 @@ class OcrHistoryDialog(QDialog):
         *,
         allow_financial_prepare: bool = False,
         review_defaults: OcrReviewDefaults | None = None,
+        panel: InlineForms | None = None,
     ) -> None:
         super().__init__(parent)
         self.review_defaults = review_defaults or OcrReviewDefaults.for_today()
         self.preview = preview
+        self._panel = panel
         self.reviews: dict[int, ReviewedOcrCard] = {}
         self.selected_for_financial: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
         self.setWindowTitle(f"История · {preview.bank_name}: проверка строк")
@@ -56,8 +59,8 @@ class OcrHistoryDialog(QDialog):
         split = QSplitter(Qt.Orientation.Horizontal)
         self.image = SourceImageView(preview.source.image, preview.history.document)
         split.addWidget(self.image)
-        panel = QWidget()
-        right = QVBoxLayout(panel)
+        controls = QWidget()
+        right = QVBoxLayout(controls)
         self.selection_note = plain("Строка не выбрана")
         right.addWidget(self.selection_note)
         self.table = QTableView()
@@ -89,7 +92,7 @@ class OcrHistoryDialog(QDialog):
             button.clicked.connect(action)
             tools.addWidget(button)
         right.addLayout(tools)
-        split.addWidget(panel)
+        split.addWidget(controls)
         split.setSizes([480, 680])
         layout.addWidget(split, 1)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
@@ -216,10 +219,11 @@ class OcrHistoryDialog(QDialog):
                 previous.local_time.strftime("%H:%M") if previous.local_time else ""
             )
             dialog.description.setText(previous.description)
-        try:
-            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.reviewed is not None:
+
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and dialog.reviewed is not None:
                 self.reviews[index] = dialog.reviewed
                 self._refresh()
                 self.table.selectRow(index)
-        finally:
-            dialog.deleteLater()
+
+        present_form(dialog, self._panel, completed)

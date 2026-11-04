@@ -49,6 +49,7 @@ from personal_finance.domain.ocr_imports import (
     OcrSelection,
 )
 from personal_finance.domain.ocr_settings import OcrPreferences
+from personal_finance.presentation.inline_forms import InlineForms, form_warning, present_form
 from personal_finance.presentation.jobs import Job
 from personal_finance.presentation.ocr_metadata import bank_category_match, context_note
 from personal_finance.presentation.ocr_preview import (
@@ -157,7 +158,7 @@ class BatchDecisionDialog(QDialog):
                 )
             values.append(value)
         if not values:
-            QMessageBox.information(
+            form_warning(
                 self, "Ничего не выбрано", "Выберите хотя бы одну новую операцию или связь."
             )
             return
@@ -178,12 +179,14 @@ class OcrBatchDialog(QDialog):
         on_saved: Callable[[tuple[OcrImportResult, ...]], None] = lambda _: None,
         on_busy: Callable[[bool], None] = lambda _: None,
         classification: ClassificationSnapshot | None = None,
+        panel: InlineForms | None = None,
     ) -> None:
         super().__init__(parent)
         self.preview, self.importing, self.preferences = preview, importing, preferences
         self.accounts, self.categories = accounts, categories
         classification = classification if importing is not None else None
         self._classification = classification
+        self._panel = panel
         self._on_saved, self._on_busy = on_saved, on_busy
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(1)
@@ -413,7 +416,8 @@ class OcrBatchDialog(QDialog):
         split.addWidget(self.table)
         split.setSizes([360, 1000])
         body.addWidget(split, 1)
-        layout.addWidget(self.content, 1)
+        if panel is None:
+            layout.addWidget(self.content, 1)
         self.checked: QCheckBox | None = None
         if preferences.confirm_fields:
             self.checked = QCheckBox("Суммы, валюты, направления и даты выбранных строк сверены")
@@ -427,6 +431,8 @@ class OcrBatchDialog(QDialog):
         self.close_button.clicked.connect(self.reject)
         tools.addWidget(self.close_button)
         layout.addLayout(tools)
+        if panel is not None:
+            layout.addWidget(self.content, 1)
         self.common_account.currentIndexChanged.connect(self._common_changed)
         self.unknown_flow.currentIndexChanged.connect(self._set_unknown_flow)
         if self.rows:
@@ -654,8 +660,9 @@ class OcrBatchDialog(QDialog):
         dialog.occurred_on.setText(row.occurred_on.text())
         dialog.local_time.setText(row.local_time)
         dialog.description.setText(row.description)
-        try:
-            if dialog.exec() == QDialog.DialogCode.Accepted and dialog.reviewed is not None:
+
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and dialog.reviewed is not None:
                 value = dialog.reviewed
                 row.amount.setText(
                     ("+" if value.direction == CashDirection.IN else "−")
@@ -668,8 +675,8 @@ class OcrBatchDialog(QDialog):
                 self._apply_category_rule(index)
                 self._edited()
                 self._show_source()
-        finally:
-            dialog.deleteLater()
+
+        present_form(dialog, self._panel, completed)
 
     def _review(self, index: int) -> ReviewedOcrCard:
         row, card = self.rows[index], self.preview.history.cards[index]
@@ -805,22 +812,25 @@ class OcrBatchDialog(QDialog):
                 )
                 self._update_button()
                 return
+
+        def confirm(selections: tuple[OcrSelection, ...]) -> None:
+            self._start(
+                lambda: importing.confirm_many(selections),
+                lambda result: self._saved(result, selections),
+            )
+
         if self.preferences.review_before_save or any(
             p.status != OcrImportStatus.NEW for p in previews
         ):
             dialog = BatchDecisionDialog(previews, self)
-            try:
-                if dialog.exec() != QDialog.DialogCode.Accepted:
-                    return
-                selections = dialog.result_selections
-            finally:
-                dialog.deleteLater()
+
+            def completed(result: int) -> None:
+                if result == QDialog.DialogCode.Accepted:
+                    confirm(dialog.result_selections)
+
+            present_form(dialog, self._panel, completed)
         else:
-            selections = tuple(p.selection for p in previews)
-        self._start(
-            lambda: importing.confirm_many(selections),
-            lambda result: self._saved(result, selections),
-        )
+            confirm(tuple(p.selection for p in previews))
 
     def _saved(
         self, result: tuple[OcrImportResult, ...], selections: tuple[OcrSelection, ...]
@@ -901,7 +911,8 @@ class OcrBatchDialog(QDialog):
         self._update_button()
         if error:
             self.notice.setText(error + " Правки остаются в списке.")
-            QMessageBox.warning(self, "Операции не записаны", error)
+            if self._panel is None:
+                QMessageBox.warning(self, "Операции не записаны", error)
         else:
             callback(value)
 

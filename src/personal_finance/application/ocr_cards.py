@@ -77,7 +77,9 @@ class CardRecognition:
         self._retry_missing_card = retry_missing_card
 
     def preview(self, path: Path) -> OcrCardPreview:
-        source = self._loader(path)
+        return self.preview_image(self._loader(path))
+
+    def preview_image(self, source: LoadedOcrImage) -> OcrCardPreview:
         document = self._ocr.recognize(source.image)
         return self._card_preview(source, document)
 
@@ -137,9 +139,11 @@ class CardRecognition:
         return self._history_adapter is not None
 
     def history(self, path: Path) -> OcrHistoryPreview:
+        return self.history_image(self._loader(path))
+
+    def history_image(self, source: LoadedOcrImage) -> OcrHistoryPreview:
         if self._history_adapter is None:
             raise ValidationError("Адаптер истории ещё не подключён.")
-        source = self._loader(path)
         document = self._ocr.recognize(source.image)
         history = self._history_adapter.parse(document)
         if history.document != document:

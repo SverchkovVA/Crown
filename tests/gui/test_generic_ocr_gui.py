@@ -2,6 +2,8 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+from PySide6.QtGui import QDropEvent, QImage
 from PySide6.QtWidgets import QDialog, QFileDialog
 
 from personal_finance.application.ocr import Ocr
@@ -11,6 +13,7 @@ from personal_finance.application.ocr_cards import (
     OcrHistoryPreview,
 )
 from personal_finance.application.ocr_review import OcrReviewDefaults
+from personal_finance.domain.models import AccountKind
 from personal_finance.domain.ocr import LoadedOcrImage
 from personal_finance.domain.ocr_cards import CashDirection
 from personal_finance.domain.ocr_imports import make_ocr_evidence
@@ -18,8 +21,10 @@ from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.ocr_settings import OcrPreferences, TransferParty
 from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, GenericHistoryAdapter
 from personal_finance.presentation.main_window import MainWindow
-from personal_finance.presentation.ocr_batch import OcrBatchDialog
+from personal_finance.presentation.ocr_batch import BatchDecisionDialog, OcrBatchDialog
+from personal_finance.presentation.ocr_confirmation import OcrConfirmationDialog, OcrOperationDialog
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
+from tests.gui.test_ocr_confirmation_gui import choose_expense
 from tests.integration.test_generic_ocr_upgrade import schema11 as schema11
 from tests.ocr_fixtures import document, png_image
 from tests.unit.test_generic_ocr import layout
@@ -167,17 +172,143 @@ def test_explicit_history_button_uses_one_worker(qtbot, session, monkeypatch):
     recognition, engine = service(history_source().history.document)
     window = MainWindow(ocr_recognitions=(recognition,))
     qtbot.addWidget(window)
-    seen = []
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args: ("unused.png", ""))
-    monkeypatch.setattr(window, "_show_ocr_preview", lambda result: seen.append(result))
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileNames", lambda *args: (["unused.png", "second.jpg"], "")
+    )
+    monkeypatch.setattr(OcrBatchDialog, "exec", lambda self: pytest.fail("Вызван отдельный диалог"))
     window.activate_session(session)
-    menu = window.ocr_button.menu()
-    assert [a.text() for a in menu.actions()] == ["Карточка операции", "История операций"]
-    assert all(a.menu() is None for a in menu.actions())
-    menu.actions()[1].trigger()
-    qtbot.waitUntil(lambda: not window._busy and bool(seen), timeout=10000)
-    assert isinstance(seen[0], OcrHistoryPreview) and engine.calls == 1
-    assert window.session is session
+    window.show()
+    window.ocr_button.click()
+    assert window.ocr_input.isVisible() and window.add_operation_button.isVisible()
+    window.ocr_input.mode.setCurrentIndex(1)
+    window.ocr_input.choose_files()
+    assert window.ocr_input.files.count() == 2
+    window.ocr_input.recognize.click()
+    qtbot.waitUntil(lambda: not window._busy and window._ocr_forms.isVisible(), timeout=10000)
+    batch = window._ocr_forms.stack.currentWidget().widget()
+    assert isinstance(batch, OcrBatchDialog) and not batch.isWindow()
+    assert len(batch.rows) == 2 and engine.calls == 1
+    batch.reject()
+    assert window.ocr_input.isVisible() and window.ocr_input.files.count() == 2
+    window.lock_book()
+    assert window.ocr_input.files.count() == 0 and window._ocr_forms.stack.count() == 0
+
+
+def test_drop_batch_review_cancel_confirm_and_repeat_stay_in_page(qtbot, session, monkeypatch):
+    recognition, _ = service(history_source(("-12,50 RUB", "+14,20 RUB")).history.document)
+    account = session.catalog.add_account("Синтетический счёт", AccountKind.CASH)
+    window = MainWindow(ocr_recognitions=(recognition,))
+    qtbot.addWidget(window)
+    monkeypatch.setattr(QDialog, "exec", lambda self: pytest.fail("Вызван отдельный диалог"))
+    window.activate_session(session)
+    window._ocr_preferences = OcrPreferences(
+        reference_year=2026, confirm_fields=False, review_before_save=True
+    )
+    window.show()
+    window.ocr_button.click()
+    window.ocr_input.mode.setCurrentIndex(1)
+    mime = QMimeData()
+    mime.setUrls([QUrl.fromLocalFile("synthetic.png"), QUrl("https://example.test/image.png")])
+    drop = QDropEvent(
+        QPointF(),
+        Qt.DropAction.CopyAction,
+        mime,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    window.ocr_input.dropEvent(drop)
+    assert drop.isAccepted() and window.ocr_input.files.count() == 1
+
+    def current():
+        return window._ocr_forms.stack.currentWidget().widget()
+
+    def read_batch():
+        window.ocr_input.recognize.click()
+        qtbot.waitUntil(lambda: not window._busy and window._ocr_forms.isVisible(), timeout=10000)
+        batch = current()
+        assert isinstance(batch, OcrBatchDialog) and not batch.isWindow()
+        batch.common_account.setCurrentIndex(batch.common_account.findData(account.id))
+        return batch
+
+    batch = read_batch()
+    batch.table.selectRow(0)
+    batch.edit_selected()
+    card = current()
+    assert isinstance(card, OcrPreviewDialog) and not card.isWindow()
+    card.reject()
+    assert current() is batch
+
+    batch.prepare()
+    qtbot.waitUntil(lambda: isinstance(current(), BatchDecisionDialog), timeout=10000)
+    decision = current()
+    assert not decision.isWindow() and not session.ledger.operations()
+    decision.reject()
+    assert current() is batch and batch.rows[0].amount.text() and not session.ledger.operations()
+
+    batch.prepare()
+    qtbot.waitUntil(lambda: isinstance(current(), BatchDecisionDialog), timeout=10000)
+    current()._save()
+    qtbot.waitUntil(lambda: batch.saved_count == 2 and not window._busy, timeout=10000)
+    assert current() is batch and all(r.saved for r in batch.rows)
+    assert (
+        next(b.amount.minor for b in session.ledger.balances() if b.account_id == account.id) == 170
+    )
+    batch.reject()
+
+    repeated = read_batch()
+    repeated.prepare()
+    qtbot.waitUntil(lambda: isinstance(current(), BatchDecisionDialog), timeout=10000)
+    current()._save()
+    assert "Выберите" in window._ocr_forms.notice.text()
+    assert len(session.ledger.operations()) == 2
+    session.check_integrity()
+    window.lock_book()
+
+
+def test_clipboard_image_stays_in_memory_and_opens_card(qtbot, qapp, session, monkeypatch):
+    recognition, engine = service(document(("Детали операции", "-12 RUB", "03.01.2026")))
+    session.catalog.add_account("Синтетическая карта", AccountKind.CASH)
+    window = MainWindow(ocr_recognitions=(recognition,))
+    qtbot.addWidget(window)
+    monkeypatch.setattr(QDialog, "exec", lambda self: pytest.fail("Вызван отдельный диалог"))
+    image = QImage.fromData(png_image().png)
+    qapp.clipboard().setImage(image)
+    try:
+        window.activate_session(session)
+        window._ocr_preferences = OcrPreferences(confirm_fields=False, review_before_save=True)
+        window.show()
+        window.ocr_button.click()
+        window.ocr_input.paste()
+        assert window.ocr_input.files.currentText() == "Изображение из буфера"
+        window.ocr_input.recognize.click()
+        qtbot.waitUntil(lambda: not window._busy and window._ocr_forms.isVisible(), timeout=10000)
+        card = window._ocr_forms.stack.currentWidget().widget()
+        assert isinstance(card, OcrPreviewDialog) and not card.isWindow()
+        assert card.preview.source.source_sha256 == card.preview.source.image.sha256
+        assert card.preview.card.amount.value == 1200 and engine.calls == 1
+        card._request_financial()
+        operation = window._ocr_forms.stack.currentWidget().widget()
+        assert isinstance(operation, OcrOperationDialog) and not operation.isWindow()
+        choose_expense(operation, session.catalog.accounts(), session.catalog.categories())
+        operation._validate()
+
+        def current():
+            scroll = window._ocr_forms.stack.currentWidget()
+            return scroll.widget() if scroll is not None else None
+
+        qtbot.waitUntil(lambda: isinstance(current(), OcrConfirmationDialog), timeout=10000)
+        confirmation = current()
+        assert not confirmation.isWindow() and not session.ledger.operations()
+        confirmation.verified.setChecked(True)
+        confirmation._validate()
+        qtbot.waitUntil(
+            lambda: not window._busy and len(session.ledger.operations()) == 1, timeout=10000
+        )
+        session.check_integrity()
+        window.lock_book()
+        assert window.ocr_input.files.count() == 0
+    finally:
+        qapp.clipboard().clear()
 
 
 def test_readonly_preview_does_not_apply_hidden_financial_exclusion_rules(qtbot):

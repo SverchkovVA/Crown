@@ -46,6 +46,7 @@ from personal_finance.domain.bonuses import (
 )
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.models import Category, CategoryKind
+from personal_finance.presentation.inline_forms import InlineForms, present_form
 from personal_finance.presentation.ocr_preview import OptionalMaskedEdit, plain
 from personal_finance.presentation.tables import replace_table
 
@@ -241,6 +242,8 @@ class BonusesDialog(QDialog):
         session: VaultSession,
         parent: QWidget | None = None,
         seeds: tuple[BonusSeed, ...] = (),
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         super().__init__(parent or host)
         self._last_seeds: tuple[BonusDraft, ...] | None = None
@@ -251,6 +254,7 @@ class BonusesDialog(QDialog):
             raise ValidationError("В этой книге учёт бонусов недоступен.")
         self.service = session.bonuses
         self.seeds = seeds
+        self._panel = panel
         self._busy = False
         self._closing = False
         self._seed_ready = False
@@ -407,7 +411,8 @@ class BonusesDialog(QDialog):
                 failed(result[1])
             else:
                 self.status.setText(result[1])
-                QMessageBox.warning(self, "Действие не выполнено", result[1])
+                if self._panel is None:
+                    QMessageBox.warning(self, "Действие не выполнено", result[1])
 
         self.host._job(run, applied, message, defer_success=True)
 
@@ -532,23 +537,28 @@ class BonusesDialog(QDialog):
     def _save_form(
         self, form: BonusNameForm | BonusEntryForm, save: Callable[[Any, str], object]
     ) -> None:
-        if form.exec() != QDialog.DialogCode.Accepted or form.value is None:
-            form.deleteLater()
-            return
-        value = form.value
-        if getattr(form, "_last_value", None) != value:
-            form._last_value = value
-            form._command = str(uuid4())
+        def completed(result: int) -> None:
+            if result != QDialog.DialogCode.Accepted or form.value is None:
+                form.deleteLater()
+                return
+            value = form.value
+            if getattr(form, "_last_value", None) != value:
+                form._last_value = value
+                form._command = str(uuid4())
 
-        def saved(_: Any) -> None:
-            form.deleteLater()
-            self.reload()
+            def saved(_: Any) -> None:
+                form.deleteLater()
+                self.reload()
 
-        def failed(message: str) -> None:
-            form.feedback.setText(message)
-            self._save_form(form, save)
+            def failed(message: str) -> None:
+                form.feedback.setText(message)
+                self._save_form(form, save)
 
-        self._job(lambda: save(value, form._command), saved, "Сохранение бонусной записи…", failed)
+            self._job(
+                lambda: save(value, form._command), saved, "Сохранение бонусной записи…", failed
+            )
+
+        present_form(form, self._panel, completed, dispose=False)
 
     def create_program(self) -> None:
         form = BonusNameForm("", self)
@@ -661,10 +671,7 @@ class BonusesDialog(QDialog):
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        present_form(dialog, self._panel)
 
     def _prepare_seeds(self) -> None:
         self.seed_page = QWidget()

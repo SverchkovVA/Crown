@@ -1078,13 +1078,14 @@ def self_test(
                                 window.remember_book_check.setChecked(True)
                                 if len(window._recent_books.items()) != 1:
                                     raise RuntimeError("Не удалось вернуть книгу в недавние.")
-                                if ocr_recognitions and not any(
-                                    action.text() == "Карточка операции" and action.isEnabled()
-                                    for action in window._ocr_actions
-                                ):
-                                    raise RuntimeError("Команда карточки операции недоступна.")
+                                if window.ocr_button.isEnabled() != bool(ocr_recognitions):
+                                    raise RuntimeError("Неверная доступность распознавания.")
                                 window.show()
                                 app.processEvents()
+                                if ocr_recognitions:
+                                    window.ocr_button.click()
+                                    if not window.ocr_input.isVisible():
+                                        raise RuntimeError("Панель распознавания не открылась.")
                                 if (
                                     window.account_model.rowCount() != 2
                                     or window.operation_model.rowCount() != 5

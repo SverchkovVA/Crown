@@ -38,28 +38,36 @@ def decode_ocr_image(contents: bytes) -> LoadedOcrImage:
         decoded = reader.read()
         if decoded.isNull():
             raise ValidationError(_ERROR)
-        require_dimensions(decoded.width(), decoded.height())
-        # Удаляем EXIF/текстовые поля и переводим прозрачность на белый фон.
-        normalized = QImage(decoded.size(), QImage.Format.Format_RGB32)
-        # Qt defaults differ with/without QGuiApplication (96/100 DPI).
-        # Keep OCR input and its hash independent of display scale and process state.
-        normalized.setDotsPerMeterX(3937)
-        normalized.setDotsPerMeterY(3937)
-        normalized.fill("white")
-        painter = QPainter(normalized)
-        try:
-            painter.drawImage(0, 0, decoded)
-        finally:
-            painter.end()
-        target = QBuffer()
-        if not target.open(QIODevice.OpenModeFlag.WriteOnly) or not QImageWriter(
-            target, b"PNG"
-        ).write(normalized):
-            raise ValidationError(_ERROR)
-        image = OcrImage(target.data().data(), normalized.width(), normalized.height())
-        return LoadedOcrImage(hashlib.sha256(contents).hexdigest(), image)
+        return LoadedOcrImage(hashlib.sha256(contents).hexdigest(), normalize_ocr_image(decoded))
     finally:
         source.close()
+
+
+def normalize_ocr_image(decoded: QImage) -> OcrImage:
+    require_dimensions(decoded.width(), decoded.height())
+    # Удаляем EXIF/текстовые поля и переводим прозрачность на белый фон.
+    normalized = QImage(decoded.size(), QImage.Format.Format_RGB32)
+    # Qt defaults differ with/without QGuiApplication (96/100 DPI).
+    # Keep OCR input and its hash independent of display scale and process state.
+    normalized.setDotsPerMeterX(3937)
+    normalized.setDotsPerMeterY(3937)
+    normalized.fill("white")
+    painter = QPainter(normalized)
+    try:
+        painter.drawImage(0, 0, decoded)
+    finally:
+        painter.end()
+    target = QBuffer()
+    if not target.open(QIODevice.OpenModeFlag.WriteOnly) or not QImageWriter(target, b"PNG").write(
+        normalized
+    ):
+        raise ValidationError(_ERROR)
+    return OcrImage(target.data().data(), normalized.width(), normalized.height())
+
+
+def load_clipboard_image(image: QImage) -> LoadedOcrImage:
+    normalized = normalize_ocr_image(image)
+    return LoadedOcrImage(normalized.sha256, normalized)
 
 
 def load_ocr_image(path: Path) -> LoadedOcrImage:

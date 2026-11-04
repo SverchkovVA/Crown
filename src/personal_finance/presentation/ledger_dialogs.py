@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
     QScrollArea,
     QTableWidget,
@@ -40,6 +39,7 @@ from personal_finance.domain.models import (
 )
 from personal_finance.domain.organization import Tag
 from personal_finance.domain.refunds import RefundCandidate, validate_refund_reference
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.money import format_money
 from personal_finance.presentation.parts_editor import PartsEditor
 from personal_finance.presentation.tag_selector import TagSelector
@@ -423,7 +423,7 @@ class OperationDialog(QDialog):
                     raise FinanceError("Превышен остаток к возврату по одной из категорий.")
             self.result_draft = draft
         except FinanceError as exc:
-            QMessageBox.warning(self, "Проверьте операцию", str(exc))
+            form_warning(self, "Проверьте операцию", str(exc))
             return
         self.accept()
 

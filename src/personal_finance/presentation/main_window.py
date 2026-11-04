@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from platformdirs import user_data_dir
 from PySide6.QtCore import QDate, Qt, QThreadPool, Slot
-from PySide6.QtGui import QAction, QCloseEvent
+from PySide6.QtGui import QAction, QCloseEvent, QImage
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -85,6 +84,7 @@ from personal_finance.infrastructure.backup.container import (
     restore_backup,
     verify_backup,
 )
+from personal_finance.infrastructure.ocr.images import load_clipboard_image
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
 from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
@@ -118,6 +118,7 @@ from personal_finance.presentation.import_dialogs import (
     ImportOptionsDialog,
     ImportPreviewDialog,
 )
+from personal_finance.presentation.inline_forms import InlineForms, present_form
 from personal_finance.presentation.jobs import Job, JobSignals
 from personal_finance.presentation.ledger_dialogs import (
     OperationDialog,
@@ -128,6 +129,7 @@ from personal_finance.presentation.ledger_dialogs import (
 from personal_finance.presentation.ocr_batch import OcrBatchDialog
 from personal_finance.presentation.ocr_confirmation import OcrConfirmationDialog, OcrOperationDialog
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
+from personal_finance.presentation.ocr_input import OcrInputPanel
 from personal_finance.presentation.ocr_metadata import bank_category_match
 from personal_finance.presentation.ocr_preview import OcrPreviewDialog
 from personal_finance.presentation.ocr_settings import OcrSettingsDialog
@@ -298,6 +300,10 @@ class MainWindow(QMainWindow):
         self._local_ocr_preferences = LocalOcrPreferences()
         self._ocr_preferences = self._local_ocr_preferences.load()
         self._ocr_recognitions = ocr_recognitions
+        self._ocr_service = next(
+            (value for value in ocr_recognitions if value.bank_name == UNIVERSAL_PROFILE),
+            ocr_recognitions[0] if ocr_recognitions else None,
+        )
         self._ocr_actions: list[QAction] = []
         self.session: VaultSession | None = None
         self._account_records: list[Account] = []
@@ -308,6 +314,7 @@ class MainWindow(QMainWindow):
         self._saved_filters: list[SavedFilter] = []
         self._active_query = OperationQuery()
         self._jobs: set[Job] = set()
+        self._job_errors: dict[JobSignals, Callable[[str], None]] = {}
         self._job_callbacks: dict[JobSignals, Callable[[Any], object]] = {}
         self._job_deferred: set[JobSignals] = set()
         self._job_results: dict[JobSignals, object] = {}
@@ -325,11 +332,7 @@ class MainWindow(QMainWindow):
             action.triggered.connect(callback)
             return action
 
-        if self._ocr_recognitions:
-            service = next(
-                (value for value in self._ocr_recognitions if value.bank_name == UNIVERSAL_PROFILE),
-                self._ocr_recognitions[0],
-            )
+        if (service := self._ocr_service) is not None:
             for title, history in (("Карточка операции", False), ("История операций", True)):
                 if history and not service.supports_history:
                     continue
@@ -626,19 +629,24 @@ class MainWindow(QMainWindow):
             self._run_deposit_form(input_dialog)
 
     def request_bonuses(
-        self, seeds: tuple[BonusSeed, ...] = (), parent: QWidget | None = None
+        self,
+        seeds: tuple[BonusSeed, ...] = (),
+        parent: QWidget | None = None,
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         session = self.session
         if self._busy or session is None or session.bonuses is None:
             return
-        dialog = BonusesDialog(self, session, parent, seeds)
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
+        dialog = BonusesDialog(self, session, parent, seeds, panel=panel)
+        present_form(dialog, panel)
 
     def _attach_bonus_action(
-        self, dialog: QDialog, preview: OcrCardPreview | OcrHistoryPreview
+        self,
+        dialog: QDialog,
+        preview: OcrCardPreview | OcrHistoryPreview,
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         cards = preview.history.cards if isinstance(preview, OcrHistoryPreview) else (preview.card,)
         if not any(card.metadata.bonuses for card in cards):
@@ -678,11 +686,13 @@ class MainWindow(QMainWindow):
                             corrections.description,
                         )
                     )
-            self.request_bonuses(tuple(seeds), dialog)
+            self.request_bonuses(tuple(seeds), dialog, panel=panel)
 
         button.clicked.connect(open_bonuses)
         layout = dialog.layout()
-        if layout is not None:
+        if panel is not None and isinstance(layout, QVBoxLayout):
+            layout.insertWidget(1, button)
+        elif layout is not None:
             layout.addWidget(button)
 
     def configure_ocr(self) -> None:
@@ -762,7 +772,39 @@ class MainWindow(QMainWindow):
             defer_success=True,
         )
 
-    def _show_ocr_preview(self, preview: OcrCardPreview | OcrHistoryPreview) -> None:
+    def _toggle_ocr_input(self) -> None:
+        if self.session is not None and self._ocr_service is not None:
+            self.ocr_input.setVisible(self.ocr_input.isHidden())
+            if not self.ocr_input.isHidden():
+                self.ocr_input.mode.setFocus()
+
+    def _recognize_input(self, source: Path | QImage, history: bool) -> None:
+        session, service = self.session, self._ocr_service
+        if self._busy or session is None or service is None:
+            return
+
+        def recognize() -> OcrCardPreview | OcrHistoryPreview:
+            if isinstance(source, Path):
+                return service.history(source) if history else service.preview(source)
+            loaded = load_clipboard_image(source)
+            return service.history_image(loaded) if history else service.preview_image(loaded)
+
+        def show(preview: OcrCardPreview | OcrHistoryPreview) -> None:
+            if self.session is session:
+                self.ocr_input.notice.setText("Снимок обработан. Можно выбрать следующий.")
+                self._show_ocr_preview(preview, panel=self._ocr_forms)
+
+        self._job(
+            recognize,
+            show,
+            "Локальное распознавание…",
+            defer_success=True,
+            on_error=self.ocr_input.notice.setText,
+        )
+
+    def _show_ocr_preview(
+        self, preview: OcrCardPreview | OcrHistoryPreview, *, panel: InlineForms | None = None
+    ) -> None:
         session = self.session
         universal = preview.bank_name == UNIVERSAL_PROFILE
         allow = (
@@ -778,14 +820,11 @@ class MainWindow(QMainWindow):
             else ""
         )
         if isinstance(preview, OcrHistoryPreview) and universal and not allow:
-            batch = OcrBatchDialog(preview, None, [], [], self._ocr_preferences, self)
+            batch = OcrBatchDialog(preview, None, [], [], self._ocr_preferences, self, panel=panel)
             if schema_notice:
                 batch.notice.setText(batch.notice.text() + " " + schema_notice)
-            self._attach_bonus_action(batch, preview)
-            try:
-                batch.exec()
-            finally:
-                batch.deleteLater()
+            self._attach_bonus_action(batch, preview, panel=panel)
+            present_form(batch, panel)
             return
         if (
             isinstance(preview, OcrHistoryPreview)
@@ -802,15 +841,13 @@ class MainWindow(QMainWindow):
                 self,
                 on_saved=lambda _: self.refresh() if self.session is session else None,
                 on_busy=self._ocr_batch_busy,
+                panel=panel,
                 classification=session.classification.snapshot()
                 if session.classification is not None
                 else None,
             )
-            self._attach_bonus_action(batch, preview)
-            try:
-                batch.exec()
-            finally:
-                batch.deleteLater()
+            self._attach_bonus_action(batch, preview, panel=panel)
+            present_form(batch, panel)
             return
         dialog = (
             OcrHistoryDialog(
@@ -818,6 +855,7 @@ class MainWindow(QMainWindow):
                 self,
                 allow_financial_prepare=allow,
                 review_defaults=self._review_defaults(),
+                panel=panel,
             )
             if isinstance(preview, OcrHistoryPreview)
             else OcrPreviewDialog(
@@ -827,34 +865,40 @@ class MainWindow(QMainWindow):
                 review_defaults=self._review_defaults(),
             )
         )
-        self._attach_bonus_action(dialog, preview)
+        self._attach_bonus_action(dialog, preview, panel=panel)
         if schema_notice and isinstance(dialog, OcrPreviewDialog):
             dialog.notice.setText(dialog.notice.text() + " " + schema_notice)
-        requested: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
-        try:
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                if isinstance(dialog, OcrHistoryDialog):
-                    requested = dialog.selected_for_financial
-                elif dialog.financial_requested and dialog.reviewed is not None:
-                    requested = (dialog.preview, dialog.reviewed)
-                if requested is None:
-                    self.statusBar().showMessage(
-                        "Поля OCR проверены · Операция в книгу не записана"
-                    )
-        finally:
-            dialog.deleteLater()
-        if requested is not None and session is not None and self.session is session:
-            self._prepare_ocr_operation(session, *requested)
+
+        def completed(result: int) -> None:
+            if result != QDialog.DialogCode.Accepted:
+                return
+            requested = None
+            if isinstance(dialog, OcrHistoryDialog):
+                requested = dialog.selected_for_financial
+            elif dialog.financial_requested and dialog.reviewed is not None:
+                requested = (dialog.preview, dialog.reviewed)
+            if requested is None:
+                self.statusBar().showMessage("Поля OCR проверены · Операция в книгу не записана")
+            elif session is not None and self.session is session:
+                if panel is None:
+                    self._prepare_ocr_operation(session, *requested)
+                else:
+                    self._prepare_ocr_operation(session, *requested, panel=panel)
+
+        present_form(dialog, panel, completed)
 
     def _prepare_ocr_operation(
-        self, session: VaultSession, preview: OcrCardPreview, reviewed: ReviewedOcrCard
+        self,
+        session: VaultSession,
+        preview: OcrCardPreview,
+        reviewed: ReviewedOcrCard,
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         if self.session is not session or session.ocr_importing is None or session.ledger is None:
             return
         if not any(account.currency == "RUB" for account in self._account_records):
-            QMessageBox.information(
-                self, "Сначала добавьте счёт", "Создайте счёт RUB для операции OCR."
-            )
+            self._ocr_notice(panel, "Создайте счёт RUB для операции OCR.")
             return
         dialog = OcrOperationDialog(
             preview,
@@ -875,11 +919,7 @@ class MainWindow(QMainWindow):
                 buttons.button(QDialogButtonBox.StandardButton.Save).setText("Добавить операцию")
         parties = self._ocr_preferences.matching_parties(reviewed.description)
         if len(parties) == 1 and parties[0].exclude:
-            QMessageBox.information(
-                self,
-                "Исключённый отправитель",
-                "По настройке эта строка не импортируется и не меняет остатки.",
-            )
+            self._ocr_notice(panel, "По настройке эта строка не импортируется и не меняет остатки.")
             dialog.deleteLater()
             return
         if len(parties) == 1:
@@ -888,23 +928,40 @@ class MainWindow(QMainWindow):
             if other is not None:
                 target = dialog.account if reviewed.direction.value == "in" else dialog.destination
                 target.setCurrentIndex(target.findData(other))
-        selection = None
-        try:
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                selection = dialog.result_selection
-        finally:
-            dialog.deleteLater()
-        if selection is None or self.session is not session:
-            return
-        service = session.ocr_importing
-        self._job(
-            lambda: service.preview(selection),
-            lambda prepared: self._show_ocr_confirmation(session, prepared),
-            "Проверка повторов и финансового смысла OCR…",
-            defer_success=True,
-        )
 
-    def _show_ocr_confirmation(self, session: VaultSession, prepared: OcrImportPreview) -> None:
+        def completed(result: int) -> None:
+            selection = dialog.result_selection
+            if (
+                result != QDialog.DialogCode.Accepted
+                or selection is None
+                or self.session is not session
+            ):
+                return
+            service = session.ocr_importing
+            assert service is not None
+            self._job(
+                lambda: service.preview(selection),
+                lambda prepared: (
+                    self._show_ocr_confirmation(session, prepared)
+                    if panel is None
+                    else self._show_ocr_confirmation(session, prepared, panel=panel)
+                ),
+                "Проверка повторов и финансового смысла OCR…",
+                defer_success=True,
+                on_error=self.ocr_input.notice.setText if panel is not None else None,
+            )
+
+        present_form(dialog, panel, completed)
+
+    def _ocr_notice(self, panel: InlineForms | None, message: str) -> None:
+        if panel is None:
+            QMessageBox.information(self, "Распознавание", message)
+        else:
+            self.ocr_input.notice.setText(message)
+
+    def _show_ocr_confirmation(
+        self, session: VaultSession, prepared: OcrImportPreview, *, panel: InlineForms | None = None
+    ) -> None:
         if self.session is not session or session.ocr_importing is None:
             return
         if not self._ocr_preferences.review_before_save and prepared.status in (
@@ -921,6 +978,7 @@ class MainWindow(QMainWindow):
                 lambda result: self._ocr_saved(session, result),
                 "Добавление операции OCR…",
                 defer_success=True,
+                on_error=self.ocr_input.notice.setText if panel is not None else None,
             )
             return
         dialog = OcrConfirmationDialog(
@@ -931,21 +989,26 @@ class MainWindow(QMainWindow):
             self,
             require_agreement=self._ocr_preferences.review_before_save,
         )
-        selection = None
-        try:
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                selection = dialog.result_selection
-        finally:
-            dialog.deleteLater()
-        if selection is None or self.session is not session:
-            return
-        service, command_id = session.ocr_importing, str(uuid4())
-        self._job(
-            lambda: service.confirm(selection, command_id=command_id),
-            lambda result: self._ocr_saved(session, result),
-            "Подтверждение операции и происхождения OCR…",
-            defer_success=True,
-        )
+
+        def completed(result: int) -> None:
+            selection = dialog.result_selection
+            if (
+                result != QDialog.DialogCode.Accepted
+                or selection is None
+                or self.session is not session
+            ):
+                return
+            service, command_id = session.ocr_importing, str(uuid4())
+            assert service is not None
+            self._job(
+                lambda: service.confirm(selection, command_id=command_id),
+                lambda result: self._ocr_saved(session, result),
+                "Подтверждение операции и происхождения OCR…",
+                defer_success=True,
+                on_error=self.ocr_input.notice.setText if panel is not None else None,
+            )
+
+        present_form(dialog, panel, completed)
 
     def _ocr_saved(self, session: VaultSession, result: OcrImportResult) -> None:
         if self.session is not session:
@@ -1209,7 +1272,13 @@ class MainWindow(QMainWindow):
         return page
 
     def _journal(self) -> QWidget:
+        wrapper = QWidget()
+        outer = QVBoxLayout(wrapper)
+        outer.setContentsMargins(0, 0, 0, 0)
         page = QWidget()
+        outer.addWidget(page)
+        self._ocr_forms = InlineForms(page, wrapper)
+        outer.addWidget(self._ocr_forms)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
         self.journal_notice = label(
@@ -1220,7 +1289,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.journal_notice)
         recognition = QHBoxLayout()
         recognition.addStretch()
-        self.ocr_button = button("Распознать снимок", lambda: None)
+        self.ocr_button = button("Распознать снимок", self._toggle_ocr_input)
         self.ocr_button.setAccessibleName("Распознать карточку или историю операций")
         self.ocr_button.setEnabled(bool(self._ocr_actions))
         self.ocr_button.setToolTip(
@@ -1228,12 +1297,14 @@ class MainWindow(QMainWindow):
             if self._ocr_actions
             else "В каталоге приложения нет проверенного OCR-модуля."
         )
-        if self._ocr_actions:
-            ocr_menu = QMenu(self.ocr_button)
-            ocr_menu.addActions(self._ocr_actions)
-            self.ocr_button.setMenu(ocr_menu)
         recognition.addWidget(self.ocr_button)
         layout.addLayout(recognition)
+        self.ocr_input = OcrInputPanel(
+            self._ocr_service is not None and self._ocr_service.supports_history, page
+        )
+        self.ocr_input.submitted.connect(self._recognize_input)
+        layout.addWidget(self.ocr_input)
+        self.ocr_input.hide()
         actions = QHBoxLayout()
         self.add_operation_button = button(
             "Добавить операцию", self.add_default_operation, primary=True
@@ -1304,7 +1375,7 @@ class MainWindow(QMainWindow):
         self.journal_empty = label("Операций пока нет.", "emptyState")
         layout.addWidget(self.journal_empty)
         layout.addWidget(self.operation_table, 1)
-        return page
+        return wrapper
 
     def _selected_operation(self) -> Operation | None:
         if not self.operation_table.selectionModel().hasSelection():
@@ -2010,6 +2081,7 @@ class MainWindow(QMainWindow):
         message: str,
         *,
         defer_success: bool = False,
+        on_error: Callable[[str], None] | None = None,
     ) -> None:
         if self._busy:
             return
@@ -2022,6 +2094,8 @@ class MainWindow(QMainWindow):
         job = Job(action, self)
         self._jobs.add(job)
         self._job_callbacks[job.signals] = success
+        if on_error is not None:
+            self._job_errors[job.signals] = on_error
         if defer_success:
             self._job_deferred.add(job.signals)
         # Только QObject-слоты принимают сигналы рабочего потока. Пользовательские
@@ -2044,7 +2118,12 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _job_failed(self, message: str) -> None:
-        QMessageBox.warning(self, "Действие не выполнено", message)
+        signals = self.sender()
+        handler = self._job_errors.get(signals) if isinstance(signals, JobSignals) else None
+        if handler is not None:
+            handler(message)
+        else:
+            QMessageBox.warning(self, "Действие не выполнено", message)
 
     @Slot()
     def _job_finished(self) -> None:
@@ -2055,6 +2134,7 @@ class MainWindow(QMainWindow):
         # удаления его сигналов; ожидание Qt освобождает GIL.
         self._pool.waitForDone()
         callback = self._job_callbacks.pop(signals, None)
+        self._job_errors.pop(signals, None)
         has_result = signals in self._job_results
         result = self._job_results.pop(signals, None)
         self._job_deferred.discard(signals)
@@ -2076,6 +2156,8 @@ class MainWindow(QMainWindow):
             callback(result)
 
     def activate_session(self, session: VaultSession) -> None:
+        self._ocr_forms.clear()
+        self.ocr_input.reset()
         if self.session and self.session is not session:
             self.session.close()
         self.session = session
@@ -2207,6 +2289,8 @@ class MainWindow(QMainWindow):
         self._job(restore, self._created, "Проверка и восстановление в новую папку…")
 
     def lock_book(self) -> None:
+        self._ocr_forms.clear()
+        self.ocr_input.reset()
         if self.session:
             self.session.close()
             self.session = None
