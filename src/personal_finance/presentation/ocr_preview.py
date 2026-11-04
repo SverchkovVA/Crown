@@ -37,6 +37,7 @@ from personal_finance.domain.ocr_cards import (
     ReviewedOcrCard,
     review_card,
 )
+from personal_finance.presentation.inline_forms import containing_panel
 from personal_finance.presentation.ocr_metadata import context_note
 
 
@@ -392,7 +393,8 @@ class OcrPreviewDialog(QDialog):
             self.reviewed = self._review_fields()
         except ValidationError as error:
             self._feedback(str(error), error=True)
-            QMessageBox.warning(self, "Проверьте поля", str(error))
+            if containing_panel(self) is None:
+                QMessageBox.warning(self, "Проверьте поля", str(error))
             return
         self.financial_requested = financial
         self.accept()

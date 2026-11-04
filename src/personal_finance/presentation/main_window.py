@@ -331,7 +331,8 @@ class MainWindow(QMainWindow):
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.root_stack = QStackedWidget()
         self.setCentralWidget(self.root_stack)
-        self.root_stack.addWidget(self._welcome())
+        welcome, self._welcome_forms = self._wrap_actions(self._welcome())
+        self.root_stack.addWidget(welcome)
         self.statusBar().showMessage("Работает без интернета · Книга закрыта")
 
         def command(title: str, callback: Callable[..., Any]) -> QAction:
@@ -367,7 +368,8 @@ class MainWindow(QMainWindow):
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
         )
         self.saved_deposits_action = command(
-            "Сохранённые сценарии вкладов…", self.request_saved_deposits
+            "Сохранённые сценарии вкладов…",
+            lambda: self.request_saved_deposits(panel=self._report_forms),
         )
         for action in (
             self.report_action,
@@ -615,11 +617,11 @@ class MainWindow(QMainWindow):
         dialog = CashFlowDialog(result[0], result[1], self, categories=result[2])
         present_form(dialog, panel)
 
-    def request_saved_deposits(self) -> None:
+    def request_saved_deposits(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.deposit_scenarios is None:
             return
-        DepositScenariosController(self, session).open()
+        DepositScenariosController(self, session, panel).open()
 
     def request_deposit(self, *, panel: InlineForms | None = None) -> None:
         if not self._busy:
@@ -1102,12 +1104,18 @@ class MainWindow(QMainWindow):
         )
         layout.addSpacing(28)
         row = QHBoxLayout()
-        row.addWidget(button("Создать книгу", self.create_book, primary=True))
-        row.addWidget(button("Открыть книгу", self.open_book))
+        row.addWidget(
+            button(
+                "Создать книгу", lambda: self.create_book(panel=self._welcome_forms), primary=True
+            )
+        )
+        row.addWidget(button("Открыть книгу", lambda: self.open_book(panel=self._welcome_forms)))
         row.addStretch()
         layout.addLayout(row)
         layout.addSpacing(12)
-        restore = button("Восстановить из резервной копии", self.restore_book)
+        restore = button(
+            "Восстановить из резервной копии", lambda: self.restore_book(panel=self._welcome_forms)
+        )
         restore.setMaximumWidth(355)
         layout.addWidget(restore)
         layout.addWidget(label("Недавние книги", "brand"))
@@ -1117,7 +1125,9 @@ class MainWindow(QMainWindow):
         self.recent_books_list.itemDoubleClicked.connect(self._open_recent_item)
         layout.addWidget(self.recent_books_list)
         recent_actions = QHBoxLayout()
-        self.open_recent_button = button("Открыть выбранную", self.open_recent_book)
+        self.open_recent_button = button(
+            "Открыть выбранную", lambda: self.open_recent_book(panel=self._welcome_forms)
+        )
         self.forget_recent_button = button("Убрать из списка", self.forget_recent_book)
         recent_actions.addWidget(self.open_recent_button)
         recent_actions.addWidget(self.forget_recent_button)
@@ -2370,7 +2380,11 @@ class MainWindow(QMainWindow):
                 "Проверить резервную копию", lambda: self.verify_copy(panel=self._settings_forms)
             )
         )
-        layout.addWidget(button("Восстановить в новую папку", self.restore_book))
+        layout.addWidget(
+            button(
+                "Восстановить в новую папку", lambda: self.restore_book(panel=self._settings_forms)
+            )
+        )
         layout.addWidget(
             button(
                 "Проверить целостность книги", lambda: self.check_book(panel=self._settings_forms)
@@ -2477,7 +2491,7 @@ class MainWindow(QMainWindow):
         if has_result and callback is not None:
             callback(result)
 
-    def activate_session(self, session: VaultSession) -> None:
+    def activate_session(self, session: VaultSession, *, show_workspace: bool = True) -> None:
         self._clear_action_panels()
         self.ocr_input.reset()
         if self.session and self.session is not session:
@@ -2498,45 +2512,72 @@ class MainWindow(QMainWindow):
         self.book_title.setText(session.name)
         self.refresh()
         self.navigation.setCurrentRow(0)
-        self.root_stack.setCurrentIndex(1)
+        self.root_stack.setCurrentIndex(1 if show_workspace else 0)
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
 
-    def _created(self, result: tuple[VaultSession, str]) -> None:
-        self.activate_session(result[0])
-        RecoveryDialog(result[1], self).exec()
+    def _created(self, result: tuple[VaultSession, str], *, inline: bool = False) -> None:
+        session, recovery = result
+        self.activate_session(session, show_workspace=not inline)
+        dialog = RecoveryDialog(recovery, self)
+        if not inline:
+            present_form(dialog, None)
+            return
 
-    def create_book(self) -> None:
+        def completed(code: int) -> None:
+            if code == QDialog.DialogCode.Accepted and self.session is session:
+                self.root_stack.setCurrentIndex(1)
+
+        present_form(dialog, self._welcome_forms, completed)
+
+    def create_book(self, *, panel: InlineForms | None = None) -> None:
         dialog = CreateDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        path, name, password = Path(dialog.path.text()), dialog.name.text(), dialog.password.text()
 
-        def create() -> object:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            return create_vault(path, name, password)
+        def completed(code: int) -> None:
+            if code != QDialog.DialogCode.Accepted:
+                return
+            path, name, password = (
+                Path(dialog.path.text()),
+                dialog.name.text(),
+                dialog.password.text(),
+            )
 
-        self._job(create, self._created, "Создание защищённой книги…")
+            def create() -> tuple[VaultSession, str]:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                return create_vault(path, name, password)
 
-    def open_book(self) -> None:
+            self._panel_job(
+                panel,
+                create,
+                lambda result: self._created(result, inline=panel is not None),
+                "Создание защищённой книги…",
+            )
+
+        present_form(dialog, panel, completed)
+
+    def open_book(self, *, panel: InlineForms | None = None) -> None:
         path = QFileDialog.getExistingDirectory(self, "Выберите папку книги (.pfvault)")
-        if not path:
-            return
-        self._open_book_path(Path(path))
+        if path:
+            self._open_book_path(Path(path), panel=panel)
 
-    def _open_book_path(self, path: Path) -> None:
+    def _open_book_path(self, path: Path, *, panel: InlineForms | None = None) -> None:
         if self._busy:
             return
         dialog = OpenDialog(path, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        credential, recovery = dialog.credential.text(), dialog.recovery.isChecked()
-        if recovery:
-            credential = credential.strip()
-        self._job(
-            lambda: open_vault(Path(path), credential, recovery=recovery),
-            self.activate_session,
-            "Открытие и проверка книги…",
-        )
+
+        def completed(code: int) -> None:
+            if code != QDialog.DialogCode.Accepted:
+                return
+            credential, recovery = dialog.credential.text(), dialog.recovery.isChecked()
+            if recovery:
+                credential = credential.strip()
+            self._panel_job(
+                panel,
+                lambda: open_vault(path, credential, recovery=recovery),
+                self.activate_session,
+                "Открытие и проверка книги…",
+            )
+
+        present_form(dialog, panel, completed)
 
     def _refresh_recent_books(self) -> None:
         self.recent_books_list.clear()
@@ -2553,9 +2594,9 @@ class MainWindow(QMainWindow):
         self.forget_recent_button.setEnabled(selected)
 
     def _open_recent_item(self, item: QListWidgetItem) -> None:
-        self.open_recent_book()
+        self.open_recent_book(panel=self._welcome_forms)
 
-    def open_recent_book(self) -> None:
+    def open_recent_book(self, *, panel: InlineForms | None = None) -> None:
         if self._busy:
             return
         items = self.recent_books_list.selectedItems()
@@ -2563,14 +2604,14 @@ class MainWindow(QMainWindow):
             return
         path = Path(items[0].data(Qt.ItemDataRole.UserRole))
         if not path.is_dir():
-            QMessageBox.information(
-                self,
+            self._panel_notice(
+                panel,
                 "Книга недоступна",
                 "Папка книги недоступна. Выберите её через «Открыть книгу» "
                 "или уберите запись из списка.",
             )
             return
-        self._open_book_path(path)
+        self._open_book_path(path, panel=panel)
 
     def forget_recent_book(self) -> None:
         items = self.recent_books_list.selectedItems()
@@ -2579,7 +2620,7 @@ class MainWindow(QMainWindow):
         try:
             self._recent_books.forget(items[0].data(Qt.ItemDataRole.UserRole))
         except ValidationError as error:
-            QMessageBox.warning(self, "Настройка не сохранена", str(error))
+            self._welcome_forms.message(str(error))
         self._refresh_recent_books()
 
     def _remember_book_changed(self, checked: bool) -> None:
@@ -2591,24 +2632,34 @@ class MainWindow(QMainWindow):
             if checked:
                 self._recent_books.remember(session.root, session.book_id, session.name)
         except ValidationError as error:
-            QMessageBox.warning(self, "Настройка не сохранена", str(error))
+            self._settings_forms.message(str(error))
         self._refresh_recent_books()
 
-    def restore_book(self) -> None:
+    def restore_book(self, *, panel: InlineForms | None = None) -> None:
         source, _ = QFileDialog.getOpenFileName(self, "Резервная копия", "", "Копия (*.pfbackup)")
         if not source:
             return
+        session = self.session
         dialog = CreateDialog(self, restoring=True)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        target = Path(dialog.path.text())
-        backup_password, new_password = dialog.backup_password.text(), dialog.password.text()
 
-        def restore() -> object:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            return restore_backup(Path(source), target, backup_password, new_password)
+        def completed(code: int) -> None:
+            if code != QDialog.DialogCode.Accepted or self.session is not session:
+                return
+            target = Path(dialog.path.text())
+            backup_password, new_password = dialog.backup_password.text(), dialog.password.text()
 
-        self._job(restore, self._created, "Проверка и восстановление в новую папку…")
+            def restore() -> tuple[VaultSession, str]:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                return restore_backup(Path(source), target, backup_password, new_password)
+
+            self._panel_job(
+                panel,
+                restore,
+                lambda result: self._created(result, inline=panel is not None),
+                "Проверка и восстановление в новую папку…",
+            )
+
+        present_form(dialog, panel, completed)
 
     def lock_book(self) -> None:
         self._clear_action_panels()

@@ -5,13 +5,14 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import Qt, QThread
-from PySide6.QtWidgets import QDialog
+from PySide6.QtWidgets import QDialog, QDialogButtonBox
 
 from personal_finance.domain.deposit_scenarios import SavedDepositScenario
 from personal_finance.domain.errors import ValidationError
 from personal_finance.presentation import deposit_scenarios_workflow as m
 from personal_finance.presentation.deposit_scenarios import ScenarioAction, ScenarioRequest
 from personal_finance.presentation.main_window import MainWindow
+from tests.gui.test_deposits_gui import fill
 from tests.unit.test_deposits import scenario, uid
 
 
@@ -383,3 +384,49 @@ def test_result_explains_whether_conditions_are_already_saved(context, qtbot, sa
     qtbot.addWidget(dialog)
     assert ("сохранённой версии" in dialog.storage_note.text()) is saved
     assert ("на диске не сохраняются" in dialog.storage_note.text()) is not saved
+
+
+def test_reports_button_creates_and_recalculates_saved_scenario_inline(qtbot, session):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.activate_session(session)
+    window.navigation.setCurrentRow(2)
+    window.show()
+    before = session.ledger.operations(), session.ledger.balances()
+    panel = window._report_forms
+
+    def current(form_type):
+        scroll = panel.stack.currentWidget()
+        form = scroll.widget() if scroll is not None else None
+        assert isinstance(form, form_type) and form.isVisible() and not form.isWindow()
+        return form
+
+    window.report_buttons[-1].click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+    listing = current(m.SavedScenariosDialog)
+    listing.buttons[ScenarioAction.CREATE].click()
+    conditions = current(m.DepositScenarioDialog)
+    fill(conditions)
+    conditions._accept()
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+
+    forecast = current(m.SaveForecastDialog)
+    forecast.edit_button.click()
+    assert current(m.DepositScenarioDialog) is conditions
+    conditions._accept()
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+    current(m.SaveForecastDialog).save_button.click()
+    name = current(m.ScenarioNameDialog)
+    name.name.setText("Проверочный сценарий")
+    name.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Save).click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+
+    listing = current(m.SavedScenariosDialog)
+    assert [v.name for v in listing.records] == ["Проверочный сценарий"]
+    assert (session.ledger.operations(), session.ledger.balances()) == before
+    listing.table.selectRow(0)
+    listing.buttons[ScenarioAction.CALCULATE].click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+    current(m.DepositForecastDialog)
+    window.lock_book()
+    assert not window._busy and not window._jobs and panel.stack.count() == 0

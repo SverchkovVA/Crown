@@ -29,6 +29,7 @@ from personal_finance.presentation.deposit_scenarios import (
     date_text,
 )
 from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
+from personal_finance.presentation.inline_forms import InlineForms, present_form
 from personal_finance.presentation.tables import replace_table
 
 if TYPE_CHECKING:
@@ -161,8 +162,10 @@ class ScenarioHistoryDialog(QDialog):
 
 
 class DepositScenariosController:
-    def __init__(self, window: MainWindow, session: VaultSession) -> None:
-        self.window, self.session = window, session
+    def __init__(
+        self, window: MainWindow, session: VaultSession, panel: InlineForms | None = None
+    ) -> None:
+        self.window, self.session, self.panel = window, session, panel
         assert session.deposit_scenarios is not None
         self.service = session.deposit_scenarios
         self.query = ""
@@ -170,7 +173,9 @@ class DepositScenariosController:
         self.notice = ""
 
     def current(self) -> bool:
-        return self.window.session is self.session
+        return self.window.session is self.session and (
+            self.panel is None or not self.panel.clearing
+        )
 
     def _job(
         self,
@@ -213,6 +218,9 @@ class DepositScenariosController:
 
     def _list_failed(self, message: str) -> None:
         # Не повторять неуспешное чтение бесконечно.
+        if self.panel is not None:
+            self.panel.message(message)
+            return
         from PySide6.QtWidgets import QMessageBox
 
         QMessageBox.warning(self.window, "Сценарии не загружены", message)
@@ -224,14 +232,17 @@ class DepositScenariosController:
         if self.notice:
             dialog.selection_info.setText(self.notice)
             self.notice = ""
-        try:
-            accepted = dialog.exec() == QDialog.DialogCode.Accepted
-            request = dialog.request
+
+        def completed(code: int) -> None:
             self.query, self.show_archived = dialog.search.text(), dialog.archived.isChecked()
-        finally:
-            dialog.deleteLater()
-        if accepted and request is not None and self.current():
-            self.handle(request)
+            if (
+                code == QDialog.DialogCode.Accepted
+                and dialog.request is not None
+                and self.current()
+            ):
+                self.handle(dialog.request)
+
+        present_form(dialog, self.panel, completed)
 
     def handle(self, request: ScenarioRequest) -> None:
         if not self.current() or self.window._busy:
@@ -284,23 +295,18 @@ class DepositScenariosController:
 
     def _view(self, report: DepositForecast) -> None:
         dialog = DepositForecastDialog(report, self.window, conditions_saved=True)
-        try:
-            dialog.exec()
-        finally:
-            dialog.deleteLater()
-        self.open()
+        present_form(dialog, self.panel, lambda _: self.open())
 
     def _history(self, records: list[SavedDepositScenario]) -> None:
         dialog = ScenarioHistoryDialog(records, self.window)
-        try:
-            accepted = dialog.exec() == QDialog.DialogCode.Accepted
-            request = dialog.request
-        finally:
-            dialog.deleteLater()
-        if accepted and request is not None:
-            self.handle(request)
-        else:
-            self.open()
+
+        def completed(code: int) -> None:
+            if code == QDialog.DialogCode.Accepted and dialog.request is not None:
+                self.handle(dialog.request)
+            else:
+                self.open()
+
+        present_form(dialog, self.panel, completed)
 
     def edit(self, record: SavedDepositScenario | None, *, copy: bool = False) -> None:
         dialog = DepositScenarioDialog(self.window)
@@ -324,23 +330,27 @@ class DepositScenariosController:
             dialog.deleteLater()
             return
         dialog.result_scenario = None
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.result_scenario is None:
-            dialog.deleteLater()
-            self.open()
-            return
-        scenario = dialog.result_scenario
 
-        def failed(message: str) -> None:
-            dialog.feedback.setText(message)
-            dialog.feedback.show()
-            self._form(dialog, record, copy=copy)
+        def completed(code: int) -> None:
+            scenario = dialog.result_scenario
+            if code != QDialog.DialogCode.Accepted or scenario is None or not self.current():
+                dialog.deleteLater()
+                self.open()
+                return
 
-        self._job(
-            lambda: forecast_deposit(scenario),
-            lambda result: self._result(dialog, record, result, copy=copy),
-            failed,
-            "Расчёт сценария перед сохранением…",
-        )
+            def failed(message: str) -> None:
+                dialog.feedback.setText(message)
+                dialog.feedback.show()
+                self._form(dialog, record, copy=copy)
+
+            self._job(
+                lambda: forecast_deposit(scenario),
+                lambda result: self._result(dialog, record, result, copy=copy),
+                failed,
+                "Расчёт сценария перед сохранением…",
+            )
+
+        present_form(dialog, self.panel, completed, dispose=False)
 
     def _result(
         self,
@@ -351,19 +361,19 @@ class DepositScenariosController:
         copy: bool,
     ) -> None:
         dialog = SaveForecastDialog(report, self.window, editing=record is not None and not copy)
-        try:
-            accepted = dialog.exec() == QDialog.DialogCode.Accepted
-            edit, save = accepted and dialog.edit_requested, accepted and dialog.save_requested
-        finally:
-            dialog.deleteLater()
-        if edit:
-            self._form(form, record, copy=copy)
-            return
-        form.deleteLater()
-        if save:
-            self.save_name(report.scenario, record, copy=copy)
-        else:
-            self.open()
+
+        def completed(code: int) -> None:
+            accepted = code == QDialog.DialogCode.Accepted and self.current()
+            if accepted and dialog.edit_requested:
+                self._form(form, record, copy=copy)
+                return
+            form.deleteLater()
+            if accepted and dialog.save_requested:
+                self.save_name(report.scenario, record, copy=copy)
+            else:
+                self.open()
+
+        present_form(dialog, self.panel, completed)
 
     def save_name(
         self,
@@ -393,31 +403,37 @@ class DepositScenariosController:
         if not self.current():
             dialog.deleteLater()
             return
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            dialog.deleteLater()
-            self.open()
-            return
-        name, command = dialog.name.text(), str(uuid4())
 
-        def save() -> SavedDepositScenario:
-            if record is not None and rename:
-                return self.service.rename(record.id, record.revision_id, name, command_id=command)
-            return self.service.save(
-                name,
-                scenario,
-                identifier=record.id if record is not None and not copy else None,
-                expected_revision_id=(
-                    record.revision_id if record is not None and not copy else None
-                ),
-                command_id=command,
-            )
+        def completed(code: int) -> None:
+            if code != QDialog.DialogCode.Accepted or not self.current():
+                dialog.deleteLater()
+                self.open()
+                return
+            name, command = dialog.name.text(), str(uuid4())
 
-        def saved(value: SavedDepositScenario) -> None:
-            dialog.deleteLater()
-            self._saved(value)
+            def save() -> SavedDepositScenario:
+                if record is not None and rename:
+                    return self.service.rename(
+                        record.id, record.revision_id, name, command_id=command
+                    )
+                return self.service.save(
+                    name,
+                    scenario,
+                    identifier=record.id if record is not None and not copy else None,
+                    expected_revision_id=(
+                        record.revision_id if record is not None and not copy else None
+                    ),
+                    command_id=command,
+                )
 
-        def failed(message: str) -> None:
-            dialog.feedback.setText(message)
-            self._name_form(dialog, scenario, record, copy=copy, rename=rename)
+            def saved(value: SavedDepositScenario) -> None:
+                dialog.deleteLater()
+                self._saved(value)
 
-        self._job(save, saved, failed, "Сохранение условий сценария без финансовой записи…")
+            def failed(message: str) -> None:
+                dialog.feedback.setText(message)
+                self._name_form(dialog, scenario, record, copy=copy, rename=rename)
+
+            self._job(save, saved, failed, "Сохранение условий сценария без финансовой записи…")
+
+        present_form(dialog, self.panel, completed, dispose=False)

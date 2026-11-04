@@ -19,6 +19,7 @@ class InlineForms(QWidget):
     def __init__(self, page: QWidget, parent: QWidget) -> None:
         super().__init__(parent)
         self.page = page
+        self.clearing = False
         self.page_notice: QLabel | None = None
         self.heading = QLabel()
         self.heading.setObjectName("heading")
@@ -83,14 +84,18 @@ class InlineForms(QWidget):
         self.page.setVisible(dialog is None)
 
     def clear(self) -> None:
-        while isinstance(scroll := self.stack.currentWidget(), QScrollArea):
-            dialog = scroll.widget()
-            if isinstance(dialog, QDialog):
-                dialog.reject()
-            if self.stack.indexOf(scroll) >= 0:
-                self.stack.removeWidget(scroll)
-                scroll.deleteLater()
-        self._update_page()
+        self.clearing = True
+        try:
+            while isinstance(scroll := self.stack.currentWidget(), QScrollArea):
+                dialog = scroll.widget()
+                if isinstance(dialog, QDialog):
+                    dialog.reject()
+                if self.stack.indexOf(scroll) >= 0:
+                    self.stack.removeWidget(scroll)
+                    scroll.deleteLater()
+            self._update_page()
+        finally:
+            self.clearing = False
 
 
 def present_form(

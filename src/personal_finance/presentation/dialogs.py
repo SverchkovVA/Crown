@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import validate_name
 from personal_finance.infrastructure.security.keys import validate_password
-from personal_finance.presentation.inline_forms import form_warning
+from personal_finance.presentation.inline_forms import containing_panel, form_warning
 
 
 def library_directory() -> Path:
@@ -230,3 +230,7 @@ class RecoveryDialog(QDialog):
         saved.toggled.connect(ok.setEnabled)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def reject(self) -> None:
+        if containing_panel(self) is None:
+            super().reject()

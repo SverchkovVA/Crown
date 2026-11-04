@@ -2,12 +2,21 @@ import hashlib
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QMessageBox
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+)
 
 from personal_finance.application.vault import create_vault, open_vault
 from personal_finance.domain.models import AccountKind
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
-from personal_finance.presentation.dialogs import OpenDialog
+from personal_finance.presentation.dialogs import CreateDialog, OpenDialog, RecoveryDialog
 from personal_finance.presentation.main_window import MainWindow
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 
@@ -160,3 +169,60 @@ def test_recovery_code_input_events_select_mode_and_open_book(qtbot, tmp_path, i
     assert not dialog.recovery.isChecked()
     dialog.accept()
     assert not dialog.recovery.isChecked()
+
+
+@pytest.mark.parametrize("restore", [False, True])
+def test_inline_book_entry_keeps_recovery_step_and_reopens_from_recent(
+    qtbot, tmp_path, monkeypatch, restore
+):
+    target = tmp_path / "Новая проверочная книга.pfvault"
+    if restore:
+        source, _ = _create_book(tmp_path / "Исходная книга.pfvault")
+        backup = create_backup(source, tmp_path / "Синтетическая копия.pfbackup", BACKUP_PASSWORD)
+        source.close()
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args: (str(backup), ""))
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    panel = window._welcome_forms
+    caption = "Восстановить из резервной копии" if restore else "Создать книгу"
+    next(b for b in panel.page.findChildren(QPushButton) if b.text() == caption).click()
+    entry = panel.stack.currentWidget().widget()
+    assert isinstance(entry, CreateDialog) and not entry.isWindow()
+    entry.path.setText(str(target))
+    entry.name.setText("Новая проверочная книга")
+    entry.password.setText(PASSWORD)
+    entry.confirm.setText(PASSWORD)
+    if restore:
+        entry.backup_password.setText(BACKUP_PASSWORD)
+    entry.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok).click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=20000)
+    assert window.session is not None and window.session.root == target
+    if restore:
+        assert window.session.catalog.accounts()[0].name == "Синтетический счёт"
+
+    recovery = panel.stack.currentWidget().widget()
+    assert isinstance(recovery, RecoveryDialog) and not recovery.isWindow()
+    assert not window.navigation.isVisible()
+    done = recovery.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Ok)
+    assert not done.isEnabled()
+    qtbot.keyClick(recovery, Qt.Key.Key_Escape)
+    assert panel.stack.currentWidget().widget() is recovery and not window.navigation.isVisible()
+    code = recovery.findChild(QPlainTextEdit).toPlainText()
+    recovery.findChild(QCheckBox).setChecked(True)
+    done.click()
+    assert window.navigation.isVisible() and panel.stack.count() == 0
+
+    window.lock_book()
+    window.recent_books_list.setCurrentRow(0)
+    window.open_recent_button.click()
+    dialog = panel.stack.currentWidget().widget()
+    assert isinstance(dialog, OpenDialog) and not dialog.isWindow()
+    dialog.credential.setText(code)
+    assert dialog.recovery.isChecked()
+    dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.StandardButton.Open).click()
+    qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+    assert window.session is not None and window.session.root == target
+    assert window.navigation.isVisible()
+    window.lock_book()
