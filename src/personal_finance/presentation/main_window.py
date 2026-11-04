@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from platformdirs import user_data_dir
 from PySide6.QtCore import QDate, Qt, QThreadPool, Slot
-from PySide6.QtGui import QAction, QCloseEvent, QImage
+from PySide6.QtGui import QAction, QCloseEvent, QImage, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -192,6 +192,8 @@ QListWidget::item:selected, QListWidget::item:selected:!active {
     background: #17694f; color: white; border-color: #104c3a;
 }
 QListWidget::item:focus { border: 2px solid #155c9b; padding: 11px; }
+QFrame#sidebar QListWidget::item { padding: 6px 12px; margin: 1px 0; }
+QFrame#sidebar QListWidget::item:focus { padding: 5px 11px; }
 QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QAbstractSpinBox {
     background: white; color: #172b35; border: 1px solid #728b97;
     border-radius: 5px; padding: 7px; selection-background-color: #17694f;
@@ -299,6 +301,7 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
+        self._fit_on_first_show = True
         self.resize(1160, 760)
         self.setMinimumSize(920, 620)
         self.setStyleSheet(STYLE)
@@ -3086,6 +3089,20 @@ class MainWindow(QMainWindow):
                 ),
                 "Проверка книги…",
             )
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if not self._fit_on_first_show or event.spontaneous():
+            return
+        self._fit_on_first_show = False
+        available = self.screen().availableGeometry()
+        frame = self.frameGeometry()
+        max_width = max(1, available.width() - (frame.width() - self.width()))
+        max_height = max(1, available.height() - (frame.height() - self.height()))
+        self.setMinimumSize(
+            min(self.minimumWidth(), max_width), min(self.minimumHeight(), max_height)
+        )
+        self.resize(min(self.width(), max_width), min(self.height(), max_height))
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._busy:

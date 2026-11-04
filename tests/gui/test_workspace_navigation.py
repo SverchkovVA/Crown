@@ -30,6 +30,17 @@ def test_closed_book_has_only_welcome_and_no_top_commands(qtbot):
     assert not any(b.isVisible() for b in window.report_buttons)
 
 
+def test_initial_window_fits_the_available_screen(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    available = window.screen().availableGeometry()
+    window.resize(available.width() + 120, available.height() + 120)
+    window.show()
+    frame = window.frameGeometry()
+    assert frame.width() <= available.width()
+    assert frame.height() <= available.height()
+
+
 def test_left_navigation_order_and_security_inside_last_settings(qtbot, session):
     window = MainWindow()
     qtbot.addWidget(window)
