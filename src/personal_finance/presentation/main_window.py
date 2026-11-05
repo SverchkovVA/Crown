@@ -58,7 +58,7 @@ from personal_finance.application.vault import VaultSession, create_vault, open_
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
-from personal_finance.domain.budget import MonthlyBudget
+from personal_finance.domain.budget import BudgetExecution
 from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
@@ -96,7 +96,7 @@ from personal_finance.presentation.analytics_comparison import (
     IncomeExpenseComparisonDialog,
 )
 from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
-from personal_finance.presentation.budget import MonthlyBudgetDialog, MonthlyBudgetOptions
+from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -370,7 +370,7 @@ class MainWindow(QMainWindow):
             "Движение средств…", lambda: self.request_cash_flow(panel=self._report_forms)
         )
         self.budget_action = command(
-            "Месячный бюджет…", lambda: self.request_monthly_budget(panel=self._report_forms)
+            "Бюджет расходов…", lambda: self.request_budget(panel=self._report_forms)
         )
         self.deposit_action = command(
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
@@ -486,36 +486,33 @@ class MainWindow(QMainWindow):
         dialog = IncomeExpenseDialog(result[0], result[1], self, accounts=result[2])
         present_form(dialog, panel, lambda _: dialog.charts.dispose())
 
-    def request_monthly_budget(self, *, panel: InlineForms | None = None) -> None:
+    def request_budget(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
         with session.mutex:
             session.ensure_open()
             accounts, categories = session.catalog.accounts(), session.catalog.categories()
-        dialog = MonthlyBudgetOptions(accounts, categories, self)
+        dialog = BudgetOptions(accounts, categories, self)
         analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
 
-        def show(report: MonthlyBudget) -> None:
+        def show(report: BudgetExecution) -> None:
             if self.session is session:
-                present_form(MonthlyBudgetDialog(report, accounts, categories, self), panel)
+                present_form(BudgetDialog(report, accounts, categories, self), panel)
 
-        def completed(code: int) -> None:
+        def calculate() -> None:
             request = dialog.result_request
-            if (
-                code != QDialog.DialogCode.Accepted
-                or self.session is not session
-                or request is None
-            ):
+            if self._busy or self.session is not session or request is None:
                 return
             self._panel_job(
                 panel,
-                lambda: analytics.monthly_budget(*request),
+                lambda: analytics.budget(*request),
                 show,
-                "Расчёт исполнения месячного бюджета…",
+                "Расчёт исполнения бюджета расходов…",
             )
 
-        present_form(dialog, panel, completed)
+        dialog.calculationRequested.connect(calculate)
+        present_form(dialog, panel)
 
     def request_comparison(self, *, panel: InlineForms | None = None) -> None:
         session = self.session

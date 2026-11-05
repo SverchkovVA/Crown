@@ -1,4 +1,4 @@
-"""Исполнение месячного лимита по существующим проводкам."""
+"""Исполнение лимита за выбранный период по существующим проводкам."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -17,8 +17,8 @@ from personal_finance.domain.periods import AccountingMonth
 
 
 @dataclass(frozen=True, slots=True)
-class MonthlyBudget:
-    month: AccountingMonth
+class BudgetExecution:
+    period: ReportPeriod
     limit: Money
     scope: ReportScope
     sources: tuple[OperationFlow, ...]
@@ -32,17 +32,15 @@ class MonthlyBudget:
         return self.limit.minor - self.spent_minor
 
 
-def monthly_budget(
+def budget_execution(
     operations: Sequence[Operation],
-    month: AccountingMonth,
+    period: ReportPeriod,
     limit: Money,
     scope: ReportScope | None = None,
-) -> MonthlyBudget:
-    if not isinstance(month, AccountingMonth):
-        raise ValidationError("Укажите месяц бюджета.")
+) -> BudgetExecution:
     if not isinstance(limit, Money) or limit.minor < 0:
         raise ValidationError("Введите неотрицательный лимит расходов.")
-    report = income_expense_report(operations, ReportPeriod(month.start, month.end), scope)
+    report = income_expense_report(operations, period, scope)
     currencies = {totals.currency for totals in report.totals}
     if any(
         currency.code == limit.currency.code and currency != limit.currency
@@ -54,4 +52,15 @@ def monthly_budget(
         if limit.currency in currencies
         else ()
     )
-    return MonthlyBudget(month, limit, report.scope, sources)
+    return BudgetExecution(period, limit, report.scope, sources)
+
+
+def monthly_budget(
+    operations: Sequence[Operation],
+    month: AccountingMonth,
+    limit: Money,
+    scope: ReportScope | None = None,
+) -> BudgetExecution:
+    if not isinstance(month, AccountingMonth):
+        raise ValidationError("Укажите месяц бюджета.")
+    return budget_execution(operations, ReportPeriod(month.start, month.end), limit, scope)
