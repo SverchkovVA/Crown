@@ -77,8 +77,6 @@ class Catalog:
         self._repository.check_integrity()
 
     def seed(self) -> None:
-        for name in ("Т-Банк", "ВТБ", "Яндекс Пэй"):
-            self.add_institution(name)
         for name in ("Продукты", "Транспорт", "Дом", "Здоровье", "Отдых", "Другие расходы"):
             self.add_category(name, CategoryKind.EXPENSE)
         for name in ("Зарплата", "Другие доходы"):

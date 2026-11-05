@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -25,6 +24,7 @@ from PySide6.QtWidgets import (
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import validate_name
 from personal_finance.infrastructure.security.keys import validate_password
+from personal_finance.presentation.inline_forms import containing_panel, form_warning
 
 
 def library_directory() -> Path:
@@ -36,7 +36,7 @@ class NameDialog(QInputDialog):
         try:
             validate_name(self.textValue())
         except ValidationError as exc:
-            QMessageBox.warning(self, "Проверьте название", str(exc))
+            form_warning(self, "Проверьте название", str(exc))
             return
         super().accept()
 
@@ -73,7 +73,7 @@ class CreateDialog(QDialog):
             form.addRow("Пароль резервной копии", self.backup_password)
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setPlaceholderText("Парольная фраза от 12 символов")
+        self.password.setPlaceholderText("Введите парольную фразу")
         self.confirm = QLineEdit()
         self.confirm.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("Новая парольная фраза" if restoring else "Парольная фраза", self.password)
@@ -108,7 +108,7 @@ class CreateDialog(QDialog):
             if not self.path.text().strip() or Path(self.path.text()).exists():
                 raise ValidationError("Укажите новое имя папки книги.")
         except ValidationError as exc:
-            QMessageBox.warning(self, "Проверьте ввод", str(exc))
+            form_warning(self, "Проверьте ввод", str(exc))
             return
         self.accept()
 
@@ -196,7 +196,7 @@ class PasswordDialog(QDialog):
                 if self.password.text() != self.confirm.text():
                     raise ValidationError("Пароли не совпадают.")
             except ValidationError as exc:
-                QMessageBox.warning(self, "Проверьте ввод", str(exc))
+                form_warning(self, "Проверьте ввод", str(exc))
                 return
         self.accept()
 
@@ -230,3 +230,7 @@ class RecoveryDialog(QDialog):
         saved.toggled.connect(ok.setEnabled)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def reject(self) -> None:
+        if containing_panel(self) is None:
+            super().reject()

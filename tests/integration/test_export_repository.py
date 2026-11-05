@@ -46,7 +46,7 @@ def state(session):
 
 @pytest.fixture
 def export_data(session):
-    bank = session.catalog.institutions()[0]
+    bank = session.catalog.add_institution("Вымышленный банк экспорта")
     account = session.catalog.add_account("СЧЁТ_ЭКСПОРТА", AccountKind.DEBIT, bank.id)
     other = session.catalog.add_account("Получатель", AccountKind.CASH)
     categories = session.catalog.categories()

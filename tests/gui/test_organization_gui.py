@@ -110,26 +110,23 @@ def test_query_editor_roundtrips_and_rejects_reversed_dates(qtbot, session, monk
     assert dialog.result_query is None and "Начало периода" in errors[-1]
 
 
-def test_filter_changes_journal_but_not_balances_and_save_apply_update_works(
-    qtbot, session, monkeypatch
-):
+def test_filter_changes_journal_but_not_balances_and_save_apply_update_works(qtbot, session):
     tag, _, first, second = data(session)
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.navigation.setCurrentRow(2)
+    window.navigation.setCurrentRow(0)
     window.show()
     window._set_query(OperationQuery(tag_ids=(tag.id,)))
     assert window.operation_model.rowCount() == 1
     assert window._journal_operations == [first]
     assert window.account_model.item(0, 4).text() == "-30,00"
 
-    def name(dialog):
-        dialog.setTextValue("Поездки")
-        return QDialog.DialogCode.Accepted
-
-    monkeypatch.setattr(NameDialog, "exec", name)
     qtbot.mouseClick(window.save_filter_button, Qt.MouseButton.LeftButton)
+    form = window._journal_forms.stack.currentWidget().widget()
+    assert isinstance(form, NameDialog) and not form.isWindow()
+    form.setTextValue("Поездки")
+    form.accept()
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     saved = session.organization.filters()[0]
     window.saved_filter_combo.setCurrentIndex(window.saved_filter_combo.findData(saved.id))
@@ -149,16 +146,24 @@ def test_filter_changes_journal_but_not_balances_and_save_apply_update_works(
     assert window.saved_filter_combo.count() == 1 and not window.save_filter_button.isEnabled()
 
 
-def test_tag_page_archives_and_restores_in_worker(qtbot, session, monkeypatch):
+def test_tag_page_archives_and_restores_in_worker(qtbot, session):
     tag, _, first, _ = data(session)
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
-    window.navigation.setCurrentRow(6)
+    window.navigation.setCurrentRow(4)
     window.show()
     window.organization_page.tag_table.selectRow(0)
-    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
     qtbot.mouseClick(window.organization_page.archive_tag, Qt.MouseButton.LeftButton)
+    buttons = window._organization_forms.findChild(QDialogButtonBox)
+    assert buttons is not None and not buttons.window().isModal() and buttons.window() is window
+    qtbot.mouseClick(
+        buttons.button(QDialogButtonBox.StandardButton.Cancel), Qt.MouseButton.LeftButton
+    )
+    assert session.organization.tags()[0].id == tag.id
+    qtbot.mouseClick(window.organization_page.archive_tag, Qt.MouseButton.LeftButton)
+    buttons = window._organization_forms.stack.currentWidget().findChild(QDialogButtonBox)
+    qtbot.mouseClick(buttons.button(QDialogButtonBox.StandardButton.Ok), Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert window.organization_page.tag_model.rowCount() == 0
     window.organization_page.archived.setChecked(True)

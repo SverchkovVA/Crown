@@ -5,7 +5,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QFileDialog
 
 from personal_finance.application import vault as vault_module
 from personal_finance.domain.exporting import ExportFormat, ExportSettings, serialize_journal_export
@@ -123,20 +124,11 @@ def test_export_pipeline_saves_reviewed_snapshot_without_book_changes(
     original_query = window._active_query
     destination = tmp_path / "reviewed.json"
 
-    def options(dialog):
-        dialog.format.setCurrentIndex(dialog.format.findData(ExportFormat.JSON.value))
-        dialog.query = OperationQuery(kinds=(OperationKind.EXPENSE,))
-        dialog._validate()
-        return dialog.result()
+    monkeypatch.setattr(QDialog, "exec", lambda self: pytest.fail("Открыт отдельный диалог"))
 
-    def preview(dialog):
-        assert not destination.exists() and not window._busy and not window._jobs
-        assert dialog.model.rowCount() == 1
-        dialog.accept()
-        return dialog.result()
-
-    monkeypatch.setattr(ExportOptionsDialog, "exec", options)
-    monkeypatch.setattr(ExportPreviewDialog, "exec", preview)
+    def current():
+        scroll = window._journal_forms.stack.currentWidget()
+        return scroll.widget() if scroll is not None else None
 
     def filename(*args, **kwargs):
         assert Path(args[2]).parent == tmp_path / "app-data" / "exports"
@@ -144,10 +136,25 @@ def test_export_pipeline_saves_reviewed_snapshot_without_book_changes(
         return str(destination), ""
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", filename)
-    messages = []
-    monkeypatch.setattr(QMessageBox, "information", lambda *args: messages.append(args[2]))
-    window.export_journal()
-    qtbot.waitUntil(lambda: bool(messages) and not window._busy, timeout=20000)
+    window.show()
+    window.export_button.click()
+    options = current()
+    assert isinstance(options, ExportOptionsDialog) and not options.isWindow()
+    options.format.setCurrentIndex(options.format.findData(ExportFormat.JSON.value))
+    options.query_button.click()
+    query = current()
+    assert isinstance(query, QueryDialog) and not query.isWindow()
+    item = query.kinds.findItems("Расход", Qt.MatchFlag.MatchExactly)[0]
+    item.setCheckState(Qt.CheckState.Checked)
+    query._validate()
+    assert current() is options
+    options._validate()
+    qtbot.waitUntil(lambda: isinstance(current(), ExportPreviewDialog), timeout=20000)
+    preview = current()
+    assert not preview.isWindow() and not destination.exists() and not window._busy
+    assert preview.model.rowCount() == 1
+    preview.accept()
+    qtbot.waitUntil(lambda: window.journal_feedback.isVisible() and not window._busy, timeout=20000)
     exported = json.loads(destination.read_bytes())
     assert len(exported["operations"]) == 1 and exported["operations"][0]["amount_minor"] == "10000"
     assert "ПРИМЕЧАНИЕ_ДЛЯ_ПРОВЕРКИ".encode() not in destination.read_bytes()

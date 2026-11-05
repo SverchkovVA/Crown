@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -45,6 +44,7 @@ from personal_finance.domain.models import Account, Category, CategoryKind, Inst
 from personal_finance.domain.organization import Tag
 from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.infrastructure.importing.statements import CsvMapping
+from personal_finance.presentation.inline_forms import form_warning, present_form
 from personal_finance.presentation.ledger_dialogs import OperationDialog, category_title
 from personal_finance.presentation.money import format_minor, format_money
 
@@ -224,7 +224,7 @@ class ImportOptionsDialog(QDialog):
             )
             self.accept()
         except FinanceError as error:
-            QMessageBox.warning(self, "Проверьте настройки", str(error))
+            form_warning(self, "Проверьте настройки", str(error))
 
 
 class ImportPreviewDialog(QDialog):
@@ -507,12 +507,16 @@ class ImportPreviewDialog(QDialog):
                 format_money(Money(abs(line.row.amount.minor)), include_currency=False)
             )
             dialog.note.setPlainText(line.row.note)
-        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_draft is not None:
-            self._classification_hints[line.row.position] = "Строка уточнена вручную."
-            self._drafts[line.row.position] = dialog.result_draft
-            self._links.pop(line.row.position, None)
-            self._render(line.row.position)
-            self._update_actions()
+
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and dialog.result_draft is not None:
+                self._classification_hints[line.row.position] = "Строка уточнена вручную."
+                self._drafts[line.row.position] = dialog.result_draft
+                self._links.pop(line.row.position, None)
+                self._render(line.row.position)
+                self._update_actions()
+
+        present_form(dialog, None, completed)
 
     def link_selected(self) -> None:
         line = self._selected()
@@ -552,19 +556,25 @@ class ImportPreviewDialog(QDialog):
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self._classification_hints[line.row.position] = "Связь уточнена вручную."
-            linked = next((op for op in line.candidates if op.id == choices.currentData()), None)
-            if linked:
-                self._links[line.row.position] = linked
-                self._drafts[line.row.position] = linked.draft
-            else:
-                self._links.pop(line.row.position, None)
-            self._render(line.row.position)
-            item = self.table.item(self._table_rows[line.row.position], 0)
-            assert item is not None
-            item.setCheckState(Qt.CheckState.Checked)
-            self._update_actions()
+
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted:
+                self._classification_hints[line.row.position] = "Связь уточнена вручную."
+                linked = next(
+                    (op for op in line.candidates if op.id == choices.currentData()), None
+                )
+                if linked:
+                    self._links[line.row.position] = linked
+                    self._drafts[line.row.position] = linked.draft
+                else:
+                    self._links.pop(line.row.position, None)
+                self._render(line.row.position)
+                item = self.table.item(self._table_rows[line.row.position], 0)
+                assert item is not None
+                item.setCheckState(Qt.CheckState.Checked)
+                self._update_actions()
+
+        present_form(dialog, None, completed)
 
     def _validate(self) -> None:
         try:
@@ -573,4 +583,4 @@ class ImportPreviewDialog(QDialog):
                 raise ValidationError("Выберите хотя бы одну корректную строку.")
             self.accept()
         except FinanceError as error:
-            QMessageBox.warning(self, "Проверьте строки импорта", str(error))
+            form_warning(self, "Проверьте строки импорта", str(error))

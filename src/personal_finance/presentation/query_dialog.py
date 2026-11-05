@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -21,6 +20,7 @@ from personal_finance.domain.ledger import OPERATION_LABELS, OperationKind
 from personal_finance.domain.models import Account, Category, Institution
 from personal_finance.domain.organization import Tag
 from personal_finance.domain.query import OperationQuery
+from personal_finance.presentation.inline_forms import form_warning
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tag_selector import CheckList
 
@@ -132,6 +132,6 @@ class QueryDialog(QDialog):
                 self.deleted.isChecked(),
             )
         except FinanceError as exc:
-            QMessageBox.warning(self, "Проверьте фильтр", str(exc))
+            form_warning(self, "Проверьте фильтр", str(exc))
             return
         self.accept()

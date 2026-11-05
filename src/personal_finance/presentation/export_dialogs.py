@@ -34,6 +34,7 @@ from personal_finance.domain.ledger import OPERATION_LABELS
 from personal_finance.domain.models import Account, Category, Institution
 from personal_finance.domain.organization import Tag
 from personal_finance.domain.query import OperationQuery
+from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.organization import describe_query
 from personal_finance.presentation.query_dialog import QueryDialog
 from personal_finance.presentation.tables import replace_table
@@ -131,9 +132,13 @@ class ExportOptionsDialog(QDialog):
             self.query, self._accounts, self._categories, self._institutions, self._tags, self
         )
         dialog.setWindowTitle("Условия экспорта")
-        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.result_query is not None:
-            self.query = dialog.result_query
-            self._describe_query()
+
+        def completed(result: int) -> None:
+            if result == QDialog.DialogCode.Accepted and dialog.result_query is not None:
+                self.query = dialog.result_query
+                self._describe_query()
+
+        present_form(dialog, None, completed)
 
     def _validate(self) -> None:
         self.options = ExportOptions(

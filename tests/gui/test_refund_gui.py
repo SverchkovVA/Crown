@@ -183,15 +183,13 @@ def test_history_links_to_exact_expense_version_after_correction(qtbot, session,
     assert "Исправленный тестовый расход" not in dialog.details.toPlainText()
 
 
-def test_gui_refund_action_changes_balance_and_clears_cache(
-    qtbot, session, refund_data, monkeypatch
-):
+def test_gui_refund_action_changes_balance_and_clears_cache(qtbot, session, refund_data):
     purchase, _ = refund_data
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)
     window.balance_date.setDate(QDate(2026, 10, 28))
-    window.navigation.setCurrentRow(2)
+    window.navigation.setCurrentRow(0)
     window.show()
     window.operation_table.selectRow(0)
     assert window.refund_button.isEnabled()
@@ -204,8 +202,10 @@ def test_gui_refund_action_changes_balance_and_clears_cache(
         dialog._validate()
         return dialog.result()
 
-    monkeypatch.setattr(OperationDialog, "exec", accept)
     qtbot.mouseClick(window.refund_button, Qt.MouseButton.LeftButton)
+    dialog = window._journal_forms.stack.currentWidget().widget()
+    assert isinstance(dialog, OperationDialog) and not dialog.isWindow()
+    accept(dialog)
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert window.operation_model.rowCount() == 2
     assert window.account_model.item(0, 4).text() == "-70,00"
