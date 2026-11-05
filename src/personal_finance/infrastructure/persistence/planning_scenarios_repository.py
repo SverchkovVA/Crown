@@ -208,7 +208,8 @@ class SqlPlanningScenariosRepository:
                 scenario.scope.account_ids,
                 "account",
                 "account_revisions",
-                " AND p.currency=:currency",
+                " AND p.currency=:currency AND EXISTS(SELECT 1 FROM currencies c "
+                "WHERE c.code=p.currency AND c.exponent=:exponent)",
             ),
             (
                 scenario.scope.category_ids,
@@ -245,6 +246,7 @@ class SqlPlanningScenariosRepository:
                             "kind": kind,
                             "ids": chunk,
                             "currency": scenario.limit.currency.code,
+                            "exponent": scenario.limit.currency.exponent,
                         },
                     ).scalars()
                 )

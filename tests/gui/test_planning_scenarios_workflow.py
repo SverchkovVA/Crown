@@ -38,6 +38,7 @@ def context(qtbot):
         ensure_open=Mock(),
         close=Mock(),
         ledger=None,
+        deposit_scenarios=None,
     )
     service = Mock()
     window.session = session

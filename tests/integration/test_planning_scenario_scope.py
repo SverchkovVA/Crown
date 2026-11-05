@@ -64,7 +64,15 @@ def test_budget_scope_retains_exact_ids_all_and_empty_without_ledger_writes(stor
 
 
 @pytest.mark.parametrize(
-    "case", ["missing_account", "category_as_account", "income", "account_as_category", "currency"]
+    "case",
+    [
+        "missing_account",
+        "category_as_account",
+        "income",
+        "account_as_category",
+        "currency",
+        "precision",
+    ],
 )
 def test_invalid_scope_fails_before_any_write(storage, case):
     session, repo = storage
@@ -79,6 +87,8 @@ def test_invalid_scope_fails_before_any_write(storage, case):
     scenario = budget(ReportScope(frozenset((account_id,)), frozenset((category_id,))))
     if case == "currency":
         scenario = replace(scenario, limit=Money(100, Currency("USD", 2)))
+    if case == "precision":
+        scenario = replace(scenario, limit=Money(100, Currency("RUB", 3)))
     before = snapshot(session.engine)
     with pytest.raises(ValidationError, match="этой книги"):
         repo.save("Не сохранять", scenario)

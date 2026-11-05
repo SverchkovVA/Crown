@@ -241,7 +241,9 @@ def upgrade() -> None:
             "account_ids",
             "account",
             "account_revisions",
-            "p.currency=json_extract(value.scenario_json,'$.currency.code')",
+            "p.currency=json_extract(value.scenario_json,'$.currency.code') "
+            "AND EXISTS(SELECT 1 FROM currencies c WHERE c.code=p.currency "
+            "AND c.exponent=json_extract(value.scenario_json,'$.currency.exponent'))",
         ),
         ("category_ids", "category", "category_revisions", "p.kind='expense'"),
     ):
