@@ -129,7 +129,11 @@ class CardRecognition:
                 not alternate.blocked_reason
                 and not contradictory
                 and alternate.amount.value is not None
-                and alternate.occurred_on.word_indices
+                and (
+                    card.amount.value is None
+                    or not card.occurred_on.word_indices
+                    and alternate.occurred_on.word_indices
+                )
             ):
                 card = alternate
         return OcrCardPreview(source, card, self.bank_name)

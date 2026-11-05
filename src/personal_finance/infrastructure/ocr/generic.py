@@ -74,6 +74,10 @@ _ACCOUNT_SECTION = re.compile(
     re.I,
 )
 _MISSING_MAIN_AMOUNT = "Не выделена область основной суммы."
+_CLOCK_SPAN = re.compile(r"(?<![0-9])[0-9]{1,2}\s*:\s*[0-9]{2}(?:\s*:\s*[0-9]{2})?(?![0-9])")
+_OPERATION_DATE_LABEL = re.compile(
+    r"^дата\s+(?:и\s+время|операции|перевода|платежа|проведения)\b", re.I
+)
 
 
 @dataclass(frozen=True)
@@ -172,7 +176,10 @@ def _dates(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...]]]
 
 def _money(document: OcrDocument, row: Row) -> list[tuple[str, tuple[int, ...], int, int]]:
     values = []
+    clocks = tuple(_CLOCK_SPAN.finditer(row.text))
     for match in _AMOUNT.finditer(row.text):
+        if any(match.start() < clock.end() and match.end() > clock.start() for clock in clocks):
+            continue
         prefix = row.text[: match.start()]
         suffix = row.text[match.end() :]
         if re.match(r"\s*%", suffix):
@@ -470,6 +477,21 @@ def _contextual(card: OcrCardDraft) -> OcrCardDraft:
     return with_operation_context(card)
 
 
+def _labelled_operation_date(rows: list[Row], index: int) -> bool:
+    row = rows[index]
+    if _OPERATION_DATE_LABEL.match(row.text):
+        return True
+    if not index:
+        return False
+    previous = rows[index - 1]
+    label = _OPERATION_DATE_LABEL.match(previous.text)
+    return bool(
+        label
+        and not previous.text[label.end() :].strip(" :")
+        and 0 <= row.top - previous.bottom <= 3 * max(row.height, previous.height)
+    )
+
+
 class GenericCardAdapter:
     @staticmethod
     def can_retry(card: OcrCardDraft) -> bool:
@@ -525,7 +547,7 @@ class GenericCardAdapter:
             if _FOREIGN.search(row.text) and _money(document, row):
                 blocked = "Известная другая валюта: финансовый OCR пока поддерживает RUB."
             if (
-                not secondary
+                (not secondary or _labelled_operation_date(rows, index))
                 and not bound_amount
                 and not _DETAILS.match(row.text)
                 and not _SUMMARY.match(row.text)
@@ -556,7 +578,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v6") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v7") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -601,14 +623,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v6",
+                "generic-card-v7",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return _contextual(result)
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v6")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v7")
         return replace(empty, blocked_reason=blocked)
 
 
@@ -734,7 +756,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v5",
+                "generic-history-v6",
                 blocked,
             )
             if index + 1 < len(rows):
