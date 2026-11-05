@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ocr import OcrDocument, OcrEngineInfo, OcrImage, require_sha256
+from personal_finance.infrastructure.ocr.preprocess import normalize_dark_png
 from personal_finance.infrastructure.ocr.process import OcrProcessError, run_ocr_process
 from personal_finance.infrastructure.ocr.tsv import parse_tesseract_tsv
 
@@ -127,6 +128,7 @@ class TesseractEngine:
             environment.update(
                 SystemRoot=str(system), WINDIR=str(system), PATH=str(system / "System32")
             )
+        pixels, normalized = normalize_dark_png(image)
         contents = run_ocr_process(
             (
                 str(root / self._runtime.executable_name),
@@ -143,7 +145,7 @@ class TesseractEngine:
                 "-c",
                 "tessedit_create_tsv=1",
             ),
-            image.png,
+            pixels,
             cwd=root,
             environment=environment,
             timeout_seconds=self._timeout,
@@ -151,4 +153,6 @@ class TesseractEngine:
         info = self._runtime.engine
         if self._page_segmentation != 6:
             info = replace(info, version=info.version + ";psm=11")
+        if normalized:
+            info = replace(info, version=info.version + ";pixels=dark-v1")
         return parse_tesseract_tsv(contents, image, info)

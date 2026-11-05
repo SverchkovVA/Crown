@@ -75,14 +75,17 @@ def test_manifest_requires_model_hash_agreement_and_unique_names(tmp_path):
 def test_engine_uses_explicit_verified_paths_and_private_minimal_environment(
     tmp_path, monkeypatch, mode
 ):
-    import struct
+    from io import BytesIO
+
+    from PIL import Image
 
     from personal_finance.domain.ocr import OcrImage
     from personal_finance.infrastructure.ocr import tesseract
 
     value = runtime(tmp_path)
-    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 20, 10) + b"\0" * 9
-    image = OcrImage(png, 20, 10)
+    buffer = BytesIO()
+    Image.new("RGB", (20, 10), "white").save(buffer, format="PNG")
+    image = OcrImage(buffer.getvalue(), 20, 10)
     calls = []
     monkeypatch.setenv("HTTPS_PROXY", "synthetic secret")
     monkeypatch.setenv("TESSDATA_PREFIX", "foreign models")
@@ -161,3 +164,42 @@ def test_total_runtime_size_is_bounded_even_when_each_file_fits(tmp_path, monkey
     monkeypatch.setattr(tesseract, "MAX_RUNTIME_BYTES", total - 1)
     with pytest.raises(OcrProcessError):
         value.verify()
+
+
+@pytest.mark.parametrize("mode", [6, 11])
+def test_dark_pixels_are_normalized_but_audit_keeps_original_image(tmp_path, monkeypatch, mode):
+    from io import BytesIO
+
+    from PIL import Image
+
+    from personal_finance.infrastructure.ocr import tesseract
+    from tests.unit.test_ocr_preprocess import picture
+
+    value = runtime(tmp_path)
+    image = picture()
+    original = image.png, image.sha256
+    calls = []
+
+    def process(command, contents, **options):
+        calls.append(contents)
+        assert contents != image.png
+        with Image.open(BytesIO(contents)) as pixels:
+            assert pixels.size == (100, 80) and pixels.getpixel((99, 79)) == 255
+        return (
+            b"level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+            b"left\ttop\twidth\theight\tconf\ttext\n"
+            b"1\t1\t0\t0\t0\t0\t0\t0\t100\t80\t-1\t\n"
+            b"5\t1\t1\t1\t1\t1\t10\t10\t20\t10\t95\t123\n"
+        )
+
+    monkeypatch.setattr(tesseract, "run_ocr_process", process)
+    result = tesseract.TesseractEngine(value, page_segmentation=mode).recognize(image)
+    assert len(calls) == 1
+    assert (image.png, image.sha256) == original and result.image_sha256 == image.sha256
+    assert (
+        result.engine.name == value.engine.name
+        and result.engine.model_sha256 == value.engine.model_sha256
+    )
+    suffix = ";pixels=dark-v1" if mode == 6 else ";psm=11;pixels=dark-v1"
+    assert result.engine.version == value.engine.version + suffix
+    assert (result.words[0].box.left, result.words[0].box.top) == (10, 10)
