@@ -33,6 +33,7 @@ class OcrHistoryDialog(QDialog):
         panel: InlineForms | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setProperty("warningsAtBottom", True)
         self.review_defaults = review_defaults or OcrReviewDefaults.for_today()
         self.preview = preview
         self._panel = panel
@@ -85,8 +86,8 @@ class OcrHistoryDialog(QDialog):
             right.addWidget(self.prepare_button)
         tools = QHBoxLayout()
         for title, action in (
-            ("Вписать", self.image.fit_image),
-            ("Увеличить", lambda: self.image.zoom(1.3)),
+            ("Целиком", self.image.fit_image),
+            ("+ Увеличить", lambda: self.image.zoom(1.3)),
         ):
             button = QPushButton(title)
             button.clicked.connect(action)

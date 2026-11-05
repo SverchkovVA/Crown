@@ -21,7 +21,7 @@ def main() -> None:
         session, _ = create_vault(
             Path(directory) / "preview.pfvault", "Мои финансы", "синтетическая парольная фраза"
         )
-        bank = next(bank for bank in session.catalog.institutions() if bank.name == "Т-Банк")
+        bank = session.catalog.add_institution("Учебный банк")
         session.catalog.add_account("Карта для покупок", AccountKind.DEBIT, bank.id)
         session.catalog.add_account("Резерв", AccountKind.SAVINGS, bank.id)
         session.catalog.add_account("Наличные", AccountKind.CASH)
@@ -30,7 +30,7 @@ def main() -> None:
         window.show()
         app.processEvents()
         window.grab().save(str(destination / "preview.png"))
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(3)
         app.processEvents()
         window.grab().save(str(destination / "accounts-preview.png"))
         window.close()

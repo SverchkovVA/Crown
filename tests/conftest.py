@@ -32,3 +32,16 @@ def isolated_recent_books(tmp_path, monkeypatch):
         "default_settings",
         lambda: QSettings(str(tmp_path / "recent-books.ini"), QSettings.Format.IniFormat),
     )
+
+
+@pytest.fixture(autouse=True)
+def isolated_theme_preferences(tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+
+    from personal_finance.presentation import theme
+
+    monkeypatch.setattr(
+        theme,
+        "default_theme_settings",
+        lambda: QSettings(str(tmp_path / "appearance.ini"), QSettings.Format.IniFormat),
+    )

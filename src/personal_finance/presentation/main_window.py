@@ -10,10 +10,11 @@ from typing import Any
 from uuid import uuid4
 
 from platformdirs import user_data_dir
-from PySide6.QtCore import QDate, Qt, QThreadPool, Slot
-from PySide6.QtGui import QAction, QCloseEvent, QImage, QShowEvent
+from PySide6.QtCore import QDate, QEvent, QObject, Qt, QThreadPool, Slot
+from PySide6.QtGui import QAction, QCloseEvent, QImage, QKeyEvent, QMouseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -140,6 +141,7 @@ from personal_finance.presentation.ledger_dialogs import (
     category_title,
     format_money,
 )
+from personal_finance.presentation.navigation import Location, NavigationHistory, living_view
 from personal_finance.presentation.ocr_batch import OcrBatchDialog
 from personal_finance.presentation.ocr_confirmation import OcrConfirmationDialog, OcrOperationDialog
 from personal_finance.presentation.ocr_history import OcrHistoryDialog
@@ -164,115 +166,9 @@ from personal_finance.presentation.reconciliation import (
 )
 from personal_finance.presentation.savings_goals import SavingsGoalDialog, SavingsGoalOptions
 from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
+from personal_finance.presentation.theme import LIGHT_STYLE, ThemeManager
 
-STYLE = """
-QMainWindow, QDialog, QWidget {
-    background-color: #f5f7f9; color: #172b35;
-    font-family: 'Segoe UI', 'DejaVu Sans'; font-size: 14px;
-}
-QLabel { background: transparent; }
-QLabel#heading { font-size: 29px; font-weight: 600; }
-QLabel#muted { color: #4e626e; }
-QLabel#brand { font-size: 23px; font-weight: 600; color: #12634b; }
-QLabel#number { font-size: 28px; font-weight: 600; color: #12634b; }
-QLabel#emptyState { background: #e8f0f4; color: #263f4c; padding: 12px;
-                   border: 1px solid #a9bdc8; border-radius: 6px; }
-QLabel#feedbackError { background: #fff0ed; color: #9c291e; padding: 8px;
-                      border: 1px solid #b23a2c; border-radius: 4px; }
-QFrame#card { background: white; border: 1px solid #a9bdc8; border-radius: 12px; }
-QFrame#sidebar { background: #eaf0ed; border: 0; }
-QPushButton { background: white; color: #172b35; border: 1px solid #728b97;
-              border-radius: 7px; padding: 9px 14px; }
-QPushButton:hover { background: #e2f0e9; border-color: #17694f; }
-QPushButton:pressed { background: #c7dfd2; border-color: #104c3a; }
-QPushButton:focus { border: 2px solid #155c9b; padding: 8px 13px; }
-QPushButton:default { border: 2px solid #17694f; padding: 8px 13px; }
-QPushButton:disabled { color: #52636d; background: #e4e9ec; border-color: #a7b5bd; }
-QPushButton#primary { background: #17694f; color: white; border: 1px solid #17694f; }
-QPushButton#primary:hover { background: #11533e; }
-QPushButton#primary:pressed { background: #0b402f; }
-QPushButton#primary:focus { border: 2px solid #f5c842; padding: 8px 13px; }
-QPushButton#primary:disabled { background: #d5dde2; color: #52636d; border-color: #a7b5bd; }
-QListWidget { border: 0; background: transparent; color: #172b35; }
-QListWidget::item { padding: 12px; margin: 3px 0; border: 1px solid transparent;
-                    border-radius: 7px; }
-QListWidget::item:hover { background: #e2f0e9; }
-QListWidget::item:selected, QListWidget::item:selected:!active {
-    background: #17694f; color: white; border-color: #104c3a;
-}
-QListWidget::item:focus { border: 2px solid #155c9b; padding: 11px; }
-QFrame#sidebar QListWidget::item { padding: 6px 12px; margin: 1px 0; }
-QFrame#sidebar QListWidget::item:focus { padding: 5px 11px; }
-QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QAbstractSpinBox {
-    background: white; color: #172b35; border: 1px solid #728b97;
-    border-radius: 5px; padding: 7px; selection-background-color: #17694f;
-    selection-color: white; placeholder-text-color: #52636d;
-}
-QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus,
-QAbstractSpinBox:focus { border: 2px solid #155c9b; padding: 6px; }
-QLineEdit:disabled, QComboBox:disabled, QPlainTextEdit:disabled, QTextEdit:disabled,
-QAbstractSpinBox:disabled { background: #e4e9ec; color: #52636d; border-color: #a7b5bd; }
-QComboBox::drop-down { background: #edf3f1; border-left: 1px solid #a9bdc8; width: 24px; }
-QComboBox::down-arrow { image: url("@ICONS@/chevron-down.svg"); width: 16px; height: 12px; }
-QComboBox::down-arrow:disabled { image: url("@ICONS@/chevron-disabled.svg"); }
-QSpinBox::up-arrow { image: url("@ICONS@/chevron-up.svg"); width: 16px; height: 12px; }
-QSpinBox::down-arrow { image: url("@ICONS@/chevron-down.svg"); width: 16px; height: 12px; }
-QComboBox QAbstractItemView { background: white; color: #172b35;
-    selection-background-color: #17694f; selection-color: white; border: 1px solid #728b97; }
-QCheckBox, QRadioButton { background: transparent; color: #172b35; spacing: 8px; padding: 3px; }
-QCheckBox:disabled, QRadioButton:disabled { color: #52636d; }
-QCheckBox:focus, QRadioButton:focus { background: #e3edf7; border-radius: 3px;
-    border: 2px solid #155c9b; padding: 1px; }
-QCheckBox::indicator, QRadioButton::indicator { width: 18px; height: 18px;
-    background: white; border: 2px solid #526b79; }
-QCheckBox::indicator { border-radius: 3px; }
-QRadioButton::indicator { border-radius: 11px; }
-QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #17694f; }
-QCheckBox::indicator:checked { background: #17694f; border-color: #17694f;
-    image: url("@ICONS@/check.svg"); }
-QCheckBox::indicator:indeterminate { background: #17694f; border: 5px solid #526b79; }
-QRadioButton::indicator:checked { image: url("@ICONS@/radio.svg"); border-color: #17694f; }
-QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
-    background: #e4e9ec; border-color: #9aaab4; }
-QCheckBox::indicator:checked:disabled { image: url("@ICONS@/check-disabled.svg"); }
-QRadioButton::indicator:checked:disabled { image: url("@ICONS@/radio-disabled.svg"); }
-QTableView, QTableWidget, QTreeWidget, QTreeView {
-    background: white; color: #172b35; alternate-background-color: #edf3f1;
-    selection-background-color: #17694f; selection-color: white;
-    border: 1px solid #a9bdc8; border-radius: 6px; gridline-color: #d5dfe5;
-}
-QTableView::item:selected, QTableView::item:selected:!active,
-QTreeView::item:selected, QTreeView::item:selected:!active {
-    background: #17694f; color: white;
-}
-QTableView::item:focus, QTreeView::item:focus { border: 2px solid #155c9b; }
-QListWidget::item:selected:focus, QTableView::item:selected:focus,
-QTreeView::item:selected:focus { border: 2px solid #f5c842; }
-QTableCornerButton::section, QHeaderView::section {
-    background: #e6eeeb; color: #172b35; border: 0; padding: 10px; font-weight: 600;
-}
-QScrollArea { background: #f5f7f9; border: 0; }
-QScrollArea#operationScroll, QScrollArea#ocrScroll, QWidget#operationBody, QWidget#ocrBody {
-    background: #f5f7f9;
-}
-QScrollBar:vertical { background: #e1e8ed; width: 14px; margin: 1px; }
-QScrollBar:horizontal { background: #e1e8ed; height: 14px; margin: 1px; }
-QScrollBar::handle:vertical { background: #607d8b; min-height: 28px; border-radius: 5px; }
-QScrollBar::handle:horizontal { background: #607d8b; min-width: 28px; border-radius: 5px; }
-QScrollBar::handle:hover { background: #305f75; }
-QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
-QScrollBar::add-page, QScrollBar::sub-page { background: #e1e8ed; }
-QTabWidget::pane { border: 1px solid #a9bdc8; background: #f5f7f9; }
-QTabBar::tab { background: #e6eeeb; color: #172b35; border: 1px solid #a9bdc8;
-               padding: 8px 12px; }
-QTabBar::tab:selected { background: #17694f; color: white; }
-QTabBar::tab:disabled { background: #e4e9ec; color: #52636d; }
-QMenuBar, QMenu { background: white; color: #172b35; }
-QMenuBar::item:selected, QMenu::item:selected { background: #17694f; color: white; }
-QMenu::item:disabled { color: #52636d; }
-QToolTip { background: #172b35; color: white; border: 1px solid #526b79; padding: 6px; }
-QStatusBar { background: #eaf0ed; color: #172b35; }
-""".replace("@ICONS@", Path(__file__).with_name("icons").as_posix())
+STYLE = LIGHT_STYLE
 
 
 def label(text: str, name: str = "") -> QLabel:
@@ -313,7 +209,13 @@ class MainWindow(QMainWindow):
         self._fit_on_first_show = True
         self.resize(1160, 760)
         self.setMinimumSize(920, 620)
-        self.setStyleSheet(STYLE)
+        self._themes = ThemeManager(self)
+        self._history = NavigationHistory(
+            self._valid_location, self._activate_location, self._update_navigation
+        )
+        app = QApplication.instance()
+        assert isinstance(app, QApplication)
+        app.installEventFilter(self)
         self._recent_books = recent_books if recent_books is not None else LocalRecentBooks()
         self._local_ocr_preferences = LocalOcrPreferences()
         self._ocr_preferences = self._local_ocr_preferences.load()
@@ -403,6 +305,7 @@ class MainWindow(QMainWindow):
         ):
             action.setEnabled(False)
         self.root_stack.addWidget(self._workspace())
+        self._themes.apply()
         self.menuBar().hide()
 
     def _update_report_action(self) -> None:
@@ -435,6 +338,7 @@ class MainWindow(QMainWindow):
             if saved_enabled
             else "Откройте новую книгу или восстановленную копию с поддержкой сценариев."
         )
+        self._update_navigation()
 
     def request_analytics(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
@@ -1252,6 +1156,13 @@ class MainWindow(QMainWindow):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(page)
         return scroll
+        appearance = QHBoxLayout()
+        appearance.addWidget(label("Тема оформления", "muted"))
+        theme_selector = self._themes.selector()
+        theme_selector.setMaximumWidth(240)
+        appearance.addWidget(theme_selector)
+        appearance.addStretch()
+        layout.addLayout(appearance)
 
     def _action_button(self, action: QAction) -> QPushButton:
         result = button(action.text(), action.trigger)
@@ -1315,6 +1226,11 @@ class MainWindow(QMainWindow):
         settings.addStretch()
         self.settings_tabs.addTab(recognition, "Распознавание и переводы")
         self.settings_tabs.addTab(self._security(), "Защита и копии")
+        appearance = QWidget()
+        appearance_layout = QFormLayout(appearance)
+        appearance_layout.addRow("Тема оформления", self._themes.selector())
+        appearance_layout.addRow(label("Выбор сохраняется на этом ПК и не меняет книгу.", "muted"))
+        self.settings_tabs.addTab(appearance, "Оформление")
         layout.addWidget(self.settings_tabs, 1)
         self.close_book_button = button("Закрыть книгу", self.lock_book)
         self.close_book_button.setObjectName("closeBook")
@@ -1431,7 +1347,7 @@ class MainWindow(QMainWindow):
             settings_page,
         ):
             self.pages.addWidget(section)
-        self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.navigation.currentRowChanged.connect(self._section_changed)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
         layout.addWidget(sidebar)
@@ -1442,18 +1358,130 @@ class MainWindow(QMainWindow):
         wrapper = QWidget()
         layout = QVBoxLayout(wrapper)
         layout.setContentsMargins(0, 0, 0, 0)
-        panel = InlineForms(page, wrapper)
+        page_scroll = QScrollArea()
+        page_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        page_scroll.setWidgetResizable(True)
+        page_scroll.setWidget(page)
+        panel = InlineForms(page_scroll, wrapper)
         panel.page_notice = label("", "muted")
         panel.page_notice.hide()
+        layout.addWidget(panel.header)
         layout.addWidget(panel.page_notice)
-        layout.addWidget(page)
-        layout.addWidget(panel)
+        layout.addWidget(page_scroll, 1)
+        layout.addWidget(panel, 1)
         self._action_panels.append(panel)
+        panel.navigator = self._navigate_history
+        panel.locationChanged.connect(lambda view, p=panel: self._record_location(p, view))
         return wrapper, panel
 
     def _clear_action_panels(self) -> None:
+        self._history.moving = True
         for panel in self._action_panels:
             panel.clear()
+        self._history.moving = False
+        self._history.reset()
+
+    def _panel_for_section(self, section: int) -> InlineForms | None:
+        if section == -1:
+            return getattr(self, "_welcome_forms", None)
+        if not hasattr(self, "pages") or not 0 <= section < self.pages.count():
+            return None
+        wrapper = self.pages.widget(section)
+        return next((p for p in self._action_panels if p.parentWidget() is wrapper), None)
+
+    def _section_changed(self, section: int) -> None:
+        self.pages.setCurrentIndex(section)
+        self._record_section()
+
+    def _record_section(self) -> None:
+        if self.session is None:
+            self._update_navigation()
+            return
+        section = self.navigation.currentRow()
+        panel = self._panel_for_section(section)
+        view = None
+        if panel is not None and panel._position >= 0:
+            current = panel.stack.currentWidget()
+            view = current if isinstance(current, QScrollArea) else None
+        self._history.record(Location.at(section, view))
+
+    def _record_location(self, panel: InlineForms, view: object) -> None:
+        if panel.clearing or self._history.moving:
+            return
+        if panel is getattr(self, "_welcome_forms", None):
+            section = -1
+        else:
+            owner = panel.parentWidget()
+            section = (
+                self.pages.indexOf(owner) if hasattr(self, "pages") and owner is not None else -1
+            )
+            if section < 0:
+                return
+        if not self._history.entries:
+            self._history.record(Location.at(section, None))
+        self._history.record(Location.at(section, view if isinstance(view, QScrollArea) else None))
+
+    def _valid_location(self, location: Location) -> bool:
+        if location.section >= 0 and self.session is None:
+            return False
+        if (
+            location.section == -1
+            and hasattr(self, "root_stack")
+            and self.root_stack.currentIndex() != 0
+        ):
+            return False
+        panel = self._panel_for_section(location.section)
+        if panel is None:
+            return False
+        if location.view is None:
+            return True
+        view = living_view(location)
+        return view is not None and panel.stack.indexOf(view) >= 0
+
+    def _activate_location(self, location: Location) -> None:
+        if location.section >= 0:
+            self.navigation.setCurrentRow(location.section)
+        panel = self._panel_for_section(location.section)
+        if panel is not None:
+            panel.show_location(living_view(location))
+
+    def _update_navigation(self) -> None:
+        if not hasattr(self, "_action_panels"):
+            return
+        enabled = not getattr(self, "_busy", False)
+        for panel in self._action_panels:
+            panel.back.setEnabled(enabled and self._history.target(-1) is not None)
+            panel.forward.setEnabled(enabled and self._history.target(1) is not None)
+            panel.header.setVisible(self.session is not None or panel.stack.count() > 0)
+
+    def _navigate_history(self, direction: int) -> None:
+        if not self._busy:
+            self._history.move(direction)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        owned = isinstance(watched, QWidget) and (watched is self or self.isAncestorOf(watched))
+        app = QApplication.instance()
+        if not owned or not isinstance(app, QApplication) or app.activeModalWidget() is not None:
+            return super().eventFilter(watched, event)
+        if (
+            isinstance(event, QMouseEvent)
+            and event.type() in (QEvent.Type.MouseButtonPress, QEvent.Type.MouseButtonRelease)
+            and event.button() in (Qt.MouseButton.BackButton, Qt.MouseButton.ForwardButton)
+        ):
+            if event.type() == QEvent.Type.MouseButtonRelease:
+                self._navigate_history(-1 if event.button() == Qt.MouseButton.BackButton else 1)
+            return True
+        if isinstance(event, QKeyEvent) and event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Back, Qt.Key.Key_Forward):
+                self._navigate_history(-1 if event.key() == Qt.Key.Key_Back else 1)
+                return True
+            if event.modifiers() == Qt.KeyboardModifier.AltModifier and event.key() in (
+                Qt.Key.Key_Left,
+                Qt.Key.Key_Right,
+            ):
+                self._navigate_history(-1 if event.key() == Qt.Key.Key_Left else 1)
+                return True
+        return super().eventFilter(watched, event)
 
     def _accounts(self) -> QWidget:
         page = QWidget()
@@ -1508,10 +1536,19 @@ class MainWindow(QMainWindow):
         outer = QVBoxLayout(wrapper)
         outer.setContentsMargins(0, 0, 0, 0)
         page = QWidget()
-        outer.addWidget(page)
-        self._journal_forms = InlineForms(page, wrapper)
+        page_scroll = QScrollArea()
+        page_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        page_scroll.setWidgetResizable(True)
+        page_scroll.setWidget(page)
+        self._journal_forms = InlineForms(page_scroll, wrapper)
+        outer.addWidget(self._journal_forms.header)
+        outer.addWidget(page_scroll, 1)
         self._action_panels.append(self._journal_forms)
-        outer.addWidget(self._journal_forms)
+        self._journal_forms.navigator = self._navigate_history
+        self._journal_forms.locationChanged.connect(
+            lambda view: self._record_location(self._journal_forms, view)
+        )
+        outer.addWidget(self._journal_forms, 1)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
         self.journal_notice = label(
@@ -2620,6 +2657,8 @@ class MainWindow(QMainWindow):
         self.refresh()
         self.navigation.setCurrentRow(0)
         self.root_stack.setCurrentIndex(1 if show_workspace else 0)
+        self._record_section()
+        self._update_navigation()
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
 
     def _created(self, result: tuple[VaultSession, str], *, inline: bool = False) -> None:

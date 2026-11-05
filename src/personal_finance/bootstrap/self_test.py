@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication, QDate, QEvent, QSettings, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QDateEdit, QDialog, QLineEdit
 
 from personal_finance.application.analytics import Analytics
@@ -151,6 +152,22 @@ def self_test(
     exit_code = 0
     try:
         report["runtime"] = {**runtime_info(), "qt_platform": app.platformName()}
+        with _step(report, "interface_theme_assets"):
+            from personal_finance.presentation import theme
+
+            icon_root = Path(theme.__file__).with_name("icons")
+            for folder in (icon_root, icon_root / "dark"):
+                for name in (
+                    "chevron-down.svg",
+                    "chevron-up.svg",
+                    "check.svg",
+                    "radio.svg",
+                    "arrow-back.svg",
+                    "arrow-forward.svg",
+                ):
+                    asset = folder / name
+                    if not asset.is_file() or QIcon(str(asset)).pixmap(20, 20).isNull():
+                        raise RuntimeError("В поставке отсутствует значок темы.")
         ocr_recognitions: tuple[CardRecognition, ...] = ()
         if ocr_directory is not None:
             with _step(report, "verify_local_ocr_runtime"):

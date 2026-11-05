@@ -150,6 +150,7 @@ class OcrPreviewDialog(QDialog):
         review_defaults: OcrReviewDefaults | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setProperty("warningsAtBottom", True)
         self.preview = preview
         self.review_defaults = review_defaults or OcrReviewDefaults.for_today()
         suggestions = suggest_corrections(preview.card, self.review_defaults)
@@ -163,9 +164,9 @@ class OcrPreviewDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             plain(
-                "Сверьте поля с изображением. «Завершить проверку» оставляет результат в памяти. "
+                "Проверка остаётся в памяти. "
                 + (
-                    "Для записи отдельно подготовьте и подтвердите операцию."
+                    "Запись в книгу — отдельным действием."
                     if allow_financial_prepare
                     else "Для финансового подтверждения откройте книгу текущей схемы."
                 )
@@ -187,9 +188,9 @@ class OcrPreviewDialog(QDialog):
         image_layout.addWidget(self.image_view, 1)
         buttons = QHBoxLayout()
         for text, action in (
-            ("Вписать", self.image_view.fit_image),
-            ("Увеличить", lambda: self.image_view.zoom(1.3)),
-            ("Уменьшить", lambda: self.image_view.zoom(1 / 1.3)),
+            ("Целиком", self.image_view.fit_image),
+            ("+ Увеличить", lambda: self.image_view.zoom(1.3)),
+            ("− Уменьшить", lambda: self.image_view.zoom(1 / 1.3)),
         ):
             button = QPushButton(text)
             button.clicked.connect(action)
@@ -202,6 +203,7 @@ class OcrPreviewDialog(QDialog):
         body = QWidget()
         body.setObjectName("ocrBody")
         form = QFormLayout(body)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self.notice = plain(
             preview.card.blocked_reason
             or "Оценка слов не гарантирует правильность суммы или даты. "
@@ -212,9 +214,9 @@ class OcrPreviewDialog(QDialog):
                 "Проверьте значения перед продолжением."
             )
         )
-        form.addRow(self.notice)
+        layout.addWidget(self.notice)
         if allow_financial_prepare and not preview.card.amount.word_indices:
-            form.addRow(
+            layout.addWidget(
                 plain(
                     "Финансовая подготовка недоступна: OCR не выделил область исходной суммы. "
                     "Проверку полей можно завершить без записи в книгу."
@@ -304,11 +306,13 @@ class OcrPreviewDialog(QDialog):
         box.button(QDialogButtonBox.StandardButton.Cancel).setText("Закрыть")
         self.finish = box.addButton("Завершить проверку", QDialogButtonBox.ButtonRole.AcceptRole)
         self.finish.clicked.connect(self._validate)
+        self.finish.setObjectName("primary" if not allow_financial_prepare else "")
         self.prepare_button: QPushButton | None = None
         if allow_financial_prepare:
             self.prepare_button = box.addButton(
                 "Подготовить операцию", QDialogButtonBox.ButtonRole.ActionRole
             )
+            self.prepare_button.setObjectName("primary")
             self.prepare_button.clicked.connect(self._request_financial)
         box.rejected.connect(self.reject)
         layout.addWidget(box)

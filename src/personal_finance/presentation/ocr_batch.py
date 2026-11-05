@@ -182,6 +182,7 @@ class OcrBatchDialog(QDialog):
         panel: InlineForms | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setProperty("warningsAtBottom", True)
         self.preview, self.importing, self.preferences = preview, importing, preferences
         self.accounts, self.categories = accounts, categories
         classification = classification if importing is not None else None

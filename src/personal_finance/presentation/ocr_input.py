@@ -3,7 +3,15 @@
 from pathlib import Path
 
 from PySide6.QtCore import QMimeData, Qt, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QImage
+from PySide6.QtGui import (
+    QDragEnterEvent,
+    QDragLeaveEvent,
+    QDropEvent,
+    QImage,
+    QKeyEvent,
+    QKeySequence,
+    QMouseEvent,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -12,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -51,32 +60,28 @@ class OcrInputPanel(QFrame):
         )
         self.files.setMinimumContentsLength(16)
         self.files.setPlaceholderText("Снимок не выбран")
-        self.notice = QLabel("Перетащите PNG/JPEG, выберите файлы или вставьте снимок.")
+        self.notice = QLabel("Изображение ещё не выбрано.")
         self.notice.setTextFormat(Qt.TextFormat.PlainText)
         self.notice.setWordWrap(True)
-        choose = QPushButton("Выбрать файлы…")
-        paste = QPushButton("Вставить из буфера")
         self.recognize = QPushButton("Распознать")
         self.recognize.setObjectName("primary")
         close = QPushButton("Свернуть")
-        choose.clicked.connect(self.choose_files)
-        paste.clicked.connect(self.paste)
         self.recognize.clicked.connect(self.submit)
         close.clicked.connect(self.hide)
         self.files.currentIndexChanged.connect(self._update)
         layout = QVBoxLayout(self)
-        layout.addWidget(self.notice)
+        self.drop_zone = ImageDropZone(self)
+        layout.addWidget(self.drop_zone)
         row = QHBoxLayout()
         row.addWidget(self.mode)
         row.addWidget(self.files, 1)
         row.addWidget(self.recognize)
         layout.addLayout(row)
         actions = QHBoxLayout()
-        actions.addWidget(choose)
-        actions.addWidget(paste)
         actions.addStretch()
         actions.addWidget(close)
         layout.addLayout(actions)
+        layout.addWidget(self.notice)
         self._update()
 
     def _update(self) -> None:
@@ -85,7 +90,7 @@ class OcrInputPanel(QFrame):
     def reset(self) -> None:
         self._source = None
         self.files.clear()
-        self.notice.setText("Перетащите PNG/JPEG, выберите файлы или вставьте снимок.")
+        self.notice.setText("Изображение ещё не выбрано.")
         self.hide()
 
     def choose_files(self) -> None:
@@ -143,3 +148,82 @@ class OcrInputPanel(QFrame):
             event.acceptProposedAction()
         else:
             event.ignore()
+
+
+class ImageDropZone(QFrame):
+    def __init__(self, panel: "OcrInputPanel") -> None:
+        super().__init__(panel)
+        self.panel = panel
+        self.setObjectName("ocrDropZone")
+        self.setAcceptDrops(True)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName("Область загрузки: перетащите изображение сюда")
+        self.setMinimumHeight(120)
+        layout = QVBoxLayout(self)
+        self.title = QLabel("Перетащите изображение сюда")
+        self.title.setObjectName("dropTitle")
+        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self.title)
+        help_text = QLabel("PNG или JPEG из Проводника · можно выбрать несколько файлов")
+        help_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        help_text.setWordWrap(True)
+        help_text.setObjectName("muted")
+        layout.addWidget(help_text)
+        row = QHBoxLayout()
+        row.addStretch()
+        choose = QPushButton("Выбрать файлы…")
+        choose.setIcon(choose.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
+        choose.clicked.connect(panel.choose_files)
+        paste = QPushButton("Вставить из буфера")
+        paste.setToolTip("Вставить изображение или локальный файл из буфера обмена")
+        paste.clicked.connect(panel.paste)
+        row.addWidget(choose)
+        row.addWidget(paste)
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _active(self, active: bool) -> None:
+        self.setProperty("dragActive", active)
+        self.title.setText(
+            "Отпустите, чтобы выбрать изображение" if active else "Перетащите изображение сюда"
+        )
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if image_paths(event.mimeData()):
+            self._active(True)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event: QDragLeaveEvent) -> None:
+        self._active(False)
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        self._active(False)
+        if paths := image_paths(event.mimeData()):
+            self.panel.set_files(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.panel.choose_files()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.panel.choose_files()
+            event.accept()
+        elif event.matches(QKeySequence.StandardKey.Paste):
+            self.panel.paste()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
