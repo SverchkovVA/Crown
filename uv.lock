@@ -403,12 +403,13 @@ wheels = [
 
 [[package]]
 name = "personal-finance-local"
-version = "0.2.0.dev46"
+version = "0.2.0.dev47"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "filelock" },
     { name = "matplotlib" },
+    { name = "pillow" },
     { name = "platformdirs" },
     { name = "pynacl" },
     { name = "pyside6-essentials" },
@@ -432,6 +433,7 @@ requires-dist = [
     { name = "alembic", specifier = "==1.20.1" },
     { name = "filelock", specifier = ">=3.16,<4" },
     { name = "matplotlib", specifier = "==3.11.2" },
+    { name = "pillow", specifier = "==13.0.0" },
     { name = "platformdirs", specifier = ">=4.3,<5" },
     { name = "pynacl", specifier = "==1.6.2" },
     { name = "pyside6-essentials", specifier = "==6.12.0" },
