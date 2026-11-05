@@ -27,6 +27,7 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
     check_ocr_workflow,
 )
 from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recognitions_for_directory
+from personal_finance.bootstrap.planning_reports_self_test import check_planning_reports
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashSourceKind, cash_flow_sources
 from personal_finance.domain.analytics_cashflow_months import cash_month_sources
@@ -651,6 +652,8 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Отчёт движения средств изменил финансовые данные.")
+                with _step(report, "report_budget_and_account_position_read_only"):
+                    check_planning_reports(source, today, expected_balances, 2223)
                 with _step(report, "forecast_deposit_read_only"):
                     before_deposit = ledger.operations(include_deleted=True)
                     deposit = forecast_deposit(
