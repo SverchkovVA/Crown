@@ -78,10 +78,22 @@ def test_optional_ocr_self_test_has_two_extra_steps_without_paths(qapp, tmp_path
 
     class Engine:
         def recognize(self, image):
-            doc = document(
-                ("Детали операции", "Списано: 473,15 руб.", "22.10.2026 09:18"),
-                image_sha256=image.sha256,
+            lines = (
+                (
+                    "История операций",
+                    "24 октября",
+                    "Вымышленный магазин −123,45 RUB",
+                    "Вымышленный перевод +678,90 RUB",
+                    "Тестовое кафе −45,00 RUB",
+                    "23 октября",
+                    "Тестовые продукты −99,01 RUB",
+                    "Тестовая подписка −250,50 RUB",
+                    "Возврат тестовой покупки +321,00 RUB",
+                )
+                if image.height == 1500
+                else ("Детали операции", "Списано: 473,15 руб.", "22.10.2026 09:18")
             )
+            doc = document(lines, image_sha256=image.sha256)
             return replace(doc, width=image.width, height=image.height)
 
     service = CardRecognition(

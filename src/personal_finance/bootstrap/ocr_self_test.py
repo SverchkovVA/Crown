@@ -191,3 +191,56 @@ def check_local_ocr_runtime(recognitions: tuple[CardRecognition, ...]) -> None:
         or card.local_time.value != time(9, 18)
     ):
         raise RuntimeError("Проверочный OCR дал неверные поля.")
+
+    # Отдельная тёмная история воспроизводит потерю строки при неверном чтении ₽.
+    from personal_finance.application.ocr_cards import OcrHistoryPreview
+    from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
+
+    history_pixels = Image.new("RGB", (1080, 1500), "#15171a")
+    draw = ImageDraw.Draw(history_pixels)
+    font_path = str(Path(get_data_path()) / "fonts/ttf/DejaVuSans.ttf")
+    regular = ImageFont.truetype(font_path, 34)
+    small = ImageFont.truetype(font_path, 29)
+    draw.text((35, 30), "История операций", font=ImageFont.truetype(font_path, 40), fill="white")
+    values = (
+        ("Вымышленный магазин", "Покупки", "−123,45", 12345, CashDirection.OUT),
+        ("Вымышленный перевод", "Переводы", "+678,90", 67890, CashDirection.IN),
+        ("Тестовое кафе", "Питание", "−45,00", 4500, CashDirection.OUT),
+        ("Тестовые продукты", "Продукты", "−99,01", 9901, CashDirection.OUT),
+        ("Тестовая подписка", "Услуги", "−250,50", 25050, CashDirection.OUT),
+        ("Возврат тестовой покупки", "Возврат", "+321,00", 32100, CashDirection.IN),
+    )
+    top = 120
+    for index, (name, category, amount, _, _) in enumerate(values):
+        if index in (0, 3):
+            draw.text(
+                (35, top), "24 октября" if index == 0 else "23 октября", font=regular, fill="white"
+            )
+            top += 65
+        draw.text((35, top), name, font=small, fill="white")
+        draw.text((1045, top), amount + " ₽", font=regular, fill="white", anchor="ra")
+        draw.text((35, top + 44), category, font=small, fill="white")
+        if index == 3:
+            draw.text((35, top + 80), "+1 бонус", font=small, fill="white")
+        top += 165
+    with tempfile.TemporaryDirectory(prefix="pf-ocr-history-self-test-") as directory:
+        path = Path(directory) / "Вымышленная тёмная история.png"
+        history_pixels.save(path, format="PNG")
+        history_preview = recognitions[0].analyze(path)
+    if (
+        not isinstance(history_preview, OcrHistoryPreview)
+        or len(history_preview.history.cards) != 6
+    ):
+        raise RuntimeError("Не выделены шесть денежных строк тёмной истории.")
+    defaults = OcrReviewDefaults(reference_year=2026)
+    for index, (draft, expected) in enumerate(
+        zip(history_preview.history.cards, values, strict=True)
+    ):
+        suggestion = suggest_corrections(draft, defaults)
+        if (
+            draft.amount.value != expected[3]
+            or suggestion.direction != expected[4]
+            or suggestion.currency != "RUB"
+            or suggestion.occurred_on != ("24.10.2026" if index < 3 else "23.10.2026")
+        ):
+            raise RuntimeError("Неверные сумма, направление или дата тёмной истории.")
