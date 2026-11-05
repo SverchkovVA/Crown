@@ -82,6 +82,7 @@ from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.domain.reconciliation import Reconciliation
 from personal_finance.domain.refunds import RefundCandidate
+from personal_finance.domain.savings_goals import SavingsGoalProjection, project_savings_goal
 from personal_finance.infrastructure.backup.container import (
     create_backup,
     restore_backup,
@@ -161,6 +162,7 @@ from personal_finance.presentation.reconciliation import (
     ReconciliationInputDialog,
     ReconciliationResultDialog,
 )
+from personal_finance.presentation.savings_goals import SavingsGoalDialog, SavingsGoalOptions
 from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
 
 STYLE = """
@@ -380,6 +382,9 @@ class MainWindow(QMainWindow):
         self.budget_action = command(
             "Бюджет расходов…", lambda: self.request_budget(panel=self._report_forms)
         )
+        self.savings_goal_action = command(
+            "Цель накоплений…", lambda: self.request_savings_goal(panel=self._report_forms)
+        )
         self.deposit_action = command(
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
         )
@@ -393,6 +398,7 @@ class MainWindow(QMainWindow):
             self.cash_flow_action,
             self.account_position_action,
             self.budget_action,
+            self.savings_goal_action,
             self.saved_deposits_action,
         ):
             action.setEnabled(False)
@@ -416,6 +422,7 @@ class MainWindow(QMainWindow):
         self.cash_flow_action.setEnabled(enabled)
         self.account_position_action.setEnabled(enabled)
         self.budget_action.setEnabled(enabled)
+        self.savings_goal_action.setEnabled(enabled)
         self.deposit_action.setEnabled(not self._busy)
         saved_enabled = (
             not self._busy
@@ -519,6 +526,27 @@ class MainWindow(QMainWindow):
                 lambda: analytics.account_position(accounts, as_of),
                 show,
                 "Расчёт средств на счетах…",
+            )
+
+        dialog.calculationRequested.connect(calculate)
+        present_form(dialog, panel)
+
+    def request_savings_goal(self, *, panel: InlineForms | None = None) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        dialog = SavingsGoalOptions(self)
+
+        def show(result: SavingsGoalProjection) -> None:
+            if self.session is session:
+                present_form(SavingsGoalDialog(result, self), panel)
+
+        def calculate() -> None:
+            request = dialog.result_request
+            if self._busy or self.session is not session or request is None:
+                return
+            self._panel_job(
+                panel, lambda: project_savings_goal(request), show, "Расчёт цели накоплений…"
             )
 
         dialog.calculationRequested.connect(calculate)
@@ -1263,6 +1291,7 @@ class MainWindow(QMainWindow):
             self.cash_flow_action,
             self.account_position_action,
             self.budget_action,
+            self.savings_goal_action,
             self.deposit_action,
             self.saved_deposits_action,
         ):
