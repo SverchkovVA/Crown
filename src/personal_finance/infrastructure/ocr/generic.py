@@ -74,6 +74,7 @@ _ACCOUNT_SECTION = re.compile(
     re.I,
 )
 _MISSING_MAIN_AMOUNT = "Не выделена область основной суммы."
+_ACCOUNT_FLOW_LABEL = re.compile(r"^(?:сч[её]т|карта)\s+(?P<flow>списания|зачисления)\s*:?$", re.I)
 _CLOCK_SPAN = re.compile(r"(?<![0-9])[0-9]{1,2}\s*:\s*[0-9]{2}(?:\s*:\s*[0-9]{2})?(?![0-9])")
 _OPERATION_DATE_LABEL = re.compile(
     r"^дата\s+(?:и\s+время|операции|перевода|платежа|проведения)\b", re.I
@@ -320,7 +321,7 @@ def _draft(
         if value.direction.value is not None and value.direction.value != direction[0]:
             blocked = blocked or "Подпись и знак суммы задают разные направления."
         elif value.direction.value is None:
-            value = replace(value, direction=OcrField(direction[0], direction[1]))
+            value = _with_direction(value, direction)
     if any(
         document.words[i].box.top + document.words[i].box.height >= document.height - 8
         for i in refs
@@ -477,6 +478,41 @@ def _contextual(card: OcrCardDraft) -> OcrCardDraft:
     return with_operation_context(card)
 
 
+def _with_direction(
+    card: OcrCardDraft, hint: tuple[CashDirection, tuple[int, ...]]
+) -> OcrCardDraft:
+    flow, refs = hint
+    low = (
+        (OcrIssue.LOW_CONFIDENCE,)
+        if any(card.document.words[i].confidence < 80 for i in refs)
+        else ()
+    )
+    return replace(card, direction=OcrField(flow, refs, low))
+
+
+def _with_account_direction(card: OcrCardDraft, rows: list[Row]) -> OcrCardDraft:
+    if card.direction.value is not None:
+        return card
+    hints = []
+    for row in rows:
+        label = _ACCOUNT_FLOW_LABEL.fullmatch(row.text.strip())
+        if label is not None:
+            hints.append(
+                (
+                    CashDirection.OUT
+                    if label["flow"].casefold() == "списания"
+                    else CashDirection.IN,
+                    row.refs,
+                )
+            )
+    if not hints:
+        return card
+    refs = tuple(dict.fromkeys(i for _, origin in hints for i in origin))
+    if len({flow for flow, _ in hints}) != 1:
+        return replace(card, direction=OcrField(None, refs, (OcrIssue.AMBIGUOUS,)))
+    return _with_direction(card, (hints[0][0], refs))
+
+
 def _labelled_operation_date(rows: list[Row], index: int) -> bool:
     row = rows[index]
     if _OPERATION_DATE_LABEL.match(row.text):
@@ -578,7 +614,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v7") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v8") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -623,15 +659,31 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v7",
+                "generic-card-v8",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
-            return _contextual(result)
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v7")
-        return replace(empty, blocked_reason=blocked)
+            return _contextual(_with_account_direction(result, rows))
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v8")
+        occurred, clock = _date_fields(document, dates)
+        empty = replace(
+            empty,
+            blocked_reason=blocked,
+            occurred_on=occurred,
+            local_time=clock,
+            description=OcrField(
+                description[:500] or None,
+                description_refs,
+                () if description else (OcrIssue.MISSING,),
+            ),
+        )
+        if direction is not None:
+            empty = _with_direction(empty, direction)
+        for hint in hints:
+            empty = _with_currency(empty, hint)
+        return _contextual(_with_account_direction(empty, rows))
 
 
 class GenericHistoryAdapter:
