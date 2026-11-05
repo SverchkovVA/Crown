@@ -58,6 +58,7 @@ from personal_finance.presentation.ocr_preview import (
     SourceImageView,
     plain,
 )
+from personal_finance.presentation.ocr_table import OcrReviewTable
 
 
 @dataclass
@@ -197,10 +198,7 @@ class OcrBatchDialog(QDialog):
         self._callback: Callable[[Any], None] = lambda _: None
         self.saved_count = 0
         self.reviewed_cards: tuple[ReviewedOcrCard, ...] = ()
-        self.setWindowTitle(
-            f"{preview.bank_name} · Операции из изображения"
-            + (" · Без записи" if importing is None else "")
-        )
+        self.setWindowTitle("История операций")
         self.resize(1380, 800)
         self.setMinimumSize(900, 540)
         screen = self.screen()
@@ -279,7 +277,7 @@ class OcrBatchDialog(QDialog):
         split = QSplitter(Qt.Orientation.Horizontal)
         self.image = SourceImageView(preview.source.image, preview.history.document)
         split.addWidget(self.image)
-        self.table = QTableWidget(len(preview.history.cards), 10)
+        self.table = OcrReviewTable(len(preview.history.cards), 10)
         self.table.setHorizontalHeaderLabels(
             [
                 "Включить",
@@ -291,7 +289,7 @@ class OcrBatchDialog(QDialog):
                 "Второй свой счёт",
                 "Состояние",
                 "Категория в банке",
-                "Бонусные подписи (не доход)",
+                "Бонусы (не доход)",
             ]
         )
         if importing is None:
@@ -410,30 +408,42 @@ class OcrBatchDialog(QDialog):
             category.activated.connect(lambda _, i=index: self._category_chosen(i))
             other.currentIndexChanged.connect(self._edited)
             include.toggled.connect(self._edited)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.configure_columns((96, 128, 136, 152, 144, 168, 160, 184, 168, 184))
+        self.table.verticalHeader().setDefaultSectionSize(
+            max(
+                (w.sizeHint().height() for w in self._row_widgets if isinstance(w, QWidget)),
+                default=36,
+            )
+            + 2
+        )
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self._show_source)
         split.addWidget(self.table)
         split.setSizes([360, 1000])
         body.addWidget(split, 1)
-        if panel is None:
-            layout.addWidget(self.content, 1)
-        self.checked: QCheckBox | None = None
-        if preferences.confirm_fields:
-            self.checked = QCheckBox("Суммы, валюты, направления и даты выбранных строк сверены")
-            self.checked.toggled.connect(self._update_button)
-            layout.addWidget(self.checked)
-        tools = QHBoxLayout()
-        self.save = QPushButton("Добавить выбранные операции")
+        layout.addWidget(self.content, 1)
+        self.action_bar = QWidget(self)
+        self.action_bar.setProperty("stickyActions", True)
+        tools = QHBoxLayout(self.action_bar)
+        tools.setContentsMargins(0, 0, 0, 0)
+        self.save = QPushButton(
+            "Добавить операции" if importing is not None else "Завершить проверку"
+        )
+        self.save.setObjectName("primary")
         self.save.clicked.connect(self.prepare)
         tools.addWidget(self.save)
+        self.checked: QCheckBox | None = None
+        if preferences.confirm_fields:
+            self.checked = QCheckBox("Выбранные строки сверены")
+            self.checked.setToolTip("Суммы, валюты, направления и даты выбранных строк сверены")
+            self.checked.toggled.connect(self._update_button)
+            tools.addWidget(self.checked)
+        tools.addStretch()
         self.close_button = QPushButton("Закрыть")
+        self.close_button.setProperty("inlineCloseAction", True)
         self.close_button.clicked.connect(self.reject)
         tools.addWidget(self.close_button)
-        layout.addLayout(tools)
-        if panel is not None:
-            layout.addWidget(self.content, 1)
+        layout.addWidget(self.action_bar)
         self.common_account.currentIndexChanged.connect(self._common_changed)
         self.unknown_flow.currentIndexChanged.connect(self._set_unknown_flow)
         if self.rows:
@@ -594,7 +604,7 @@ class OcrBatchDialog(QDialog):
         self.save.setText(
             f"Проверить выбранные ({selected})"
             if self.importing is None
-            else f"Добавить выбранные ({selected})"
+            else f"Добавить операции ({selected})"
         )
         self.save.setEnabled(
             self._job is None

@@ -39,7 +39,7 @@ class OcrHistoryDialog(QDialog):
         self._panel = panel
         self.reviews: dict[int, ReviewedOcrCard] = {}
         self.selected_for_financial: tuple[OcrCardPreview, ReviewedOcrCard] | None = None
-        self.setWindowTitle(f"История · {preview.bank_name}: проверка строк")
+        self.setWindowTitle("История операций")
         self.resize(1180, 720)
         self.setMinimumSize(920, 580)
         layout = QVBoxLayout(self)

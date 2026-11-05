@@ -42,6 +42,9 @@ class ActionFooter(QFrame):
 
 
 def _style_buttons(box: QDialogButtonBox) -> None:
+    for button in box.buttons():
+        if button.text().replace("&", "").strip() == "Закрыть":
+            button.hide()
     for standard, icon in (
         (QDialogButtonBox.StandardButton.Close, QStyle.StandardPixmap.SP_DialogCloseButton),
         (QDialogButtonBox.StandardButton.Cancel, QStyle.StandardPixmap.SP_DialogCancelButton),
@@ -68,6 +71,9 @@ def _style_buttons(box: QDialogButtonBox) -> None:
 def prepare_inline_layout(dialog: QDialog) -> None:
     if dialog.property("inlineLayoutPrepared"):
         return
+    for button in dialog.findChildren(QWidget):
+        if button.property("inlineCloseAction"):
+            button.hide()
     layout = dialog.layout()
     if not isinstance(layout, QVBoxLayout):
         return
@@ -77,7 +83,12 @@ def prepare_inline_layout(dialog: QDialog) -> None:
         item = layout.takeAt(0)
         if item is not None:
             items.append(item)
-    actions = [item for item in items if isinstance(item.widget(), QDialogButtonBox)]
+    actions = [
+        item
+        for item in items
+        if isinstance((widget := item.widget()), QDialogButtonBox)
+        or (widget is not None and widget.property("stickyActions"))
+    ]
     if not actions:
         for item in items:
             layout.addItem(item)

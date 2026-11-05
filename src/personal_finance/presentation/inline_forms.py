@@ -54,9 +54,15 @@ class InlineForms(QWidget):
         self._position = -1
         self._completions: dict[QScrollArea, Callable[[int], None]] = {}
         self.page_notice: QLabel | None = None
+        self.header_managed = False
+        self.base_title = ""
         self.header = QWidget(parent)
         header_layout = QHBoxLayout(self.header)
-        header_layout.setContentsMargins(0, 0, 0, 8)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        self.controls = QWidget(self.header)
+        controls_layout = QHBoxLayout(self.controls)
+        controls_layout.setContentsMargins(0, 4, 0, 4)
+        header_layout.addWidget(self.controls)
         self.back = QToolButton()
         self.forward = QToolButton()
         for widget, title, icon, delta, shortcut in (
@@ -73,9 +79,9 @@ class InlineForms(QWidget):
             widget.setToolTip(title + " (" + shortcut + ")")
             widget.clicked.connect(lambda checked=False, d=delta: self._navigate(d))
             widget.setEnabled(False)
-            header_layout.addWidget(widget)
+            controls_layout.addWidget(widget)
         self.header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-        self.header.setMinimumHeight(40)
+        self.header.setMinimumHeight(48)
         self.heading = QLabel()
         self.heading.setWordWrap(True)
         self.heading.setObjectName("heading")
@@ -166,10 +172,11 @@ class InlineForms(QWidget):
         scroll = self.stack.currentWidget() if self._position >= 0 else None
         dialog = scroll.widget() if isinstance(scroll, QScrollArea) else None
         self.message("")
-        self.heading.setText(dialog.windowTitle() if dialog is not None else "")
+        self.heading.setText(dialog.windowTitle() if dialog is not None else self.base_title)
         self.setVisible(dialog is not None)
         self.page.setVisible(dialog is None)
-        self.header.setVisible(dialog is not None or self.stack.count() > 0)
+        if not self.header_managed:
+            self.header.setVisible(dialog is not None or self.stack.count() > 0)
         self.back.setEnabled(self._position >= 0)
         self.forward.setEnabled(self._position + 1 < self.stack.count())
         self.locationChanged.emit(scroll)

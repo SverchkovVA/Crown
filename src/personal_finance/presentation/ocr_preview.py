@@ -158,7 +158,7 @@ class OcrPreviewDialog(QDialog):
         self.financial_requested = False
         self.checks: dict[str, QCheckBox] = {}
         self.evidence_buttons: dict[str, QPushButton] = {}
-        self.setWindowTitle(f"Проверка карточки · {preview.bank_name}")
+        self.setWindowTitle("Карточка операции")
         self.resize(1180, 720)
         self.setMinimumSize(920, 580)
         layout = QVBoxLayout(self)

@@ -1239,8 +1239,13 @@ class MainWindow(QMainWindow):
 
     def _workspace(self) -> QWidget:
         page = QWidget()
-        layout = QHBoxLayout(page)
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        body = QHBoxLayout()
+        body.setSpacing(0)
+        self.workspace_header = QStackedWidget()
+        self.workspace_header.setObjectName("workspaceHeader")
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
         sidebar.setFixedWidth(230)
@@ -1267,7 +1272,7 @@ class MainWindow(QMainWindow):
         side.addWidget(label("Локальная книга\nЗашифрованное хранение", "muted"))
         self.sidebar = sidebar
         content = QVBoxLayout()
-        content.setContentsMargins(32, 26, 32, 24)
+        content.setContentsMargins(32, 12, 32, 24)
         self.pages = QStackedWidget()
         journal_page = self._journal()
         accounts_page, self._account_forms = self._wrap_actions(self._accounts())
@@ -1347,11 +1352,30 @@ class MainWindow(QMainWindow):
             settings_page,
         ):
             self.pages.addWidget(section)
+        for index in range(self.pages.count()):
+            panel = self._panel_for_section(index)
+            assert panel is not None
+            panel.header_managed = True
+            panel.base_title = self.navigation.item(index).text()
+            panel.heading.setText(panel.base_title)
+            panel.controls.setFixedWidth(sidebar.width())
+            controls_layout = panel.controls.layout()
+            assert controls_layout is not None
+            controls_layout.setContentsMargins(20, 4, 20, 4)
+            panel.heading.setContentsMargins(32, 0, 24, 0)
+            header_owner = panel.header.parentWidget()
+            assert header_owner is not None
+            owner_layout = header_owner.layout()
+            if owner_layout is not None:
+                owner_layout.removeWidget(panel.header)
+            self.workspace_header.addWidget(panel.header)
         self.navigation.currentRowChanged.connect(self._section_changed)
         self.navigation.setCurrentRow(0)
         content.addWidget(self.pages, 1)
-        layout.addWidget(sidebar)
-        layout.addLayout(content, 1)
+        body.addWidget(sidebar)
+        body.addLayout(content, 1)
+        layout.addWidget(self.workspace_header)
+        layout.addLayout(body, 1)
         return page
 
     def _wrap_actions(self, page: QWidget) -> tuple[QWidget, InlineForms]:
@@ -1391,6 +1415,8 @@ class MainWindow(QMainWindow):
 
     def _section_changed(self, section: int) -> None:
         self.pages.setCurrentIndex(section)
+        if hasattr(self, "workspace_header"):
+            self.workspace_header.setCurrentIndex(section)
         self._record_section()
 
     def _record_section(self) -> None:
@@ -1452,7 +1478,8 @@ class MainWindow(QMainWindow):
         for panel in self._action_panels:
             panel.back.setEnabled(enabled and self._history.target(-1) is not None)
             panel.forward.setEnabled(enabled and self._history.target(1) is not None)
-            panel.header.setVisible(self.session is not None or panel.stack.count() > 0)
+            if not panel.header_managed:
+                panel.header.setVisible(self.session is not None or panel.stack.count() > 0)
 
     def _navigate_history(self, direction: int) -> None:
         if not self._busy:

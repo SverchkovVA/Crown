@@ -4,9 +4,11 @@ import re
 from enum import StrEnum
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSettings, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QSettings, Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication, QComboBox, QToolButton, QWidget
+
+from personal_finance.presentation.window_chrome import apply_caption_theme
 
 
 class ThemeChoice(StrEnum):
@@ -215,6 +217,7 @@ class ThemeManager(QObject):
     def __init__(self, window: QWidget, preferences: ThemePreferences | None = None) -> None:
         super().__init__(window)
         self.window = window
+        self.window.installEventFilter(self)
         self.preferences = preferences or ThemePreferences()
         self.choice = self.preferences.load()
         app = QApplication.instance()
@@ -262,6 +265,7 @@ class ThemeManager(QObject):
         self.window.setPalette(palette)
         self.window.setStyleSheet(theme_style(dark))
         self.window.setProperty("darkTheme", dark)
+        self._apply_caption()
         folder = Path(__file__).with_name("icons")
         if dark:
             folder /= "dark"
@@ -269,6 +273,16 @@ class ThemeManager(QObject):
             direction = button.property("navigationDirection")
             if direction in ("back", "forward"):
                 button.setIcon(QIcon(str(folder / ("arrow-" + str(direction) + ".svg"))))
+
+    def _apply_caption(self) -> None:
+        if self.window.testAttribute(Qt.WidgetAttribute.WA_WState_Created):
+            applied = apply_caption_theme(self.window, dark=bool(self.window.property("darkTheme")))
+            self.window.setProperty("nativeCaptionThemed", applied)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched is self.window and event.type() in (QEvent.Type.Show, QEvent.Type.WinIdChange):
+            self._apply_caption()
+        return super().eventFilter(watched, event)
 
     def selector(self) -> QComboBox:
         combo = QComboBox()
