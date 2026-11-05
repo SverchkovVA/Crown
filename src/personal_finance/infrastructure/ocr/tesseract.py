@@ -154,5 +154,5 @@ class TesseractEngine:
         if self._page_segmentation != 6:
             info = replace(info, version=info.version + ";psm=11")
         if normalized:
-            info = replace(info, version=info.version + ";pixels=dark-v1")
+            info = replace(info, version=info.version + ";pixels=dark-v2")
         return parse_tesseract_tsv(contents, image, info)

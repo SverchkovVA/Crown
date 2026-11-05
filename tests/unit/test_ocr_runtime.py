@@ -200,6 +200,6 @@ def test_dark_pixels_are_normalized_but_audit_keeps_original_image(tmp_path, mon
         result.engine.name == value.engine.name
         and result.engine.model_sha256 == value.engine.model_sha256
     )
-    suffix = ";pixels=dark-v1" if mode == 6 else ";psm=11;pixels=dark-v1"
+    suffix = ";pixels=dark-v2" if mode == 6 else ";psm=11;pixels=dark-v2"
     assert result.engine.version == value.engine.version + suffix
     assert (result.words[0].box.left, result.words[0].box.top) == (10, 10)
