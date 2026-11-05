@@ -37,12 +37,13 @@ def test_known_sign_is_not_replaced_by_account_role(sign, expected):
     assert card.direction.word_indices == card.amount.word_indices
 
 
-def test_both_account_roles_do_not_choose_a_transfer_side():
+@pytest.mark.parametrize("amount", ["123,45 RUB", "—123,45 RUB"])
+def test_both_account_roles_do_not_choose_a_transfer_side(amount):
     card = GenericCardAdapter().parse(
         document(
             (
                 "Детали операции",
-                "123,45 RUB",
+                amount,
                 "Счёт списания",
                 "Тестовый первый",
                 "Счёт зачисления",
@@ -52,6 +53,9 @@ def test_both_account_roles_do_not_choose_a_transfer_side():
         )
     )
     assert not card.blocked_reason and card.direction.value is None
+    from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
+
+    assert suggest_corrections(card, OcrReviewDefaults()).direction is None
 
 
 @pytest.mark.parametrize("label", ["Счёт отправителя", "Счёт получателя", "Переводы людям"])
