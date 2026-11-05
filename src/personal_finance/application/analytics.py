@@ -5,6 +5,7 @@ from datetime import date
 from threading import RLock
 
 from personal_finance.application.ledger import Ledger
+from personal_finance.domain.account_position import AccountPosition, account_position
 from personal_finance.domain.analytics import (
     IncomeExpenseReport,
     ReportPeriod,
@@ -40,6 +41,9 @@ class Analytics:
         self, scenario: DepositScenario, account: Account, category: Category, through: date
     ) -> DepositPlanFact:
         return deposit_plan_fact(scenario, self._snapshot(), account, category, through)
+
+    def account_position(self, accounts: list[Account], as_of: date) -> AccountPosition:
+        return account_position(self._snapshot(), accounts, as_of)
 
     def budget(
         self, period: ReportPeriod, limit: Money, scope: ReportScope | None = None

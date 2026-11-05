@@ -55,6 +55,7 @@ from personal_finance.application.ocr_cards import (
 )
 from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
+from personal_finance.domain.account_position import AccountPosition
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
@@ -89,6 +90,10 @@ from personal_finance.infrastructure.backup.container import (
 from personal_finance.infrastructure.ocr.images import load_clipboard_image
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
 from personal_finance.infrastructure.recent_books import LocalRecentBooks
+from personal_finance.presentation.account_position import (
+    AccountPositionDialog,
+    AccountPositionOptions,
+)
 from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog, CashFlowPeriodDialog
 from personal_finance.presentation.analytics_comparison import (
@@ -369,6 +374,9 @@ class MainWindow(QMainWindow):
         self.cash_flow_action = command(
             "Движение средств…", lambda: self.request_cash_flow(panel=self._report_forms)
         )
+        self.account_position_action = command(
+            "Средства на счетах…", lambda: self.request_account_position(panel=self._report_forms)
+        )
         self.budget_action = command(
             "Бюджет расходов…", lambda: self.request_budget(panel=self._report_forms)
         )
@@ -383,6 +391,7 @@ class MainWindow(QMainWindow):
             self.report_action,
             self.compare_action,
             self.cash_flow_action,
+            self.account_position_action,
             self.budget_action,
             self.saved_deposits_action,
         ):
@@ -405,6 +414,7 @@ class MainWindow(QMainWindow):
         self.report_action.setEnabled(enabled)
         self.compare_action.setEnabled(enabled)
         self.cash_flow_action.setEnabled(enabled)
+        self.account_position_action.setEnabled(enabled)
         self.budget_action.setEnabled(enabled)
         self.deposit_action.setEnabled(not self._busy)
         saved_enabled = (
@@ -485,6 +495,34 @@ class MainWindow(QMainWindow):
             return
         dialog = IncomeExpenseDialog(result[0], result[1], self, accounts=result[2])
         present_form(dialog, panel, lambda _: dialog.charts.dispose())
+
+    def request_account_position(self, *, panel: InlineForms | None = None) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        with session.mutex:
+            session.ensure_open()
+            accounts, categories = session.catalog.accounts(), session.catalog.categories()
+        dialog = AccountPositionOptions(self)
+        analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
+
+        def show(report: AccountPosition) -> None:
+            if self.session is session:
+                present_form(AccountPositionDialog(report, categories, self), panel)
+
+        def calculate() -> None:
+            as_of = dialog.result_request
+            if self._busy or self.session is not session or as_of is None:
+                return
+            self._panel_job(
+                panel,
+                lambda: analytics.account_position(accounts, as_of),
+                show,
+                "Расчёт средств на счетах…",
+            )
+
+        dialog.calculationRequested.connect(calculate)
+        present_form(dialog, panel)
 
     def request_budget(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
@@ -1223,6 +1261,7 @@ class MainWindow(QMainWindow):
             self.report_action,
             self.compare_action,
             self.cash_flow_action,
+            self.account_position_action,
             self.budget_action,
             self.deposit_action,
             self.saved_deposits_action,
