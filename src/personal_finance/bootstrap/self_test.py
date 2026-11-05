@@ -652,7 +652,7 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Отчёт движения средств изменил финансовые данные.")
-                with _step(report, "report_budget_and_account_position_read_only"):
+                with _step(report, "report_planning_read_only"):
                     check_planning_reports(source, today, expected_balances, 2223)
                 with _step(report, "forecast_deposit_read_only"):
                     before_deposit = ledger.operations(include_deleted=True)

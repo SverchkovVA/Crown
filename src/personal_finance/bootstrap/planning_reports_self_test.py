@@ -9,8 +9,10 @@ from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.models import Money
+from personal_finance.domain.savings_goals import SavingsGoalScenario, project_savings_goal
 from personal_finance.presentation.account_position import AccountPositionDialog
 from personal_finance.presentation.budget import BudgetDialog
+from personal_finance.presentation.savings_goals import SavingsGoalDialog
 
 
 def check_planning_reports(
@@ -38,9 +40,21 @@ def check_planning_reports(
         or sum(line.minor for line in position.sources) != sum(expected_balances.values())
     ):
         raise RuntimeError("Состояние счетов не совпало с принятыми остатками.")
+    goal = project_savings_goal(
+        SavingsGoalScenario(
+            date(2026, 1, 31), Money(10000), Money(30000), Money(10000), date(2026, 3, 30)
+        )
+    )
+    if (
+        goal.reached_on != date(2026, 3, 31)
+        or goal.required_monthly_minor != 20000
+        or goal.progress_basis_points != 3333
+    ):
+        raise RuntimeError("Сценарий цели не совпал с календарными пополнениями.")
     budget_dialog = BudgetDialog(budget, accounts, categories)
     position_dialog = AccountPositionDialog(position, categories)
-    dialogs = (budget_dialog, position_dialog)
+    goal_dialog = SavingsGoalDialog(goal)
+    dialogs = (budget_dialog, position_dialog, goal_dialog)
     try:
         if budget_dialog.sources.model().rowCount() != len(
             budget.sources
@@ -55,4 +69,4 @@ def check_planning_reports(
         ledger.operations(include_deleted=True) != before
         or [hashlib.sha256(path.read_bytes()).digest() for path in paths] != hashes
     ):
-        raise RuntimeError("Проверка бюджета или состояния счетов изменила книгу.")
+        raise RuntimeError("Проверка отчётов планирования изменила книгу.")
