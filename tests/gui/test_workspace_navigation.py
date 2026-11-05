@@ -66,6 +66,7 @@ def test_left_navigation_order_and_security_inside_last_settings(qtbot, session)
     assert [window.settings_tabs.tabText(i) for i in range(window.settings_tabs.count())] == [
         "Распознавание и переводы",
         "Защита и копии",
+        "Оформление",
     ]
     window.settings_tabs.setCurrentIndex(1)
     assert window.backup_status.isVisible()

@@ -20,7 +20,8 @@ def test_report_records_actual_platform_and_keeps_manual_acceptance_pending(qapp
     assert report["runtime"]["frozen"] is False
     assert report["windows11_manual_acceptance"] == "pending"
     assert report["uses_real_financial_data"] is False
-    assert len(report["steps"]) == 29
+    assert len(report["steps"]) == 30
+    assert report["steps"][0]["id"] == "interface_theme_assets"
     assert any(step["id"] == "report_planning_read_only" for step in report["steps"])
     assert report["steps"][-1]["id"] == "preview_ocr_without_engine"
     assert all(step["status"] == "passed" for step in report["steps"])
@@ -110,8 +111,11 @@ def test_optional_ocr_self_test_has_two_extra_steps_without_paths(qapp, tmp_path
     assert module.self_test(qapp, path, ocr_directory=requested) == 0
     report = json.loads(path.read_text())
     assert report["status"] == "passed" and report["local_ocr_runtime_requested"] is True
-    assert len(report["steps"]) == 31
-    assert report["steps"][0]["id"] == "verify_local_ocr_runtime"
+    assert len(report["steps"]) == 32
+    assert [step["id"] for step in report["steps"][:2]] == [
+        "interface_theme_assets",
+        "verify_local_ocr_runtime",
+    ]
     assert report["steps"][-1]["id"] == "recognize_local_synthetic_image"
     assert "SECRET_RUNTIME_PATH" not in path.read_text() and str(tmp_path) not in path.read_text()
 
