@@ -37,7 +37,8 @@
 - Ruff и форматирование 301 файлов passed; Mypy 154 исходных файла passed.
 - Windows PowerShell 5.1 / PyInstaller и изолированный EXE: passed.
 - Исходники с настоящим локальным OCR: passed, 32 шага.
-- Финальная проверка EXE с соседним OCR-модулем и полный CI ещё впереди
+- Финальный EXE с соседним OCR-модулем: passed, 32 шага.
+- Полный CI42126104515: Linux и полнота групп passed; Windows ещё выполняется
   на момент записи. Общий набор dev50 пока не заявляется пройденным.
 
 Локальные JUnit: artifacts/ocr-clock-before.xml, ocr-clock-targeted.xml,
