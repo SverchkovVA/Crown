@@ -1,0 +1,48 @@
+{
+  "format": 1,
+  "researched_on": "2026-11-05",
+  "candidate": "5.5.3.20260724",
+  "status": "incomplete",
+  "license_audit_complete": false,
+  "application_bundled": false,
+  "source_tag_commit": "db0ec62f81b0737fbbe184d8fea40af5738f8eef",
+  "release_asset": [
+    {
+      "name": "tesseract-ocr-w64-setup-5.5.3.20260724.exe",
+      "bytes": 26573224,
+      "digest": "sha256:bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4",
+      "url": "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe"
+    }
+  ],
+  "build_sources": [
+    {
+      "path": "tesseract.nsi",
+      "url": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/nsis/tesseract.nsi",
+      "git_blob_sha": "af28a9b5eb5e3f5c60dd43de38303a7d52775549"
+    },
+    {
+      "path": "installer-for-windows.yml",
+      "url": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/.github/workflows/installer-for-windows.yml",
+      "git_blob_sha": "fd79d932782ce0ab8f64831c5a5807377a6f6fd7"
+    },
+    {
+      "path": "build.sh",
+      "url": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/nsis/build.sh",
+      "git_blob_sha": "0060aaf7e8c2725bc869b0b9b534e92998f75e54"
+    },
+    {
+      "path": "find_deps.py",
+      "url": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/nsis/find_deps.py",
+      "git_blob_sha": "0aa12a91b721d9165ea433fc36416bc95875a8d1"
+    }
+  ],
+  "package_versions_locked_in_reference_script": false,
+  "msys2_package_set_recorded_in_release_assets": false,
+  "exact_build_run_identified": false,
+  "upstream_tag_signature_verified": false,
+  "notes": [
+    "Источник сборки использует обновляемые репозитории apt/pacman без закрепления версий пакетов.",
+    "Две библиотеки GCC копируются из Ubuntu MinGW, поэтому одного списка MSYS2 недостаточно.",
+    "Наличие рецепта на теге не связывает автоматически опубликованный EXE с конкретным запуском сборки."
+  ]
+}

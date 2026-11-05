@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "status": "partial_source_notices",
+  "license_audit_complete": false,
+  "application_bundled": false,
+  "files": [
+    {
+      "path": "tesseract/LICENSE",
+      "source_url": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/LICENSE",
+      "repository": "tesseract-ocr/tesseract",
+      "ref": "5.5.3",
+      "git_blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    {
+      "path": "tesseract/AUTHORS",
+      "source_url": "https://github.com/tesseract-ocr/tesseract/blob/5.5.3/AUTHORS",
+      "repository": "tesseract-ocr/tesseract",
+      "ref": "5.5.3",
+      "git_blob_sha": "9d1e73c3083260ae9485e7d07f6ac1fa271737fb",
+      "sha256": "720862b7253993b348fe15f37ed6e0d4feb0fc8df8324284d75975d54dd29923",
+      "bytes": 787
+    },
+    {
+      "path": "tessdata-fast/LICENSE",
+      "source_url": "https://github.com/tesseract-ocr/tessdata_fast/blob/87416418657359cb625c412a48b6e1d6d41c29bd/LICENSE",
+      "repository": "tesseract-ocr/tessdata_fast",
+      "ref": "87416418657359cb625c412a48b6e1d6d41c29bd",
+      "git_blob_sha": "d645695673349e3947e8e5ae42332d0ac3164cd7",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    }
+  ]
+}

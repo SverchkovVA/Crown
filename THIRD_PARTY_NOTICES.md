@@ -67,3 +67,11 @@ Tesseract и модели имеют Apache-2.0; лицензии всех тр�
 нормализации пикселей перед Tesseract. Новых пакетов и обновлений версий нет.
 Полный текст лицензии Pillow входит в существующий комплект
 [уведомлений Python-пакетов](docs/legal/python-packages/manifest.json).
+
+## Предварительные исходные тексты OCR
+
+LICENSE/AUTHORS Tesseract 5.5.3 и LICENSE закреплённых моделей сохранены
+без правок в [docs/legal/ocr-source-notices](docs/legal/ocr-source-notices/README.md).
+Манифест содержит источники и хеши текстов. Этот предварительный каталог
+не подключён к сборке и не покрывает все транзитивные DLL.
+[Граница происхождения](docs/ocr-runtime-provenance-preparation.md).
