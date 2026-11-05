@@ -504,7 +504,7 @@ class OcrBatchDialog(QDialog):
         row.other.setEnabled(kind == OperationKind.TRANSFER)
         if kind == "exclude":
             row.include.setChecked(False)
-            row.state.setText("Исключено: не меняет остатки и доходы")
+            self._set_row_state(index, "Исключено: не меняет остатки и доходы")
         self._edited()
 
     def _default_category(self, row: BatchRow) -> str | None:
@@ -525,7 +525,7 @@ class OcrBatchDialog(QDialog):
         if row.kind.currentData() not in (OperationKind.INCOME, OperationKind.EXPENSE):
             return
         if row.manual_category and row.category.currentData() is not None:
-            row.state.setText("Категория выбрана вручную")
+            self._set_row_state(index, "Категория выбрана вручную")
             return
         bank_match = bank_category_match(
             self.preview.history.cards[index].metadata,
@@ -566,7 +566,7 @@ class OcrBatchDialog(QDialog):
             not self.preview.history.cards[index].blocked_reason
             and len(self.preferences.matching_parties(row.description)) <= 1
         ):
-            row.state.setText(state)
+            self._set_row_state(index, state)
 
     def _category_chosen(self, index: int) -> None:
         row = self.rows[index]
@@ -682,7 +682,7 @@ class OcrBatchDialog(QDialog):
                 row.occurred_on.setText(value.occurred_on.strftime("%d.%m.%Y"))
                 row.local_time = value.local_time.strftime("%H:%M") if value.local_time else ""
                 row.description = value.description
-                row.state.setText("Поля изменены")
+                self._set_row_state(index, "Поля изменены")
                 self._apply_category_rule(index)
                 self._edited()
                 self._show_source()
@@ -753,6 +753,17 @@ class OcrBatchDialog(QDialog):
             draft,
         )
 
+    def _set_row_state(self, index: int, message: str) -> None:
+        row = self.rows[index]
+        row.state.setText(message)
+        row.state.setToolTip("<p>" + escape(message) + "</p><p>" + escape(row.description) + "</p>")
+
+    def _focus_problem(self, index: int) -> None:
+        self.table.setCurrentCell(index, 7)
+        self.table.scrollToItem(self.rows[index].state, QTableWidget.ScrollHint.PositionAtCenter)
+        self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+        self._show_source()
+
     def prepare(self) -> None:
         if self.checked is not None and not self.checked.isChecked():
             self.notice.setText("Сверьте выбранные поля либо отключите флажки в настройках.")
@@ -764,13 +775,14 @@ class OcrBatchDialog(QDialog):
                     continue
                 try:
                     checked.append(self._review(index))
-                    row.state.setText("Поля проверены · без записи")
+                    self._set_row_state(index, "Поля проверены · без записи")
                 except FinanceError as error:
-                    row.state.setText(str(error))
+                    self._set_row_state(index, str(error))
                     self.notice.setText(
                         f"Строка {index + 1}: {error} "
                         "Ничего не записано; правки остаются в этом окне."
                     )
+                    self._focus_problem(index)
                     return
             self.reviewed_cards = tuple(checked)
             self.notice.setText(
@@ -785,13 +797,19 @@ class OcrBatchDialog(QDialog):
                 continue
             try:
                 values.append(self._selection(index))
-                row.state.setText("Подготовлено")
+                self._set_row_state(index, "Подготовлено")
             except FinanceError as error:
-                row.state.setText(str(error))
-                failures.append(f"Строка {index + 1}: {error}")
+                self._set_row_state(index, str(error))
+                failures.append((index, f"Строка {index + 1}: {error}"))
         if failures or not values:
-            reason = failures[0] if failures else "Не выбраны готовые строки."
+            reason = (
+                f"Не готовы строки: {len(failures)}. {failures[0][1]}"
+                if failures
+                else "Не выбраны готовые строки."
+            )
             self.notice.setText(reason + " Ничего не записано; правки сохранены в этом окне.")
+            if failures:
+                self._focus_problem(failures[0][0])
             return
         selections = tuple(values)
         importing = self.importing
@@ -812,7 +830,7 @@ class OcrBatchDialog(QDialog):
                     continue
                 key = self._selection(index).evidence.source_key
                 if key in blocked:
-                    row.state.setText(blocked[key])
+                    self._set_row_state(index, blocked[key])
                     row.include.setChecked(False)
             previews = tuple(
                 p for p in previews if p.status in (OcrImportStatus.NEW, OcrImportStatus.POSSIBLE)
@@ -867,7 +885,7 @@ class OcrBatchDialog(QDialog):
                     row.other,
                 ):
                     widget.setEnabled(False)
-                row.state.setText("Сохранено")
+                self._set_row_state(index, "Сохранено")
         self.saved_count += len(result)
         self.notice.setText(
             f"Сохранено: {len(result)}. Всего в этом окне: {self.saved_count}. "
