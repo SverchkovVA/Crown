@@ -80,11 +80,12 @@ def test_vtb_bank_name_reaches_history_and_its_child_review(qtbot, monkeypatch):
     draft = VtbHistoryAdapter().parse(replace(history(), image_sha256=image.sha256))
     dialog = OcrHistoryDialog(OcrHistoryPreview(loaded, draft, "ВТБ"))
     qtbot.addWidget(dialog)
-    assert "ВТБ" in dialog.windowTitle()
+    assert dialog.windowTitle() == "История операций"
+    assert dialog.preview.bank_name == "ВТБ"
     seen = []
 
     def show(child):
-        assert child.preview.bank_name == "ВТБ" and "ВТБ" in child.windowTitle()
+        assert child.preview.bank_name == "ВТБ" and child.windowTitle() == "Карточка операции"
         assert child.preview.card.document is draft.document
         seen.append(True)
         return QDialog.DialogCode.Rejected
