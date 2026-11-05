@@ -62,7 +62,8 @@ def preview_dialog(qtbot):
 
 def test_universal_list_without_book_reviews_all_fields_in_memory(qtbot):
     dialog = preview_dialog(qtbot)
-    assert dialog.importing is None and "Без записи" in dialog.windowTitle()
+    assert dialog.importing is None and dialog.windowTitle() == "История операций"
+    assert "без записи" in dialog.notice.text().casefold()
     assert dialog.common_account.isHidden()
     assert all(dialog.table.isColumnHidden(i) for i in (3, 4, 5, 6))
     assert dialog.rows[0].amount.text() == "12,50"
