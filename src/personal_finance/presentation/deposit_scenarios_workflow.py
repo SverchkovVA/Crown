@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QHeaderView,
     QLineEdit,
+    QPushButton,
     QTableView,
     QVBoxLayout,
 )
@@ -86,10 +87,11 @@ class SaveForecastDialog(DepositForecastDialog):
         self.save_requested = False
         buttons = self.findChild(QDialogButtonBox)
         assert buttons is not None
-        self.save_button = buttons.addButton(
-            "Сохранить изменения…" if editing else "Сохранить сценарий…",
-            QDialogButtonBox.ButtonRole.ActionRole,
+        # В Windows CI addButton вернул QThread; сохраняем созданную QPushButton.
+        self.save_button = QPushButton(
+            "Сохранить изменения…" if editing else "Сохранить сценарий…", buttons
         )
+        buttons.addButton(self.save_button, QDialogButtonBox.ButtonRole.ActionRole)
         self.storage_note.setText(
             "Нажмите «" + self.save_button.text() + "», чтобы сохранить условия в этой книге. "
             "Расчёт не создаёт фактических выплат и не меняет остатки."

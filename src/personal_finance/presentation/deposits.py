@@ -584,9 +584,8 @@ class DepositForecastDialog(QDialog):
         layout.addWidget(self.storage_note)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         if allow_edit:
-            self.edit_button = buttons.addButton(
-                "Изменить условия", QDialogButtonBox.ButtonRole.ActionRole
-            )
+            self.edit_button = QPushButton("Изменить условия", buttons)
+            buttons.addButton(self.edit_button, QDialogButtonBox.ButtonRole.ActionRole)
             self.edit_button.setAccessibleName("Изменить условия прогноза вклада")
             self.edit_button.setToolTip(
                 "Вернуться к введённым условиям и рассчитать другой вариант."
