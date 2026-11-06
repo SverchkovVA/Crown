@@ -1712,7 +1712,6 @@ class MainWindow(QMainWindow):
             selection.addWidget(action)
         selection.addStretch()
         selection.addWidget(self.delete_operation_button)
-        layout.addWidget(self.journal_selection_tools)
         self.journal_selection_tools.hide()
         self.operation_table = QTableView()
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
@@ -1736,6 +1735,7 @@ class MainWindow(QMainWindow):
         self.journal_empty = label("Операций пока нет.", "emptyState")
         layout.addWidget(self.journal_empty)
         layout.addWidget(self.operation_table, 1)
+        layout.addWidget(self.journal_selection_tools)
         return wrapper
 
     def _update_journal_menu(self) -> None:

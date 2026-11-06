@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QScrollArea
 
 from personal_finance.application.ocr_review import OcrReviewDefaults
@@ -121,7 +121,11 @@ def test_journal_reveals_filters_and_selected_actions_without_changing_query(qtb
     assert window.journal_filters.isVisible() and window.filter_button.isVisible()
     qtbot.mouseClick(window.journal_filters_toggle, Qt.MouseButton.LeftButton)
     assert window._active_query == original
+    qtbot.wait(20)
+    table_top = window.operation_table.viewport().mapTo(window, QPoint()).y()
     window.operation_table.selectRow(0)
+    qtbot.wait(20)
+    assert window.operation_table.viewport().mapTo(window, QPoint()).y() == table_top
     assert window.journal_selection_tools.isVisible()
     assert window.edit_operation_button.isVisible() and window.refund_button.isVisible()
     window.operation_table.clearSelection()
