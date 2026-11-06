@@ -1,7 +1,7 @@
 from datetime import date
 
 from PySide6.QtCore import QDate, Qt, QThread
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from personal_finance.application import vault as vault_module
 from personal_finance.domain.ledger import OperationDraft, OperationKind
@@ -54,11 +54,11 @@ def test_main_action_runs_in_worker_and_keeps_ledger_unchanged(qtbot, session, m
     window.navigation.setCurrentRow(3)
     window.balance_date.setDate(QDate(2026, 1, 15))
     window.show()
-    threads = []
+    worker_in_gui = []
     reconcile = session.ledger.reconcile
 
     def record(*args):
-        threads.append(QThread.currentThread())
+        worker_in_gui.append(QThread.isMainThread())
         return reconcile(*args)
 
     monkeypatch.setattr(session.ledger, "reconcile", record)
@@ -76,7 +76,7 @@ def test_main_action_runs_in_worker_and_keeps_ledger_unchanged(qtbot, session, m
     result = current()
     assert not result.isWindow() and result.result_snapshot.difference_minor == -1000
     result.reject()
-    assert threads and threads[0] != QApplication.instance().thread()
+    assert worker_in_gui == [False]
     assert session.ledger.operations() == [opening]
     session.check_integrity()
     window.lock_book()

@@ -24,11 +24,11 @@ def test_filters_reach_one_snapshot_worker_and_both_actions_follow_busy_state(
     assert window.compare_action.isEnabled()
     before = fingerprints(session)
     seen = []
-    reads = []
+    reads_in_gui = []
     original = session.ledger.operations
 
     def operations(*args, **kwargs):
-        reads.append(QThread.currentThread())
+        reads_in_gui.append(QThread.isMainThread())
         return original(*args, **kwargs)
 
     monkeypatch.setattr(session.ledger, "operations", operations)
@@ -44,7 +44,7 @@ def test_filters_reach_one_snapshot_worker_and_both_actions_follow_busy_state(
         return QDialog.DialogCode.Accepted
 
     def show(dialog):
-        assert QThread.currentThread() == window.thread() and not window._busy and not window._jobs
+        assert QThread.isMainThread() and not window._busy and not window._jobs
         seen.append(dialog.comparison)
         return QDialog.DialogCode.Rejected
 
@@ -58,7 +58,7 @@ def test_filters_reach_one_snapshot_worker_and_both_actions_follow_busy_state(
     )
     qtbot.waitUntil(lambda: not window._busy and bool(seen), timeout=15000)
     result = seen[0]
-    assert len(reads) == 1 and reads[0] != window.thread()
+    assert reads_in_gui == [False]
     assert (
         result.before.scope == result.after.scope
         and result.before.scope.account_ids == frozenset({account.id})

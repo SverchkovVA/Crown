@@ -18,12 +18,12 @@ def test_cash_flow_worker_reads_once_keeps_scope_and_releases_ui_before_dialog(
     window.activate_session(session)
     assert window.cash_flow_action.isEnabled()
     before = fingerprints(session)
-    reads = []
+    reads_in_gui = []
     seen = []
     original = session.ledger.operations
 
     def operations(*args, **kwargs):
-        reads.append(QThread.currentThread())
+        reads_in_gui.append(QThread.isMainThread())
         return original(*args, **kwargs)
 
     monkeypatch.setattr(session.ledger, "operations", operations)
@@ -36,7 +36,7 @@ def test_cash_flow_worker_reads_once_keeps_scope_and_releases_ui_before_dialog(
         return QDialog.DialogCode.Accepted
 
     def show(dialog):
-        assert QThread.currentThread() == window.thread() and not window._busy and not window._jobs
+        assert QThread.isMainThread() and not window._busy and not window._jobs
         seen.append(dialog.report)
         return QDialog.DialogCode.Rejected
 
@@ -48,7 +48,7 @@ def test_cash_flow_worker_reads_once_keeps_scope_and_releases_ui_before_dialog(
         for v in [window.cash_flow_action, window.report_action, window.compare_action]
     )
     qtbot.waitUntil(lambda: not window._busy and bool(seen), timeout=15000)
-    assert len(reads) == 1 and reads[0] != window.thread()
+    assert reads_in_gui == [False]
     assert (
         seen[0].scope.account_ids == frozenset({account.id})
         and seen[0].totals[0].closing_minor == 1020

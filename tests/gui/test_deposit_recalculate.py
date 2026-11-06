@@ -48,11 +48,11 @@ def test_several_recalculations_use_one_live_form_and_real_workers(qtbot, monkey
     qtbot.addWidget(window)
     forms = []
     reports = []
-    threads = []
+    worker_in_gui = []
     calculate = module.forecast_deposit
 
     def counted(value):
-        threads.append(QThread.currentThread())
+        worker_in_gui.append(QThread.isMainThread())
         return calculate(value)
 
     def choose(form):
@@ -84,7 +84,7 @@ def test_several_recalculations_use_one_live_form_and_real_workers(qtbot, monkey
     window.request_deposit()
     qtbot.waitUntil(lambda: len(reports) == 3 and not window._busy, timeout=15000)
     qtbot.waitUntil(lambda: not shiboken6.isValid(forms[0]), timeout=15000)
-    assert len(forms) == 3 and len(threads) == 3 and all(t != window.thread() for t in threads)
+    assert len(forms) == 3 and worker_in_gui == [False, False, False]
     assert [v.interest_minor for v in reports] == [1, 2, 3]
     assert len({v.scenario.rates[0].revision_id for v in reports}) == 1
     assert reports[0].scenario.initial.minor == 1

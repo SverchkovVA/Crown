@@ -20,12 +20,12 @@ def test_forecast_worker_without_book_or_without_changing_book(
         window.activate_session(session)
     before = fingerprints(session)
     assert window.deposit_action.isEnabled()
-    threads = []
+    worker_in_gui = []
     seen = []
     original = module.forecast_deposit
 
     def calculate(value):
-        threads.append(QThread.currentThread())
+        worker_in_gui.append(QThread.isMainThread())
         return original(value)
 
     def choose(dialog):
@@ -45,7 +45,7 @@ def test_forecast_worker_without_book_or_without_changing_book(
     window.request_deposit()
     assert window._busy and not window.deposit_action.isEnabled()
     qtbot.waitUntil(lambda: not window._busy and bool(seen), timeout=15000)
-    assert len(threads) == 1 and threads[0] != window.thread()
+    assert worker_in_gui == [False]
     assert seen[0].interest_minor == 1 and fingerprints(session) == before
     if use_book:
         window.lock_book()

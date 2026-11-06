@@ -77,7 +77,7 @@ def test_archive_runs_off_gui_and_passes_exact_revision(context, qtbot, monkeypa
     calls = []
 
     def archive(*args, **kwargs):
-        assert QThread.currentThread() != window.thread()
+        assert not QThread.isMainThread()
         session.ensure_open.assert_called()
         calls.append((args, kwargs))
         return replace(value, is_deleted=True)
@@ -133,7 +133,7 @@ def test_save_uses_exact_expected_revision_and_new_command(context, qtbot, monke
     calls, saved = [], []
 
     def save(*args, **kwargs):
-        assert QThread.currentThread() != window.thread()
+        assert not QThread.isMainThread()
         calls.append((args, kwargs))
         return value
 
@@ -291,17 +291,18 @@ def test_real_book_workflow_preserves_history_and_financial_journal(qtbot, tmp_p
 
 def test_form_recalculation_saves_only_last_explicit_result(context, qtbot, monkeypatch):
     window, session, controller = context
-    forms, reports, saved, threads = [], [], [], []
+    forms, reports, saved, worker_in_gui = [], [], [], []
     value = record()
     session.deposit_scenarios.save.return_value = value
     monkeypatch.setattr(controller, "_saved", saved.append)
     calculate = m.forecast_deposit
 
     def worker(scenario_value):
-        threads.append(QThread.currentThread())
+        worker_in_gui.append(QThread.isMainThread())
         return calculate(scenario_value)
 
     def fill(form):
+        assert QThread.isMainThread()
         forms.append(form)
         assert not window._busy
         if len(forms) == 1:
@@ -313,6 +314,7 @@ def test_form_recalculation_saves_only_last_explicit_result(context, qtbot, monk
         return form.result()
 
     def result(dialog):
+        assert QThread.isMainThread()
         assert not window._busy
         reports.append(dialog.report)
         if len(reports) == 1:
@@ -322,6 +324,7 @@ def test_form_recalculation_saves_only_last_explicit_result(context, qtbot, monk
         return dialog.result()
 
     def name(dialog):
+        assert QThread.isMainThread()
         dialog.name.setText("Сохранить последний")
         dialog._accept()
         return dialog.result()
@@ -332,8 +335,8 @@ def test_form_recalculation_saves_only_last_explicit_result(context, qtbot, monk
     monkeypatch.setattr(m.ScenarioNameDialog, "exec", name)
     controller.edit(None)
     qtbot.waitUntil(lambda: len(saved) == 1 and not window._busy)
-    assert len(forms) == len(reports) == len(threads) == 2
-    assert all(thread != window.thread() for thread in threads)
+    assert len(forms) == len(reports) == len(worker_in_gui) == 2
+    assert worker_in_gui == [False, False]
     assert reports[0].scenario.initial.minor == 200000
     assert reports[1].scenario.initial.minor == 400000
     assert session.deposit_scenarios.save.call_count == 1
