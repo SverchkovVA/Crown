@@ -10,13 +10,25 @@ from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, Gene
 from tests.ocr_fixtures import ENGINE
 
 
-def source_for(kind, *, first="1", next_left=650, currency_left=820, single_word=False):
+def source_for(
+    kind, *, first="1", next_left=650, currency_left=820, single_word=False, decimal_parts=None
+):
     pieces = [
         ("Детали операции" if kind == "card" else "История операций", 40, 30, 400),
         ("27 октября 2026", 40, 95, 300),
         ("Учебный магазин", 40, 200, 230),
     ]
-    if single_word:
+    if decimal_parts is not None:
+        locations = (
+            [(300, 90), (560, 16), (680, 50)]
+            if len(decimal_parts) == 3
+            else [(300, 100), (650, 70)]
+        )
+        pieces.extend(
+            (text, left, 200, width)
+            for text, (left, width) in zip(decimal_parts, locations, strict=True)
+        )
+    elif single_word:
         pieces.append(("1 732,19", 600, 200, 180))
     else:
         pieces.extend(((first, 300, 200, 16), ("732,19", next_left, 200, 100)))
@@ -68,3 +80,12 @@ def test_single_recognized_word_keeps_its_number(kind):
     source = source_for(kind, single_word=True)
     result = parse(kind, source)
     assert result.amount.value == 173219 and not result.blocked_reason
+
+
+@pytest.mark.parametrize("kind", ["card", "history"])
+@pytest.mark.parametrize("parts", [("473", ",", "15"), ("473,", "15"), ("473", ",15")])
+def test_explicit_decimal_separator_keeps_spaced_fraction(kind, parts):
+    source = source_for(kind, decimal_parts=parts)
+    result = parse(kind, source)
+    assert result.amount.value == 47315 and not result.blocked_reason
+    assert result.document is source

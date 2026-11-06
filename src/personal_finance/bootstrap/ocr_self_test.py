@@ -13,9 +13,10 @@ from personal_finance.application.ocr_cards import (
     OcrHistoryPreview,
 )
 from personal_finance.domain.ocr import OcrBox, OcrDocument, OcrEngineInfo, OcrWord
+from personal_finance.domain.ocr_cards import OcrIssue
 from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.ocr_settings import OcrPreferences
-from personal_finance.infrastructure.ocr.generic import GenericHistoryAdapter
+from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, GenericHistoryAdapter
 from personal_finance.infrastructure.ocr.images import decode_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
 from personal_finance.infrastructure.ocr.t_bank_history import TBankHistoryAdapter
@@ -89,6 +90,35 @@ def check_packaged_ocr_preview() -> None:
             or generic.cards[0].currency.value is not None
         ):
             raise RuntimeError("Неверный разбор дробной суммы общего профиля.")
+        disconnected = replace(
+            vtb_document,
+            words=(
+                *vtb_document.words[:2],
+                OcrWord("Магазин", OcrBox(10, 60, 50, 20), Decimal(95), (1, 1, 3), 1),
+                OcrWord("1", OcrBox(70, 60, 8, 20), Decimal(95), (1, 1, 3), 2),
+                OcrWord("732,19 RUB", OcrBox(200, 60, 100, 20), Decimal(95), (1, 1, 3), 3),
+            ),
+        )
+        ambiguous = GenericCardAdapter().parse(disconnected)
+        if (
+            ambiguous.amount.value is not None
+            or OcrIssue.AMBIGUOUS not in ambiguous.amount.issues
+            or not ambiguous.blocked_reason
+            or ambiguous.document is not disconnected
+        ):
+            raise RuntimeError("Раздельные колонки ошибочно объединены в сумму.")
+        decimal_document = replace(
+            vtb_document,
+            words=(
+                *vtb_document.words[:2],
+                OcrWord("−473", OcrBox(80, 60, 40, 20), Decimal(95), (1, 1, 3), 1),
+                OcrWord(",", OcrBox(145, 60, 5, 20), Decimal(95), (1, 1, 3), 2),
+                OcrWord("15", OcrBox(220, 60, 25, 20), Decimal(95), (1, 1, 3), 3),
+            ),
+        )
+        decimal_card = GenericCardAdapter().parse(decimal_document)
+        if decimal_card.amount.value != 47315 or decimal_card.blocked_reason:
+            raise RuntimeError("Явный разделитель дробной суммы потерян.")
         inline_document = replace(
             generic_document,
             words=(

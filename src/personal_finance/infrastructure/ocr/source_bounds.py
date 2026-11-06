@@ -3,7 +3,7 @@
 from dataclasses import replace
 from itertools import pairwise
 
-from personal_finance.domain.ocr import OcrBox
+from personal_finance.domain.ocr import OcrBox, OcrWord
 from personal_finance.domain.ocr_cards import OcrCardDraft, OcrField, OcrIssue
 
 
@@ -57,31 +57,53 @@ def block_disconnected_amount(card: OcrCardDraft) -> OcrCardDraft:
     """Не соединять числовые разряды из раздельных областей строки."""
     if card.amount.value is None:
         return card
+    words = tuple(card.document.words[i] for i in card.amount.word_indices)
     numeric = sorted(
-        (
-            card.document.words[i].box
-            for i in card.amount.word_indices
-            if any("0" <= char <= "9" for char in card.document.words[i].text)
-        ),
-        key=lambda box: (2 * box.top + box.height, box.left),
+        (word for word in words if any("0" <= char <= "9" for char in word.text)),
+        key=lambda word: (2 * word.box.top + word.box.height, word.box.left),
     )
-    rows: list[list[OcrBox]] = []
-    for box in numeric:
+    punctuation = tuple(word for word in words if word.text.strip() in (",", "."))
+    rows: list[list[OcrWord]] = []
+    for word in numeric:
+        box = word.box
         for row in reversed(rows[-3:]):
-            anchor = row[0]
+            anchor = row[0].box
             overlap = min(anchor.top + anchor.height, box.top + box.height) - max(
                 anchor.top, box.top
             )
             if 2 * overlap >= min(anchor.height, box.height):
-                row.append(box)
+                row.append(word)
                 break
         else:
-            rows.append([box])
+            rows.append([word])
+
+    def decimal_between(previous: OcrWord, current: OcrWord) -> bool:
+        if previous.text.rstrip().endswith((",", ".")) or current.text.lstrip().startswith(
+            (",", ".")
+        ):
+            return True
+        left, right = previous.box, current.box
+        return any(
+            left.left + left.width <= mark.box.left
+            and mark.box.left + mark.box.width <= right.left
+            and (
+                mark.line_key in (previous.line_key, current.line_key)
+                or 2
+                * (
+                    min(left.top + left.height, mark.box.top + mark.box.height)
+                    - max(left.top, mark.box.top)
+                )
+                >= min(left.height, mark.box.height)
+            )
+            for mark in punctuation
+        )
+
     # Равные повторные отображения суммы на разных строках не соединяются.
     for row in rows:
-        for previous, current in pairwise(sorted(row, key=lambda box: box.left)):
-            gap = current.left - previous.left - previous.width
-            if gap > 2 * max(previous.height, current.height):
+        for previous, current in pairwise(sorted(row, key=lambda word: word.box.left)):
+            left, right = previous.box, current.box
+            gap = right.left - left.left - left.width
+            if gap > 2 * max(left.height, right.height) and not decimal_between(previous, current):
                 return replace(
                     card,
                     amount=OcrField(
