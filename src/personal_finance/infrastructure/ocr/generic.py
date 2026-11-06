@@ -33,6 +33,7 @@ _SUMMARY = re.compile(
     r"расходы\s+за|потрачено|получено\s+за|оборот|лимит)\b",
     re.I,
 )
+_TOTAL_CAPTION = re.compile(r"(?:траты|доходы|расходы)", re.I)
 _DETAILS = re.compile(
     r"^(?:сч[её]т|номер|карта|телефон|мсс|mcc|инн|бик|идентификатор|id|авторизац|"
     r"договор|срок действия|период)\b",
@@ -353,6 +354,13 @@ def _residue(row: Row, money: tuple[str, tuple[int, ...], int, int]) -> str:
     return re.sub(r"^(?:сегодня|вчера),?\s*", "", text.strip(), flags=re.I).strip(" ,·:—−-")
 
 
+def _is_summary(document: OcrDocument, row: Row) -> bool:
+    if _SUMMARY.match(row.text):
+        return True
+    amounts = _money(document, row)
+    return len(amounts) == 1 and bool(_TOTAL_CAPTION.fullmatch(_residue(row, amounts[0])))
+
+
 def _currency_hint(row: Row) -> tuple[str, tuple[int, ...]] | None:
     match = re.fullmatch(
         rf"(?:валюта(?: операции)?\s*:?\s*)?"
@@ -586,7 +594,7 @@ class GenericCardAdapter:
                 (not secondary or _labelled_operation_date(rows, index))
                 and not bound_amount
                 and not _DETAILS.match(row.text)
-                and not _SUMMARY.match(row.text)
+                and not _is_summary(document, row)
             ):
                 dates.extend(_dates(document, row))
             if re.match(
@@ -598,7 +606,7 @@ class GenericCardAdapter:
                 secondary
                 or index in reward_rows
                 or _noncash_quantity(document, row)
-                or _SUMMARY.match(row.text)
+                or _is_summary(document, row)
                 or _DETAILS.match(row.text)
                 or re.match(r"^(?:к[еэ]шб[еэ]к|бонусы)\b", row.text, re.I)
             ):
@@ -614,7 +622,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v8") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v9") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -659,14 +667,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v8",
+                "generic-card-v9",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return _contextual(_with_account_direction(result, rows))
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v8")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v9")
         occurred, clock = _date_fields(document, dates)
         empty = replace(
             empty,
@@ -731,7 +739,7 @@ class GenericHistoryAdapter:
                 else:
                     unbound_fee = True
                 continue
-            if _SUMMARY.match(row.text) or _DETAILS.match(row.text):
+            if _is_summary(document, row) or _DETAILS.match(row.text):
                 fragments += len(monies)
                 continue
             if dates and not monies:
@@ -771,7 +779,7 @@ class GenericHistoryAdapter:
                 if 0 <= row.top - previous.bottom <= 2 * max(row.height, previous.height) and not (
                     _dates(document, previous)
                     or _money(document, previous)
-                    or _SUMMARY.match(previous.text)
+                    or _is_summary(document, previous)
                     or _DETAILS.match(previous.text)
                     or _HEADING.fullmatch(previous.text)
                     or _HISTORY.fullmatch(previous.text)
@@ -808,7 +816,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v6",
+                "generic-history-v7",
                 blocked,
             )
             if index + 1 < len(rows):
@@ -837,7 +845,7 @@ class GenericHistoryAdapter:
         money_rows = [
             r
             for r in rows
-            if _money(document, r) and not _SUMMARY.match(r.text) and not _DETAILS.match(r.text)
+            if _money(document, r) and not _is_summary(document, r) and not _DETAILS.match(r.text)
         ]
         if any(
             _PENDING.search(r.text)
