@@ -56,7 +56,7 @@ def test_summary_rows_do_not_hide_individual_operations_or_change_source():
     result = GenericHistoryAdapter().parse(source)
     assert not result.blocked_reason and len(result.cards) == 2
     assert [card.amount.value for card in result.cards] == [7315, 14907]
-    assert all(card.adapter == "generic-history-v9" for card in result.cards)
+    assert all(card.adapter == "generic-history-v10" for card in result.cards)
     assert result.unassigned_fragments == 2
     assert source.words is words
 

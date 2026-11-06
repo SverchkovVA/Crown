@@ -433,7 +433,7 @@ def test_history_currency_forms_and_date_header(currency):
     assert all(
         c.currency.value == "RUB"
         and c.occurred_on.value == date(2026, 10, 22)
-        and c.adapter == "generic-history-v9"
+        and c.adapter == "generic-history-v10"
         for c in value.cards
     )
 

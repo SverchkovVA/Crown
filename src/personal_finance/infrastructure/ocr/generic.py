@@ -421,6 +421,17 @@ def _summary_rows(document: OcrDocument, rows: list[Row]) -> set[int]:
     return result
 
 
+def _history_content_start(document: OcrDocument, rows: list[Row]) -> int:
+    """Шапка выше раннего заголовка не содержит строк самого списка."""
+    for index, row in enumerate(rows):
+        # Поздняя навигация не должна скрывать уже датированные операции.
+        if _dates(document, row):
+            return 0
+        if 3 * row.top <= document.height and _HISTORY.fullmatch(row.text):
+            return index
+    return 0
+
+
 def _currency_hint(row: Row) -> tuple[str, tuple[int, ...]] | None:
     match = re.fullmatch(
         rf"(?:валюта(?: операции)?\s*:?\s*)?"
@@ -778,6 +789,7 @@ class GenericHistoryAdapter:
         planned = False
         unbound_fee = False
         subtitles = history_subtitles(document, rows)
+        content_start = _history_content_start(document, rows)
         for index, row in enumerate(rows):
             if index in subtitles or _noncash_quantity(document, row):
                 continue
@@ -801,6 +813,9 @@ class GenericHistoryAdapter:
                 else:
                     unbound_fee = True
                 continue
+            if index < content_start:
+                fragments += len(monies)
+                continue
             if index in summary_rows or _DETAILS.match(row.text):
                 fragments += len(monies)
                 continue
@@ -808,7 +823,8 @@ class GenericHistoryAdapter:
                 active_date = dates[0] if len(dates) == 1 else None
                 date_count += 1
                 continue
-            if dates and len(monies) == 1 and not _residue(row, monies[0]):
+            # Повреждённый знак итога не становится описанием новой операции.
+            if dates and len(monies) == 1 and not _residue(row, monies[0]).strip("~≈∼"):
                 active_date = dates[0] if len(dates) == 1 else None
                 date_count += 1
                 fragments += 1
@@ -878,7 +894,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v9",
+                "generic-history-v10",
                 blocked,
             )
             if index + 1 < len(rows):
