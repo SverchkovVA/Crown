@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFocusEvent, QImage, QMouseEvent, QPen, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -19,7 +19,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -163,7 +165,30 @@ class OcrPreviewDialog(QDialog):
         self.resize(1180, 720)
         self.setMinimumSize(920, 580)
         layout = QVBoxLayout(self)
-        layout.addWidget(
+        self.review_info = QWidget()
+        self.review_info.setProperty("stickyNotice", True)
+        information = QVBoxLayout(self.review_info)
+        information.setContentsMargins(0, 0, 0, 0)
+        summary_row = QHBoxLayout()
+        self.summary = plain(
+            f"Если нет в снимке: {self.review_defaults.currency} · "
+            f"{self.review_defaults.reference_year}"
+        )
+        summary_row.addWidget(self.summary, 1)
+        self.details_toggle = QToolButton()
+        self.details_toggle.setText("Сведения")
+        self.details_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.details_toggle.setArrowType(Qt.ArrowType.DownArrow)
+        self.details_toggle.setCheckable(True)
+        self.details_toggle.setAccessibleName("Сведения об источнике и точности распознавания")
+        self.details_toggle.setToolTip("Настройки, ограничения распознавания и оценки полей")
+        summary_row.addWidget(self.details_toggle)
+        information.addLayout(summary_row)
+        self.info_body = QWidget()
+        self.info_body.hide()
+        info_layout = QVBoxLayout(self.info_body)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.addWidget(
             plain(
                 "Проверка остаётся в памяти. "
                 + (
@@ -173,6 +198,7 @@ class OcrPreviewDialog(QDialog):
                 )
             )
         )
+        self.details_toggle.toggled.connect(self._toggle_details)
         self.defaults_note = plain(
             f"Валюта и год по настройке: {self.review_defaults.currency}, "
             f"{self.review_defaults.reference_year}. Сверьте предложения с изображением. "
@@ -181,7 +207,7 @@ class OcrPreviewDialog(QDialog):
         metadata_note = context_note(preview.card.metadata)
         if metadata_note:
             self.defaults_note.setText(self.defaults_note.text() + "\n" + metadata_note)
-        layout.addWidget(self.defaults_note)
+        info_layout.addWidget(self.defaults_note)
         split = QSplitter(Qt.Orientation.Horizontal)
         image_panel = QWidget()
         image_layout = QVBoxLayout(image_panel)
@@ -215,7 +241,7 @@ class OcrPreviewDialog(QDialog):
                 "Проверьте значения перед продолжением."
             )
         )
-        layout.addWidget(self.notice)
+        info_layout.addWidget(self.notice)
         if allow_financial_prepare and not preview.card.amount.word_indices:
             layout.addWidget(
                 plain(
@@ -268,9 +294,20 @@ class OcrPreviewDialog(QDialog):
             panel = QWidget()
             column = QVBoxLayout(panel)
             column.setContentsMargins(0, 0, 0, 0)
-            column.addWidget(editor)
+            heading = QHBoxLayout()
+            title_label = plain(title)
+            title_label.setBuddy(editor)
+            heading.addWidget(title_label, 1)
+            editor.setAccessibleName(title)
+            editor.setAccessibleDescription(self._source_status(field))
+            editor.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             row = QHBoxLayout()
-            show = QPushButton("Показать источник")
+            row.addWidget(editor, 1)
+            show = QPushButton("Источник")
+            show.setAccessibleName("Показать источник: " + title)
+            show.setToolTip(self._source_status(field))
+            show.setAccessibleDescription(self._source_status(field))
+            show.setWhatsThis(self._source_status(field))
             show.setEnabled(bool(field.word_indices))
             show.clicked.connect(
                 lambda checked=False, indices=field.word_indices: self.image_view.show_evidence(
@@ -286,20 +323,27 @@ class OcrPreviewDialog(QDialog):
                 "occurred_on",
             ):
                 check = QCheckBox("Проверено")
+                check.setAccessibleName(title + ": проверено")
                 self.checks[name] = check
-                row.addWidget(check)
+                heading.addWidget(check)
                 check.toggled.connect(self._update)
             signal = (
                 editor.textChanged if isinstance(editor, QLineEdit) else editor.currentIndexChanged
             )
             signal.connect(lambda *args, name=name: self._edited(name))
+            column.addLayout(heading)
             column.addLayout(row)
-            column.addWidget(plain(self._source_status(field)))
-            form.addRow(title, panel)
+            form.addRow(panel)
+        form.addRow(self.info_body)
         scroll.setWidget(body)
+        self.fields_scroll = scroll
+        self._details_timer = QTimer(self)
+        self._details_timer.setSingleShot(True)
+        self._details_timer.timeout.connect(self._show_details)
         split.addWidget(scroll)
         split.setSizes([590, 530])
         layout.addWidget(split, 1)
+        layout.addWidget(self.review_info)
         self.check_all = QPushButton("Проверить все поля")
         self.check_all.setAccessibleName("Подтвердить проверку всех обязательных полей карточки")
         self.check_all.setToolTip(
@@ -327,6 +371,16 @@ class OcrPreviewDialog(QDialog):
         box.rejected.connect(self.reject)
         layout.addWidget(box)
         self._update()
+
+    def _toggle_details(self, shown: bool) -> None:
+        self.info_body.setVisible(shown)
+        self.details_toggle.setArrowType(Qt.ArrowType.UpArrow if shown else Qt.ArrowType.DownArrow)
+        if shown:
+            self._details_timer.start(0)
+
+    def _show_details(self) -> None:
+        if self.details_toggle.isChecked():
+            self.fields_scroll.verticalScrollBar().setValue(self.info_body.y())
 
     def _source_status[T](self, field: OcrField[T]) -> str:
         confidence = self.preview.card.confidence(field)

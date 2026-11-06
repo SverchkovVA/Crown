@@ -84,8 +84,8 @@ def test_ocr_actions_stay_visible_while_content_scrolls(qtbot, session):
     qtbot.waitUntil(lambda: dialog.isVisible())
     qtbot.wait(30)
     footer = dialog.findChild(ActionFooter)
-    assert footer is not None and footer.isAncestorOf(dialog.defaults_note)
-    assert footer.isAncestorOf(dialog.notice)
+    assert footer is not None and footer.isAncestorOf(dialog.validation_note)
+    assert footer.isAncestorOf(dialog.check_all)
     for button in (dialog.finish, dialog.prepare_button):
         rect = button.rect()
         top = button.mapTo(window, rect.topLeft())
