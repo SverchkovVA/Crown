@@ -38,8 +38,11 @@
 - Windows PowerShell 5.1 / PyInstaller и изолированный EXE: passed.
 - Исходники с настоящим локальным OCR: passed, 32 шага.
 - Финальный EXE с соседним OCR-модулем: passed, 32 шага.
-- Полный CI42126104515: Linux и полнота групп passed; Windows ещё выполняется
-  на момент записи. Общий набор dev50 пока не заявляется пройденным.
+- [Полный CI42126104515](https://github.com/SverchkovVA/Crown/actions/runs/42126104515)
+  passed: по 2088 тестов Windows и Linux, 0 errors/failures/skipped.
+  Linux 1021+1067 покрывает весь набор без пересечения.
+  Сверены четыре технических архива и их SHA-256, JUnit/JSON и commit77a1713.
+  Windows Server / PowerShell5.1: сборка и source/EXE по 30 шагов passed.
 
 Локальные JUnit: artifacts/ocr-clock-before.xml, ocr-clock-targeted.xml,
 dev50-ocr-regressions.xml внутри worktree-ocr-dev50.
