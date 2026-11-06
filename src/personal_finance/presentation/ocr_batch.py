@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from html import escape
 from typing import Any
 
-from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QThreadPool, Slot
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -763,6 +764,22 @@ class OcrBatchDialog(QDialog):
         self.table.scrollToItem(self.rows[index].state, QTableWidget.ScrollHint.PositionAtCenter)
         self.table.setFocus(Qt.FocusReason.OtherFocusReason)
         self._show_source()
+        # Нижнее сообщение меняет высоту тела формы на следующем проходе layout.
+        QTimer.singleShot(0, self, lambda: self._reveal_problem(index))
+
+    def _reveal_problem(self, index: int) -> None:
+        if not self.isVisible() or self.table.currentRow() != index:
+            return
+        if (layout := self.layout()) is not None:
+            layout.activate()
+        self.table.scrollToItem(self.rows[index].state, QTableWidget.ScrollHint.PositionAtCenter)
+        owner = self.table.parentWidget()
+        while owner is not None:
+            if isinstance(owner, QScrollArea) and (content := owner.widget()) is not None:
+                rect = self.table.visualItemRect(self.rows[index].state)
+                point = self.table.viewport().mapTo(content, rect.center())
+                owner.ensureVisible(point.x(), point.y(), 16, rect.height() // 2 + 2)
+            owner = owner.parentWidget()
 
     def prepare(self) -> None:
         if self.checked is not None and not self.checked.isChecked():
