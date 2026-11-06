@@ -106,16 +106,26 @@ def check_packaged_ocr_preview() -> None:
             or inline_history.cards[0].occurred_on.value != date(2026, 10, 22)
         ):
             raise RuntimeError("Дата рядом с суммой общего профиля не выделена.")
-        for box in (
-            OcrBox(0, 60, 100, 20),
-            OcrBox(220, 60, 100, 20),
-            OcrBox(200, 0, 100, 20),
-            OcrBox(200, 100, 100, 20),
-        ):
-            clipped_document = replace(
+        clipped_documents = tuple(
+            replace(
                 generic_document,
                 words=(*generic_document.words[:-1], replace(generic_document.words[-1], box=box)),
             )
+            for box in (
+                OcrBox(0, 60, 100, 20),
+                OcrBox(220, 60, 100, 20),
+                OcrBox(200, 0, 100, 20),
+                OcrBox(200, 100, 100, 20),
+            )
+        )
+        unknown_tail = replace(
+            generic_document,
+            words=(
+                *generic_document.words,
+                OcrWord("RUE", OcrBox(304, 60, 16, 20), Decimal(95), (1, 1, 3), 3),
+            ),
+        )
+        for clipped_document in (*clipped_documents, unknown_tail):
             clipped_history = GenericHistoryAdapter().parse(clipped_document)
             if (
                 len(clipped_history.cards) != 1

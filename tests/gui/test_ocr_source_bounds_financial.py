@@ -18,6 +18,15 @@ from tests.ocr_fixtures import document, png_image
 def clipped_source(lines, edge):
     image = png_image()
     original = document(lines, image_sha256=image.sha256)
+    if edge == "currency":
+        words = tuple(
+            replace(word, text=word.text.replace("-50 RUB", "-50"), box=OcrBox(800, 500, 140, 32))
+            if "-50 RUB" in word.text
+            else word
+            for word in original.words
+        )
+        tail = replace(words[0], text="RUE", box=OcrBox(960, 500, 120, 32), line_key=(1, 2, 1))
+        return LoadedOcrImage("3" * 64, image), replace(original, words=(*words, tail))
     left, top = {"left": (0, 500), "right": (900, 500), "top": (650, 0), "bottom": (650, 1368)}[
         edge
     ]
@@ -34,7 +43,7 @@ def counts(session):
     return len(session.ledger.operations()), audits
 
 
-@pytest.mark.parametrize("edge", ("left", "right", "top", "bottom"))
+@pytest.mark.parametrize("edge", ("left", "right", "top", "bottom", "currency"))
 def test_clipped_card_cannot_prepare_with_confirmations_disabled(qtbot, session, edge):
     loaded, source = clipped_source(("Детали операции", "-50 RUB", "27.10.2026"), edge)
     card = GenericCardAdapter().parse(source)

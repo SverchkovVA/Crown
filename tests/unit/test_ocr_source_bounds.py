@@ -94,3 +94,32 @@ def test_existing_reason_is_not_replaced_by_source_bounds():
     source = source_at(("Т-Банк", "Перевод", "-50 RUB", "27.10.2026", "В обработке"), "right", 0)
     result = TBankCardAdapter().parse(source)
     assert "Непроведённая" in result.blocked_reason
+
+
+@pytest.mark.parametrize("split", (False, True))
+def test_clipped_adjacent_unrecognized_currency_blocks_numeric_source(split):
+    source = source_at(("Детали операции", "-50 RUB", "27.10.2026"), "inside", 40)
+    money = next(i for i, w in enumerate(source.words) if w.text == "-50 RUB")
+    numeric = replace(source.words[money], text="-50", box=OcrBox(800, 500, 140, 32))
+    if split:
+        tail = (
+            replace(numeric, text="R", box=OcrBox(960, 500, 25, 32), line_key=(1, 2, 1)),
+            replace(numeric, text="U", box=OcrBox(997, 500, 25, 32), line_key=(1, 2, 2)),
+            replace(numeric, text="E", box=OcrBox(1034, 500, 46, 32), line_key=(1, 2, 3)),
+        )
+    else:
+        tail = (replace(numeric, text="RUE", box=OcrBox(960, 500, 120, 32), line_key=(1, 2, 1)),)
+    source = replace(
+        source, words=(*source.words[:money], numeric, *source.words[money + 1 :], *tail)
+    )
+    result = GenericCardAdapter().parse(source)
+    assert result.amount.value == 5000 and result.document is source
+    assert result.blocked_reason and "снимок" in result.blocked_reason.casefold()
+
+
+@pytest.mark.parametrize("box", (OcrBox(0, 500, 100, 32), OcrBox(800, 0, 140, 32)))
+def test_detached_edge_word_does_not_block_complete_amount(box):
+    source = source_at(("Детали операции", "-50 RUB", "27.10.2026"), "inside", 40)
+    extra = replace(source.words[0], text="Примечание", box=box, line_key=(1, 2, 1))
+    result = GenericCardAdapter().parse(replace(source, words=(*source.words, extra)))
+    assert result.amount.value == 5000 and not result.blocked_reason
