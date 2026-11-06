@@ -1,3 +1,15 @@
+# Проверенный интерфейс dev60 — 06.11.2026
+
+Компактные журнал и карточка OCR, общая сверка полей и удаление пустой прокрутки
+прошли [полную квалификацию](docs/ui-dev60-qualification.md). Финальный
+[CI Windows/Linux](https://github.com/SverchkovVA/Crown/actions/runs/42249430350):
+по2481 passed; четыре технических архива, SHA-256, JUnit и JSON сверены.
+Локальные нативные source/EXE с OCR — по32 шага.
+Запуск: S:\Dev\Crown\artifacts\start-checked-ui-dev60.cmd.
+[Ручная приёмка](docs/manual-acceptance-current.md). Чистая Windows/Sandbox
+ещё требует согласованной перезагрузки; гостевой запуск не заявлен.
+Ниже сохранена история предыдущих срезов; актуальные результаты — по ссылке выше.
+
 # Компактная карточка — dev60, 06.11.2026
 
 [Карточка OCR](docs/ocr-card-compact-report.md): все шесть полей рядом с источником,
