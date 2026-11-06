@@ -1,13 +1,15 @@
-# Проверенный кандидат dev55 — 06.11.2026
+# Проверенный кандидат dev56 — 06.11.2026
 
-Локальный полный набор:2189 passed;[CI Windows/Linux](https://github.com/SverchkovVA/Crown/actions/runs/42166844365)
-по2189 passed. Сборка и нативные source/EXE с локальным OCR — по32 шага.
-[Ручная проверка и запуск](docs/manual-acceptance-current.md),
+Локально2245 passed; [CI Windows/Linux](https://github.com/SverchkovVA/Crown/actions/runs/42215526994)
+по2245 passed. Четыре технических архива/SHA-256/JUnit/JSON/отпечаток сверены.
+Сборка и нативные source/EXE с локальным OCR — по32 шага.
+[Запуск и ручная проверка](docs/manual-acceptance-current.md),
 [контрольная точка](docs/development-checkpoint.md),
-[проверки Qt](docs/qt-thread-probe-report.md),
-[исправления OCR](docs/ocr-summary-layout-report.md).
-[Сравнение проектов](docs/open-source-reference-review.md): стек и архитектура сохраняются.
-Полная ручная приёмка не объявляется; ниже — история предыдущих срезов.
+[проверка границ OCR](docs/ocr-source-bounds-report.md).
+[Сравнение проектов](docs/open-source-reference-review.md): стек и архитектура прежние.
+Dev55 принят пользователем без замечаний; отдельные DPI, автономность и чистая Windows остаются.
+Схема новых книг0014. Следующий формат0015 согласован после обязательных проверок,
+подготовка отделена от этого кандидата. Ниже — история предыдущих срезов.
 
 # Crown — личные финансы
 
