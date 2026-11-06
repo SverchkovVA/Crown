@@ -106,6 +106,24 @@ def check_packaged_ocr_preview() -> None:
             or inline_history.cards[0].occurred_on.value != date(2026, 10, 22)
         ):
             raise RuntimeError("Дата рядом с суммой общего профиля не выделена.")
+        for box in (
+            OcrBox(0, 60, 100, 20),
+            OcrBox(220, 60, 100, 20),
+            OcrBox(200, 0, 100, 20),
+            OcrBox(200, 100, 100, 20),
+        ):
+            clipped_document = replace(
+                generic_document,
+                words=(*generic_document.words[:-1], replace(generic_document.words[-1], box=box)),
+            )
+            clipped_history = GenericHistoryAdapter().parse(clipped_document)
+            if (
+                len(clipped_history.cards) != 1
+                or clipped_history.cards[0].amount.value != 47315
+                or not clipped_history.cards[0].blocked_reason
+                or clipped_history.cards[0].document is not clipped_document
+            ):
+                raise RuntimeError("Неполная область суммы не защищена от финансовой записи.")
         generic_dialog = OcrBatchDialog(
             OcrHistoryPreview(loaded, generic, UNIVERSAL_PROFILE),
             None,

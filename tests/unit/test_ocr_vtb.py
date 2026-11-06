@@ -20,7 +20,7 @@ def card(lines=CARD, **kwargs):
 
 def test_vtb_card_uses_labelled_date_and_preserves_evidence():
     value = card()
-    assert not value.blocked_reason and value.adapter == "vtb-card-v1"
+    assert not value.blocked_reason and value.adapter == "vtb-card-v2"
     assert value.amount.value == 123456 and value.currency.value == "RUB"
     assert value.direction.value == CashDirection.OUT
     assert value.occurred_on.value == date(2026, 10, 27) and value.local_time.value == time(14, 35)
@@ -87,7 +87,7 @@ def test_vtb_history_keeps_rows_and_excludes_money_near_date_header():
     assert not result.blocked_reason and len(result.cards) == 2
     assert result.unassigned_fragments == 1
     first, second = result.cards
-    assert first.adapter == "vtb-history-v1" and first.document is doc
+    assert first.adapter == "vtb-history-v2" and first.document is doc
     assert first.amount.value == 123456 and second.amount.value == 5000
     assert first.occurred_on.value == date(2026, 10, 27)
     assert first.direction.value == CashDirection.OUT and second.direction.value == CashDirection.IN

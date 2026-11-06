@@ -93,7 +93,7 @@ def test_card_purchase_footer_and_bonus_block_never_replace_primary_amount():
     assert card.amount.value == 36720 and card.direction.value is CashDirection.OUT
     assert card.metadata.bank_category == "Продукты"
     assert [b.units_minor for b in card.metadata.bonuses] == [300]
-    assert card.adapter == "generic-card-v10"
+    assert card.adapter == "generic-card-v11"
 
 
 def test_source_keys_stable_but_different_images_are_distinct():

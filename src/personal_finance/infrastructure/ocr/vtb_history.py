@@ -105,7 +105,7 @@ class VtbHistoryAdapter:
                 fragments += 1
                 continue
             card = parse_rub_fields(
-                document, [header, (match["money"], evidence)], adapter_id="vtb-history-v1"
+                document, [header, (match["money"], evidence)], adapter_id="vtb-history-v2"
             )
             if prefix:
                 description = tuple(date_indices)
@@ -116,14 +116,6 @@ class VtbHistoryAdapter:
                 )
                 if len(prefix) <= 500:
                     card = replace(card, description=OcrField(prefix, description, issues))
-            if any(
-                document.words[i].box.top + document.words[i].box.height >= document.height - 8
-                for i in evidence
-            ):
-                card = replace(
-                    card,
-                    blocked_reason="Строка касается края изображения. Проверьте полный источник.",
-                )
             cards.append(card)
             if len(cards) > 100:
                 return OcrHistoryDraft(

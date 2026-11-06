@@ -7,6 +7,7 @@ from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import Money
 from personal_finance.domain.ocr import OcrDocument
 from personal_finance.domain.ocr_cards import CashDirection, OcrCardDraft, OcrField, OcrIssue
+from personal_finance.infrastructure.ocr.source_bounds import block_clipped_amount
 
 _NUMBER = r"(?:[0-9]+|[0-9]{1,3}(?:[ \u00a0\u202f][0-9]{3})+)(?:[,.][0-9]{1,2})?"
 _MONEY = re.compile(
@@ -159,16 +160,18 @@ def parse_rub_fields(
         description = value(
             None, tuple(i for _, ws in descriptions for i in ws), (OcrIssue.AMBIGUOUS,)
         )
-    return OcrCardDraft(
-        document,
-        adapter_id,
-        amount,
-        currency,
-        direction,
-        occurred_on,
-        local_time,
-        description,
-        blocked,
+    return block_clipped_amount(
+        OcrCardDraft(
+            document,
+            adapter_id,
+            amount,
+            currency,
+            direction,
+            occurred_on,
+            local_time,
+            description,
+            blocked,
+        )
     )
 
 

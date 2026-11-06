@@ -56,7 +56,7 @@ def test_summary_rows_do_not_hide_individual_operations_or_change_source():
     result = GenericHistoryAdapter().parse(source)
     assert not result.blocked_reason and len(result.cards) == 2
     assert [card.amount.value for card in result.cards] == [7315, 14907]
-    assert all(card.adapter == "generic-history-v8" for card in result.cards)
+    assert all(card.adapter == "generic-history-v9" for card in result.cards)
     assert result.unassigned_fragments == 2
     assert source.words is words
 
@@ -65,5 +65,5 @@ def test_card_uses_actual_amount_and_keeps_summary_as_source_only():
     source = document(("Детали операции", "+73,15 RUB", "27.10.2026", "Доходы +5 600,00 RUB"))
     card = GenericCardAdapter().parse(source)
     assert not card.blocked_reason and card.amount.value == 7315
-    assert card.adapter == "generic-card-v10" and card.document is source
+    assert card.adapter == "generic-card-v11" and card.document is source
     assert "Доходы" in " ".join(word.text for word in card.document.words)

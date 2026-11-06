@@ -91,14 +91,6 @@ class TBankHistoryAdapter:
                     else ()
                 )
                 card = replace(card, description=OcrField(prefix, description_indices, issues))
-            if any(
-                document.words[i].box.top + document.words[i].box.height >= document.height - 8
-                for i in evidence
-            ):
-                card = replace(
-                    card,
-                    blocked_reason="Строка касается края изображения. Проверьте полный источник.",
-                )
             cards.append(card)
             if len(cards) > 100:
                 return OcrHistoryDraft(

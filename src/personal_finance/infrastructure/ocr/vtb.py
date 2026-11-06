@@ -7,6 +7,7 @@ from personal_finance.domain.ocr import OcrDocument
 from personal_finance.domain.ocr_cards import OcrCardDraft, OcrField, OcrIssue
 from personal_finance.infrastructure.ocr.rows import document_rows
 from personal_finance.infrastructure.ocr.rub_fields import _DATE, _MONEY, _NUMBER, parse_rub_fields
+from personal_finance.infrastructure.ocr.source_bounds import block_clipped_amount
 
 
 class VtbCardAdapter:
@@ -57,7 +58,7 @@ class VtbCardAdapter:
             elif not _DATE.fullmatch(text):
                 inline = _inline_amount(document, text, evidence)
                 selected.extend(inline if inline is not None else [(text, evidence)])
-        result = parse_rub_fields(document, selected, adapter_id="vtb-card-v1")
+        result = parse_rub_fields(document, selected, adapter_id="vtb-card-v2")
         if len(labelled_amounts) == 1:
             result = _repeated_summary(document, selected, labelled_amounts[0], result)
         headings = sum(text.casefold() == "детали операции" for text, _ in rows)
@@ -70,7 +71,7 @@ class VtbCardAdapter:
             return replace(
                 result, blocked_reason="Карточка с отдельной комиссией пока не поддержана."
             )
-        return result
+        return block_clipped_amount(result)
 
 
 def _repeated_summary(
@@ -91,7 +92,7 @@ def _repeated_summary(
     if len(monetary) != 2:
         return original
     candidates = [
-        parse_rub_fields(document, [row], adapter_id="vtb-card-v1") for row, _ in monetary
+        parse_rub_fields(document, [row], adapter_id="vtb-card-v2") for row, _ in monetary
     ]
     first, second = candidates
     if first.amount.value is None or first.amount.value != second.amount.value:
@@ -112,7 +113,7 @@ def _repeated_summary(
     directions = {c.direction.value for c in candidates if c.direction.value is not None}
     if len(directions) > 1:
         return original
-    single = parse_rub_fields(document, [*other, labelled], adapter_id="vtb-card-v1")
+    single = parse_rub_fields(document, [*other, labelled], adapter_id="vtb-card-v2")
     evidence = tuple(dict.fromkeys(i for (row, _) in monetary for i in row[1]))
     issues = (
         (OcrIssue.LOW_CONFIDENCE,)

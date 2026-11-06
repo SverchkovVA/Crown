@@ -19,7 +19,7 @@ class TBankCardAdapter:
         *,
         require_heading: bool = True,
     ) -> OcrCardDraft:
-        result = parse_rub_fields(document, rows, adapter_id="t-bank-card-v1")
+        result = parse_rub_fields(document, rows, adapter_id="t-bank-card-v2")
         if not require_heading:
             return result
         headings = [

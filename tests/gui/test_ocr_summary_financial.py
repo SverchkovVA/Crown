@@ -68,7 +68,7 @@ def test_only_individual_rows_are_saved_audited_and_not_repeated(qtbot, session,
             connection.exec_driver_sql("SELECT evidence_json FROM ocr_records").scalars().all()
         )
     assert len(payloads) == 2 and all(
-        json.loads(p)["adapter"] == "generic-history-v8" for p in payloads
+        json.loads(p)["adapter"] == "generic-history-v9" for p in payloads
     )
     data = [json.loads(payload) for payload in payloads]
     assert len({entry["document_sha256"] for entry in data}) == 1

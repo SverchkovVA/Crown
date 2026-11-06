@@ -15,6 +15,7 @@ from personal_finance.domain.ocr_cards import (
 )
 from personal_finance.infrastructure.ocr.generic_dates import date_spans, parse_date
 from personal_finance.infrastructure.ocr.rub_fields import parse_rub_fields
+from personal_finance.infrastructure.ocr.source_bounds import block_clipped_amount
 
 _SPACE = r"[ \u00a0\u202f]"
 _NUMBER = (
@@ -323,19 +324,18 @@ def _draft(
             blocked = blocked or "Подпись и знак суммы задают разные направления."
         elif value.direction.value is None:
             value = _with_direction(value, direction)
-    if any(
-        document.words[i].box.top + document.words[i].box.height >= document.height - 8
-        for i in refs
-    ):
-        blocked = blocked or "Строка касается края изображения. Нужен полный снимок."
-    return replace(
-        value,
-        occurred_on=occurred,
-        local_time=clock,
-        description=OcrField(
-            description[:500] or None, description_refs, () if description else (OcrIssue.MISSING,)
-        ),
-        blocked_reason=value.blocked_reason or blocked,
+    return block_clipped_amount(
+        replace(
+            value,
+            occurred_on=occurred,
+            local_time=clock,
+            description=OcrField(
+                description[:500] or None,
+                description_refs,
+                () if description else (OcrIssue.MISSING,),
+            ),
+            blocked_reason=value.blocked_reason or blocked,
+        )
     )
 
 
@@ -683,7 +683,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v10") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v11") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -728,14 +728,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v10",
+                "generic-card-v11",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return _contextual(_with_account_direction(result, rows))
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v10")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v11")
         occurred, clock = _date_fields(document, dates)
         empty = replace(
             empty,
@@ -878,7 +878,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v8",
+                "generic-history-v9",
                 blocked,
             )
             if index + 1 < len(rows):
