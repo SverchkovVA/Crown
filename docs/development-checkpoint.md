@@ -3,9 +3,11 @@
 Ветка planning-storage-integration, исходник8eb471f,
 worktree artifacts/worktree-planning-integration. [Проверки](planning15-reader-verification.md).
 213 целевых passed; Ruff/формат337 файлов/Mypy164 файлов passed.
-Последний полный pytest:session19292, PID5416/3648/12052,23%; не останавливать без причины.
+Полный локальный pytest завершён:2458 passed,2373.98 секунды; JUnit сверён.
 Сборка artifacts/planning15-reader-dev57-build и нативные source/EXE с OCR32 passed.
-Полный локальный pytest (session19292) и CI42224998259 выполняются; не считать их passed.
+CI42224998259 полностью passed:2458 Windows и1183+1275 Linux.
+Четыре технических архива, SHA-256/JUnit/JSON, полнота и отпечаток исходника сверены.
+Подтверждение: основной artifacts/dev57-ci-evidence/verified-summary.json.
 
 HEAD0014, reader0002–0015. Явная0015 зарегистрирована для обязательных тестов;
 создание и restore по умолчанию остаются0014. Меню нового сохранения не подключено.
