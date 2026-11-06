@@ -4,7 +4,7 @@
 [Интерфейс dev49](docs/ui-refinement-report.md), [OCR dev50](docs/ocr-clock-partial-card-report.md),
 [OCR dev51](docs/ocr-field-evidence-report.md),
 [обратная связь dev52](docs/ocr-review-feedback-report.md).
-UI dev49 и OCR dev50 прошли полный CI. Dev52 собрана, source/EXE с OCR —
+UI dev49 и OCR dev50/dev51 прошли полный CI. Dev52 собрана, source/EXE с OCR —
 по 32 шага; связанный GUI — 31 passed. Её полный локальный набор и CI
 пока выполняются. Незавершённые проверки указаны
 в отчётах; полная ручная приёмка не объявляется.

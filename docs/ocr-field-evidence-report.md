@@ -96,7 +96,11 @@ uv run --frozen python -m tools.benchmark_ocr --ocr-runtime <каталог-ocr-
 - Широкий OCR/generic/tesseract-набор: 768 passed, 1346 deselected,
   353.90 с. Только синтетические книги и изображения.
 - [Полный CI dev51](https://github.com/SverchkovVA/Crown/actions/runs/42131722134)
-  запущен; результат будет добавлен после завершения.
+  passed: по 2114 тестов Windows/Linux, 0 errors/failures/skipped.
+  Группы Linux1036+1078 покрывают весь набор без пересечения.
+  Сверены четыре технических архива, их SHA-256, JUnit/JSON и commitbe460b2.
+  Сборка и source/EXE30 в Windows CI прошли. Локальные source/EXE с OCR32
+  относятся к отдельному запуску с настоящим модулем.
 
 JUnit и JSON находятся в игнорируемом artifacts рабочей ветки:
 dev51-field-targeted.xml, dev51-color-runtime.xml, dev51-benchmark-final-unit.xml,
