@@ -2,7 +2,7 @@
 
 import hashlib
 from threading import RLock
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import Connection, Engine, bindparam, text
@@ -118,7 +118,8 @@ class SqlPlanningScenariosRepository:
             text(
                 self._select()
                 + " AND r.id=e.accepted_revision_id AND (:archived=1 OR r.is_deleted=0) "
-                "AND (:kind IS NULL OR p.scenario_kind=:kind) ORDER BY p.scenario_kind,p.name_key,e.id"
+                "AND (:kind IS NULL OR p.scenario_kind=:kind) "
+                "ORDER BY p.scenario_kind,p.name_key,e.id"
             ),
             {
                 "book": self._book_id,
@@ -238,7 +239,7 @@ class SqlPlanningScenariosRepository:
                     + " WHERE e.book_id=:book AND e.kind=:kind AND e.id IN :ids"
                     + predicate
                 ).bindparams(bindparam("ids", expanding=True))
-                found = set(
+                found: set[str] = set(
                     connection.execute(
                         statement,
                         {
@@ -350,7 +351,7 @@ class SqlPlanningScenariosRepository:
                 ).one()
                 if duplicate:
                     raise ValidationError("Активная запись с таким названием уже существует.")
-                if active >= 1000:
+                if cast(int, active) >= 1000:
                     raise ValidationError("Допустимо не более 1000 активных записей каждого вида.")
             self._scope(connection, scenario, current=not is_deleted)
             if identifier is None:

@@ -173,6 +173,18 @@ def test_extra_missing_and_cross_kind_fields_are_rejected(factory):
         "\ud800",
         " " * (4 * 1024 * 1024 + 1),
     ],
+    ids=(
+        "empty",
+        "array",
+        "null",
+        "number",
+        "broken",
+        "duplicate-key",
+        "nan",
+        "infinity",
+        "surrogate",
+        "oversized",
+    ),
 )
 def test_planning_json_rejects_invalid_encoding_and_structure(text):
     with pytest.raises(ValidationError):

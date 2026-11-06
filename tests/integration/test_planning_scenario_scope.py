@@ -117,7 +117,8 @@ def test_raw_payload_subtype_change_is_refused_when_sealing(storage, kind):
         if statement.startswith("INSERT INTO planning_scenario_revisions"):
             revision = parameters[0]
             connection.exec_driver_sql(
-                "UPDATE planning_scenario_revisions SET scenario_kind=?,scenario_json=? WHERE revision_id=?",
+                "UPDATE planning_scenario_revisions SET scenario_kind=?,scenario_json=? "
+                "WHERE revision_id=?",
                 ("savings_goal" if kind == "budget" else "budget", planning_json(other), revision),
             )
             changed.append(True)

@@ -168,7 +168,8 @@ def test_failure_after_each_atomic_write_rolls_back_every_row(storage, prefix):
     [
         "UPDATE planning_scenario_revisions SET name='Не менять' WHERE revision_id=?",
         "DELETE FROM planning_scenario_revisions WHERE revision_id=?",
-        "INSERT INTO planning_scenario_revisions(revision_id,scenario_kind,name,name_key,scenario_json) "
+        "INSERT INTO planning_scenario_revisions"
+        "(revision_id,scenario_kind,name,name_key,scenario_json) "
         "VALUES (?,'savings_goal','Тест','тест','{}')",
     ],
 )

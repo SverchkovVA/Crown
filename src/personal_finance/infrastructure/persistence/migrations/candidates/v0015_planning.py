@@ -218,12 +218,14 @@ def upgrade() -> None:
     op.execute("""CREATE TRIGGER planning_scenario_count_valid BEFORE UPDATE OF sealed
         ON entity_revisions
         WHEN NEW.sealed=1 AND OLD.sealed=0 AND NEW.is_deleted=0 AND EXISTS (
-        SELECT 1 FROM entities own JOIN planning_scenario_revisions value ON value.revision_id=NEW.id
+        SELECT 1 FROM entities own JOIN planning_scenario_revisions value ON
+            value.revision_id=NEW.id
         WHERE own.id=NEW.entity_id AND own.kind='planning_scenario'
         AND (SELECT count(*) FROM entities other JOIN entity_revisions r ON
             r.id=other.accepted_revision_id
             JOIN planning_scenario_revisions previous ON previous.revision_id=r.id
-            WHERE previous.scenario_kind=value.scenario_kind AND other.book_id=own.book_id AND other.kind='planning_scenario' AND
+            WHERE previous.scenario_kind=value.scenario_kind AND other.book_id=own.book_id
+                AND other.kind='planning_scenario' AND
             other.id<>own.id AND r.is_deleted=0)>=1000)
         BEGIN SELECT RAISE(ABORT, 'too many active planning scenarios'); END""")
 

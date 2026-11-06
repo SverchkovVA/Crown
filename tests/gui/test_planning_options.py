@@ -13,7 +13,7 @@ from personal_finance.presentation.planning_options import (
     BudgetScenarioOptions,
     SavingsGoalScenarioOptions,
 )
-from tests.unit.test_planning_scenarios import A, B, PERIOD, goal
+from tests.unit.test_planning_scenarios import PERIOD, A, B, goal
 
 
 @pytest.mark.parametrize(

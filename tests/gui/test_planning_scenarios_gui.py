@@ -4,9 +4,9 @@ import pytest
 from PySide6.QtCore import QItemSelectionModel, Qt
 from PySide6.QtWidgets import QDialog
 
-from personal_finance.domain.planning_scenarios import SavedPlanningScenario
 from personal_finance.domain.errors import ValidationError
-from personal_finance.presentation.planning_scenarios import SavedPlanningDialog, PlanningAction
+from personal_finance.domain.planning_scenarios import SavedPlanningScenario
+from personal_finance.presentation.planning_scenarios import PlanningAction, SavedPlanningDialog
 from tests.unit.test_deposits import uid
 from tests.unit.test_planning_scenarios import budget as scenario
 
