@@ -1,3 +1,22 @@
+# Текущая квалификация dev62 — 06.11.2026
+
+Активная ветка ocr-spatial-amount-dev62, worktree artifacts/worktree-ocr-dev62.
+Финальный исходник520e7ca, отпечатокdb7283ff…ac664.
+[Результат и фактические ограничения](ocr-spatial-amount-report.md).
+210 связанных проверок, исправленная сборка/source/EXE32 passed.
+Полный локальный session8003, JUnit artifacts/dev62-full-final.xml,
+exit artifacts/dev62-full-final-exit.json; CI42284567853 ещё выполняется.
+Первая итерация5d5180c: native source failed, полный прогон остановлен на14%,
+не passed. Не использовать первый ocr-dev62-final-build как проверенный.
+
+Dev61: локально2493 passed, LinuxCI2493 и3 архива сверены; Windows pending.
+Проверенный запуск dev60. Главный указатель — основной
+artifacts/checkpoint-current-20261106.json, текущая точка
+artifacts/checkpoint-ocr-dev62-20261106.json.
+Пользовательские книги не открывать. Схема0014, runtime прежний.
+Sandbox ждёт согласованного reboot. Новых автоматических окон не назначать.
+Далее — исторические состояния.
+
 # Текущая OCR-квалификация dev61 — 06.11.2026
 
 Активна ocr-leading-context-dev61, worktree artifacts/worktree-ocr-dev61.
