@@ -1,0 +1,587 @@
+{
+  "format": 1,
+  "corpus": "synthetic-holdout-v1",
+  "expected": [
+    {
+      "expected_blocked": false,
+      "id": "card-numeric-sans",
+      "kind": "card",
+      "rows": [
+        {
+          "amount_minor": 872316,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": "15:42:00",
+          "occurred_on": "2026-10-27"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "card-serif-dark",
+      "kind": "card",
+      "rows": [
+        {
+          "amount_minor": 7315,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": "15:42:00",
+          "occurred_on": "2026-10-27"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "card-mono-integer",
+      "kind": "card",
+      "rows": [
+        {
+          "amount_minor": 250000,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": "15:42:00",
+          "occurred_on": "2026-10-27"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "card-account-label",
+      "kind": "card",
+      "rows": [
+        {
+          "amount_minor": 45983,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": "15:42:00",
+          "occurred_on": "2026-10-27"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "card-yearless-heading",
+      "kind": "card",
+      "rows": [
+        {
+          "amount_minor": 183504,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": "15:42:00",
+          "occurred_on": "2026-10-27"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": true
+    },
+    {
+      "expected_blocked": false,
+      "id": "history-sans-right",
+      "kind": "history",
+      "rows": [
+        {
+          "amount_minor": 73219,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 149087,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 250604,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 60835,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 174200,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 92371,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "history-serif-dark",
+      "kind": "history",
+      "rows": [
+        {
+          "amount_minor": 73219,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 149087,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 250604,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 60835,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 174200,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 92371,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "history-mono-left",
+      "kind": "history",
+      "rows": [
+        {
+          "amount_minor": 73219,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 149087,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 250604,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 60835,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 174200,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 92371,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "history-compact",
+      "kind": "history",
+      "rows": [
+        {
+          "amount_minor": 73219,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 149087,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 250604,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 60835,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 174200,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 92371,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        }
+      ],
+      "uses_currency_default": true,
+      "uses_year_default": true
+    },
+    {
+      "expected_blocked": false,
+      "id": "history-wrapped",
+      "kind": "history",
+      "rows": [
+        {
+          "amount_minor": 73219,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 149087,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 250604,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 60835,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 174200,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 92371,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": false,
+      "id": "history-mixed",
+      "kind": "history",
+      "rows": [
+        {
+          "amount_minor": 73219,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 149087,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 250604,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-27"
+        },
+        {
+          "amount_minor": 60835,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 174200,
+          "currency": "RUB",
+          "direction": "in",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        },
+        {
+          "amount_minor": 92371,
+          "currency": "RUB",
+          "direction": "out",
+          "local_time": null,
+          "occurred_on": "2026-10-25"
+        }
+      ],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": true,
+      "id": "control-clock",
+      "kind": "history",
+      "rows": [],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": true,
+      "id": "control-bonuses",
+      "kind": "history",
+      "rows": [],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    },
+    {
+      "expected_blocked": true,
+      "id": "control-summary",
+      "kind": "history",
+      "rows": [],
+      "uses_currency_default": false,
+      "uses_year_default": false
+    }
+  ],
+  "expected_cases_sha256": "148da94fdc66c39d8c4089b9feae6b73e3524dda453ad7f68f1f7a8c18547cbd",
+  "specifications": [
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": false,
+      "id": "card-numeric-sans",
+      "incoming": false,
+      "kind": "card",
+      "layout": "below",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 7315,
+      "currency": "₽",
+      "dark": true,
+      "id": "card-serif-dark",
+      "incoming": true,
+      "kind": "card",
+      "layout": "below",
+      "profile": "serif",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 250000,
+      "currency": "RUB",
+      "dark": false,
+      "id": "card-mono-integer",
+      "incoming": true,
+      "kind": "card",
+      "layout": "right",
+      "profile": "mono",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 45983,
+      "currency": "RUB",
+      "dark": true,
+      "id": "card-account-label",
+      "incoming": false,
+      "kind": "card",
+      "layout": "right",
+      "profile": "sans",
+      "unsigned": true,
+      "yearless": false
+    },
+    {
+      "amount": 183504,
+      "currency": "RUB",
+      "dark": false,
+      "id": "card-yearless-heading",
+      "incoming": false,
+      "kind": "card",
+      "layout": "right",
+      "profile": "serif",
+      "unsigned": false,
+      "yearless": true
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": false,
+      "id": "history-sans-right",
+      "incoming": false,
+      "kind": "history",
+      "layout": "right",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": true,
+      "id": "history-serif-dark",
+      "incoming": false,
+      "kind": "history",
+      "layout": "right",
+      "profile": "serif",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": false,
+      "id": "history-mono-left",
+      "incoming": false,
+      "kind": "history",
+      "layout": "left",
+      "profile": "mono",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "",
+      "dark": false,
+      "id": "history-compact",
+      "incoming": false,
+      "kind": "history",
+      "layout": "compact",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": true
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": true,
+      "id": "history-wrapped",
+      "incoming": false,
+      "kind": "history",
+      "layout": "wrapped",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": true,
+      "id": "history-mixed",
+      "incoming": false,
+      "kind": "history",
+      "layout": "mixed",
+      "profile": "serif",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": false,
+      "id": "control-clock",
+      "incoming": false,
+      "kind": "control",
+      "layout": "clock",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": true,
+      "id": "control-bonuses",
+      "incoming": false,
+      "kind": "control",
+      "layout": "bonuses",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": false
+    },
+    {
+      "amount": 872316,
+      "currency": "RUB",
+      "dark": false,
+      "id": "control-summary",
+      "incoming": false,
+      "kind": "control",
+      "layout": "summary",
+      "profile": "sans",
+      "unsigned": false,
+      "yearless": false
+    }
+  ]
+}
