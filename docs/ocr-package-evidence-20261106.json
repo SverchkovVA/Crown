@@ -8,10 +8,10 @@
     "application_bundled": false,
     "format": 1,
     "license_audit_complete": false,
-    "native_byte_matches": 10,
+    "native_byte_matches": 52,
     "native_files": 56,
-    "native_unmatched": 46,
-    "package_directories": 20,
+    "native_unmatched": 4,
+    "package_directories": 113,
     "records": [
       {
         "byte_match_found": false,
@@ -21,9 +21,26 @@
         "sha256": "c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 4,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "f8311a804ec5f65e433c7e8b86c188c879e510bcc8d7cee79bb1b4410a8432c8",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-2-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "58324f2a5aed83621be12049f62bf9aa94a0c032170cf48cdde60250ec81c4b4",
+              "pkgname": "mingw-w64-x86_64-libarchive",
+              "pkgver": "3.8.8-2",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libarchive-3.8.8-2-any/mingw64/bin/libarchive-13.dll"
+          }
+        ],
         "path": "libarchive-13.dll",
         "sha256": "ddabddfdc98e1e1342ce4a7069fb4004de6c870d7bc9f4e95ef243dd18468e97"
       },
@@ -124,16 +141,50 @@
         "sha256": "b79cd3a7102e359ef6324e98966a67939e58ec2b651ae2847cae84a4dfa453f7"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "70628f806bd2f3473ebcf90423d0949505d657f3c0576a9f092537991429455d",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later OR MPL-1.1"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "400cab69c408c8817ad5eb079aef84b587c5b4c3ff147f3409e6a0c4d5f9bd22",
+              "pkgname": "mingw-w64-x86_64-cairo",
+              "pkgver": "1.18.4-4",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-cairo-1.18.4-4-any/mingw64/bin/libcairo-2.dll"
+          }
+        ],
         "path": "libcairo-2.dll",
         "sha256": "c474166543aed18b389b20122ca2741189504994dafd86cd5ed121e95bd82ce4"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "cd3915796a3a7335177ba36dbffdabe7f476de4ca63eadbf44d402de9258383b",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "1826fc4b0e9ca6099e46718ffafaf4e0f2adb91911f0b81e2aeb26fa408568dd",
+              "pkgname": "mingw-w64-x86_64-curl-winssl",
+              "pkgver": "8.21.0-2",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-curl-winssl-8.21.0-2-any/mingw64/bin/libcurl-4.dll"
+          }
+        ],
         "path": "libcurl-4.dll",
         "sha256": "3d302f9690e810fdfd950254e2f0663d0ff768737f350c602a4ed3a06e9b6b2b"
       },
@@ -162,16 +213,50 @@
         "sha256": "2f784872e6404e57847201fe1e7e591bd5b5be4a319ef38ebcb36014ac7f385d"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "5fe0eff2d0de0b1139cb5f001d00482e66d11dcff24cac21d1c3a0745691920a",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "ba0899c7b6d6b0af3e8dffbd4780f566730eddcefb1ad9fbbc8e601a980b6eaf",
+              "pkgname": "mingw-w64-x86_64-libdeflate",
+              "pkgver": "1.25-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libdeflate-1.25-1-any/mingw64/bin/libdeflate.dll"
+          }
+        ],
         "path": "libdeflate.dll",
         "sha256": "3f3fc3a73bc3623dc93b37bb321c484d3731d93006fd01c0495d15711826eb44"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 4,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "a2d98b2a7a577e5899979694d275d9aab535f6ad55c443a8da984d1d6f5b129e",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "3c907220dbd153270432b2dad1581ce02fd097ae3db99a35f9bc42f09dc280c0",
+              "pkgname": "mingw-w64-x86_64-expat",
+              "pkgver": "2.8.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-expat-2.8.2-1-any/mingw64/bin/libexpat-1.dll"
+          }
+        ],
         "path": "libexpat-1.dll",
         "sha256": "92ae866c6c58dd2d8366aa0e6230ba8d434d5306e8d8c3a08b7e61750fc16153"
       },
@@ -200,16 +285,50 @@
         "sha256": "390e4bf8abd037abd0e1dd1f311606715e43f8efe812e5c5b8775acf2cb2f21e"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "8d2e349d7557d3d12c0584d458945a5ae2c782f510e41d5a927666df862cc7ae",
+              "licenses_declared_in_pkginfo": [
+                "custom"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "113bf3b1a0fe4941847dd4fc19d20c0491051d15f6bd294aad158d2e3acabf77",
+              "pkgname": "mingw-w64-x86_64-fontconfig",
+              "pkgver": "2.18.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-fontconfig-2.18.2-1-any/mingw64/bin/libfontconfig-1.dll"
+          }
+        ],
         "path": "libfontconfig-1.dll",
         "sha256": "661c44249b9b06820554940a984b783b1daae9740a4a2eb265fe77205962486f"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "02fbd6075a03a96e0e58c498b436384a256716bd3d6d741643fe0ae7d53febd0",
+              "licenses_declared_in_pkginfo": [
+                "spdx:GPL-2.0-or-later OR FTL"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "03b675986c1fe75ad848a893a183245a8e4427635f87b65c3b6927eca7f5d94a",
+              "pkgname": "mingw-w64-x86_64-freetype",
+              "pkgver": "2.14.3-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-freetype-2.14.3-1-any/mingw64/bin/libfreetype-6.dll"
+          }
+        ],
         "path": "libfreetype-6.dll",
         "sha256": "bbb3e6390ee229c867ef31f10e42a49a61a92e434a11d40c6139a2608ebc6194"
       },
@@ -269,30 +388,98 @@
         "sha256": "5b3d837ccaab84683dd93fbaddf2d98e1a9f90e0ddb8ea73dc70157adb4d26f1"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "eb954a7c87031942d26f0ff564bdd318994e25d4c617d396a2e4743b41732d38",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "9828a0fbc362ceb4a8253672895a7e758ff6a5e4d53014c77a41dc30074444f8",
+              "pkgname": "mingw-w64-x86_64-glib2",
+              "pkgver": "2.88.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-glib2-2.88.2-1-any/mingw64/bin/libgio-2.0-0.dll"
+          }
+        ],
         "path": "libgio-2.0-0.dll",
         "sha256": "3dc3d4d477633cc9265b0796f9037a9fa387f4a1e8b7258890987a8c2c21eb0a"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "eb954a7c87031942d26f0ff564bdd318994e25d4c617d396a2e4743b41732d38",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "9828a0fbc362ceb4a8253672895a7e758ff6a5e4d53014c77a41dc30074444f8",
+              "pkgname": "mingw-w64-x86_64-glib2",
+              "pkgver": "2.88.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-glib2-2.88.2-1-any/mingw64/bin/libglib-2.0-0.dll"
+          }
+        ],
         "path": "libglib-2.0-0.dll",
         "sha256": "43f2015fccfb10e22ecece61855d9ea21835f833b6533bc53ab77b54f4d66c34"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "eb954a7c87031942d26f0ff564bdd318994e25d4c617d396a2e4743b41732d38",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "9828a0fbc362ceb4a8253672895a7e758ff6a5e4d53014c77a41dc30074444f8",
+              "pkgname": "mingw-w64-x86_64-glib2",
+              "pkgver": "2.88.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-glib2-2.88.2-1-any/mingw64/bin/libgmodule-2.0-0.dll"
+          }
+        ],
         "path": "libgmodule-2.0-0.dll",
         "sha256": "69cf44cda7756a6ec4a926e0cf9fe81721f05d65abfab88ff83004fa508bb0e7"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "eb954a7c87031942d26f0ff564bdd318994e25d4c617d396a2e4743b41732d38",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "9828a0fbc362ceb4a8253672895a7e758ff6a5e4d53014c77a41dc30074444f8",
+              "pkgname": "mingw-w64-x86_64-glib2",
+              "pkgver": "2.88.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-glib2-2.88.2-1-any/mingw64/bin/libgobject-2.0-0.dll"
+          }
+        ],
         "path": "libgobject-2.0-0.dll",
         "sha256": "acf20d5ddd3d2e4b4355576f5cf662c18f42746c50f43eaccc0596592616602a"
       },
@@ -321,51 +508,172 @@
         "sha256": "063a9ad34a5ec87d038b4646660957395224ecf2cf707917256b7d251a7c5f57"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "52eb69026f233dffab5dbc770d00732af66af387d861968c759e9f702cf4c7ed",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "5940b136c27b489e2b41a41df46f7ec28023d2e1929e5c185ea700d27f63cbee",
+              "pkgname": "mingw-w64-x86_64-harfbuzz",
+              "pkgver": "14.2.1-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-harfbuzz-14.2.1-1-any/mingw64/bin/libharfbuzz-0.dll"
+          }
+        ],
         "path": "libharfbuzz-0.dll",
         "sha256": "54fb644a1143b3b81d494684f299aca9ff4b72134f12a7b1cfb2bd0f8fa9cef7"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "ccd20bd631186cd36d3a8615de2602d6c672f619846603a44360d0d726cef026",
+              "licenses_declared_in_pkginfo": [
+                "documentation:spdx:GPL-3.0-or-later",
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "23ed1c7e836c2923e16081289d0b479690c0a28684ab1804bbed8e423f308d91",
+              "pkgname": "mingw-w64-x86_64-libiconv",
+              "pkgver": "1.19-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libiconv-1.19-1-any/mingw64/bin/libiconv-2.dll"
+          }
+        ],
         "path": "libiconv-2.dll",
         "sha256": "7a282a854e01be726c6cccfe46f548c716aa45b3014818468253aaa4efbcd067"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "cbcf04447b15a5a44de7b803d9abd977195fa2a2ef6f29d43504ddf28fafde52",
+              "licenses_declared_in_pkginfo": [
+                "spdx:ICU"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "3c5f24483c12d2d184e5b94da497b27b701edf5fea0081bbd0e00edb50673054",
+              "pkgname": "mingw-w64-x86_64-icu",
+              "pkgver": "78.3-3",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-icu-78.3-3-any/mingw64/bin/libicudt78.dll"
+          }
+        ],
         "path": "libicudt78.dll",
         "sha256": "47d19b605a28461d44e0d8c062c465e92c9edfb0244f023a8066f7337d317d0e"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "cbcf04447b15a5a44de7b803d9abd977195fa2a2ef6f29d43504ddf28fafde52",
+              "licenses_declared_in_pkginfo": [
+                "spdx:ICU"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "3c5f24483c12d2d184e5b94da497b27b701edf5fea0081bbd0e00edb50673054",
+              "pkgname": "mingw-w64-x86_64-icu",
+              "pkgver": "78.3-3",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-icu-78.3-3-any/mingw64/bin/libicuin78.dll"
+          }
+        ],
         "path": "libicuin78.dll",
         "sha256": "af3341827897a41ab16667ee0699acdb2b0338c3bf4ecc7f510a324f18755422"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "cbcf04447b15a5a44de7b803d9abd977195fa2a2ef6f29d43504ddf28fafde52",
+              "licenses_declared_in_pkginfo": [
+                "spdx:ICU"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "3c5f24483c12d2d184e5b94da497b27b701edf5fea0081bbd0e00edb50673054",
+              "pkgname": "mingw-w64-x86_64-icu",
+              "pkgver": "78.3-3",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-icu-78.3-3-any/mingw64/bin/libicuuc78.dll"
+          }
+        ],
         "path": "libicuuc78.dll",
         "sha256": "3186171e946552e2a5e371cd0bc68bf37bd6e229a85dbb0d3c40231cf0858b49"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "d13ef86293cdf2712c9201c20f3630a018c343bba902fb503b1ae2460a2cd18d",
+              "licenses_declared_in_pkginfo": [
+                "spdx:GPL-2.0-or-later",
+                "spdx:LGPL-3.0-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "8b883dcda35b62c1537a0d6bfca8bdb46600cf8d317156c350d41cd2ac447591",
+              "pkgname": "mingw-w64-x86_64-libidn2",
+              "pkgver": "2.3.8-4",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libidn2-2.3.8-4-any/mingw64/bin/libidn2-0.dll"
+          }
+        ],
         "path": "libidn2-0.dll",
         "sha256": "9880b52651a0247640a2531d777380f7c35fac7efa7e3979b265ddcb78db8642"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "098abf252a0b9f82c57d2812fdb6f6f42d047bafa7c16d850e2c1d15956fbe3b",
+              "licenses_declared_in_pkginfo": [
+                "spdx:GPL-3.0-or-later AND LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "7ecd86325ab8577ef74b9c18be402eb84d1f8f1f2e8864d7a4dc56dde98399ee",
+              "pkgname": "mingw-w64-x86_64-gettext-runtime",
+              "pkgver": "1.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-gettext-runtime-1.0-1-any/mingw64/bin/libintl-8.dll"
+          }
+        ],
         "path": "libintl-8.dll",
         "sha256": "0537c3dd2378218508ebe3cc416d72a99ee2d24ae1c5525e23458f32544ef861"
       },
@@ -394,114 +702,387 @@
         "sha256": "275a827ba6839d47cfdbe059db1b1b403a92ff26e2b76a29362915487868bef2"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "9a12cae8b10c57d8bae7c1f08b63cea20f472d59a2c0e141780e40bf9a70b716",
+              "licenses_declared_in_pkginfo": [
+                "custom:BSD-like"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "c5a2a8c5a2a5d0598fb72c084b505c659700f06a2b5b11df6ee57bfff97c7e3a",
+              "pkgname": "mingw-w64-x86_64-libjpeg-turbo",
+              "pkgver": "3.2.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libjpeg-turbo-3.2.0-1-any/mingw64/bin/libjpeg-8.dll"
+          }
+        ],
         "path": "libjpeg-8.dll",
         "sha256": "b564d34adaca83e73af0e2231719dd0198ea6cd074c64b2ba85bfd7182f27db7"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "9618f3f7ee541b2a634faaf4abed3c67ebc4b64a5d242df675790c3785ffee15",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-2-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "0e79c47d2b2ee62b3e7bd807acff5ebfd07e348095348ccd5d0173668d0e106a",
+              "pkgname": "mingw-w64-x86_64-leptonica",
+              "pkgver": "1.87.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-leptonica-1.87.0-1-any/mingw64/bin/libleptonica-6.dll"
+          }
+        ],
         "path": "libleptonica-6.dll",
         "sha256": "1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "f89b82d0b6db911b23b16e0dce14e1958c4b228121c5c9cdf207cced21823853",
+              "licenses_declared_in_pkginfo": [
+                "spdx:Apache-2.0"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "8bea2777ac34009da9d70b58991a5e41ca65731d8116bffc452db53ffec0e3af",
+              "pkgname": "mingw-w64-x86_64-lerc",
+              "pkgver": "4.1.1-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-lerc-4.1.1-1-any/mingw64/bin/libLerc.dll"
+          }
+        ],
         "path": "libLerc.dll",
         "sha256": "6887fb5aeabf382a835a4cb693025e8d48d9c90e82ca4eae5d2d8ffb70c6ca9a"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "f89ea03ee3dc13fe7d598c2b394e99e8bcf92361964a2205484c99a87b5277e3",
+              "licenses_declared_in_pkginfo": [
+                "BSD",
+                "GPL2"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "4dfe4958fd9c64b036d248a5757da268b907a02603bcd7ef69698e2543f336bb",
+              "pkgname": "mingw-w64-x86_64-lz4",
+              "pkgver": "1.10.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-lz4-1.10.0-1-any/mingw64/bin/liblz4.dll"
+          }
+        ],
         "path": "liblz4.dll",
         "sha256": "35f917274bca8f19677ba66f1b3cc3c83568c3249fc43215fc16e76439c8e856"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "4101a60bf0555db81c7ebb2ed8b9200011d81e322a5f02f9de0dba179c850200",
+              "licenses_declared_in_pkginfo": [
+                "spdx:0BSD AND LGPL-2.1-or-later AND GPL-2.0-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "4a2b5ffd9d40432f676052d209ae22779ff8a01e6cd8da7d0b37534f9249ba6a",
+              "pkgname": "mingw-w64-x86_64-xz",
+              "pkgver": "5.8.3-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-xz-5.8.3-1-any/mingw64/bin/liblzma-5.dll"
+          }
+        ],
         "path": "liblzma-5.dll",
         "sha256": "dc9edb9bd83b0371fe68d96cb3e70cd17b7a5aba958326a18f8210cb812432e9"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "8bd08ec23cdba378f20d0750ae95e92648c06bff2105f782aad8f921bbff95c9",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-2-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "a124ef0f13a2448ea5041e9cfa25d410e6ca70c06b7346ea9ae35d09ca13d42b",
+              "pkgname": "mingw-w64-x86_64-openjpeg2",
+              "pkgver": "2.5.4-2",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-openjpeg2-2.5.4-2-any/mingw64/bin/libopenjp2-7.dll"
+          }
+        ],
         "path": "libopenjp2-7.dll",
         "sha256": "123587086cb1a25d2a338fb9b7c1d6bda10bf9062625b4f08c6a92b3d9cafe47"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "267675addaa2fd9069a1458534e937f64ef869465613ddaa8841288a78153921",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "7e80fb35681492fe84ac19df4cf4aca5a33d0a80859affadd81874d184138fde",
+              "pkgname": "mingw-w64-x86_64-pango",
+              "pkgver": "1.58.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-pango-1.58.0-1-any/mingw64/bin/libpango-1.0-0.dll"
+          }
+        ],
         "path": "libpango-1.0-0.dll",
         "sha256": "a7722692aa345f88cd0cb0296ad144e14b89a25c9926b5c3bac815331bba2127"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "267675addaa2fd9069a1458534e937f64ef869465613ddaa8841288a78153921",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "7e80fb35681492fe84ac19df4cf4aca5a33d0a80859affadd81874d184138fde",
+              "pkgname": "mingw-w64-x86_64-pango",
+              "pkgver": "1.58.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-pango-1.58.0-1-any/mingw64/bin/libpangocairo-1.0-0.dll"
+          }
+        ],
         "path": "libpangocairo-1.0-0.dll",
         "sha256": "f0efa65511bc8f35186e9adf4628fb9ed505b31435a93afe218ae6c348197954"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "267675addaa2fd9069a1458534e937f64ef869465613ddaa8841288a78153921",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "7e80fb35681492fe84ac19df4cf4aca5a33d0a80859affadd81874d184138fde",
+              "pkgname": "mingw-w64-x86_64-pango",
+              "pkgver": "1.58.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-pango-1.58.0-1-any/mingw64/bin/libpangoft2-1.0-0.dll"
+          }
+        ],
         "path": "libpangoft2-1.0-0.dll",
         "sha256": "adeeffc8438397998f449f8da1bd3832f4c031215415d7ed21109582dc6908a6"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "267675addaa2fd9069a1458534e937f64ef869465613ddaa8841288a78153921",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "7e80fb35681492fe84ac19df4cf4aca5a33d0a80859affadd81874d184138fde",
+              "pkgname": "mingw-w64-x86_64-pango",
+              "pkgver": "1.58.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-pango-1.58.0-1-any/mingw64/bin/libpangowin32-1.0-0.dll"
+          }
+        ],
         "path": "libpangowin32-1.0-0.dll",
         "sha256": "08a8ac72c621158d47eb713139e0ad9021c43bef1af01f1365a41fb7f33272c8"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "14dc4d3bba916b44d037d7ea67d09df7403b5264454205145e9858ce20c7b6d0",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-3-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "1ca0916c1d18201127cdd51c3e6ecedbd687a0d005c805bb58704c64840c683c",
+              "pkgname": "mingw-w64-x86_64-pcre2",
+              "pkgver": "10.47-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-pcre2-10.47-1-any/mingw64/bin/libpcre2-8-0.dll"
+          }
+        ],
         "path": "libpcre2-8-0.dll",
         "sha256": "a499fb8a7eff453d6e4f0842576bc5171d40a1505d8f7f13fff6cee51b738a62"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "9e3f717491bb4ed40dc49dbf7ff7e1dc5092b7daf5b5b036c6d45d332a5253ba",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "fa830ef873ec1ae198990e4206ea4020ea39f5408e7d48ed0a7d4cd6aca45891",
+              "pkgname": "mingw-w64-x86_64-pixman",
+              "pkgver": "0.46.4-3",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-pixman-0.46.4-3-any/mingw64/bin/libpixman-1-0.dll"
+          }
+        ],
         "path": "libpixman-1-0.dll",
         "sha256": "55ce45825eb8e825c635416171be4736147a6b0b690469f545d8c4ae8e85b4a3"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "fef0a487ac1cb8ef622e43e23bb68dc6253361600b025ce3403517162925bc3f",
+              "licenses_declared_in_pkginfo": [
+                "custom"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "f6541a41e4ba805c22118b2839dd8271d719db43fb5c56750297e90eb9de45c6",
+              "pkgname": "mingw-w64-x86_64-libpng",
+              "pkgver": "1.6.58-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libpng-1.6.58-1-any/mingw64/bin/libpng16-16.dll"
+          }
+        ],
         "path": "libpng16-16.dll",
         "sha256": "3737838ee8d6b893df7bdabf7439775371a57dce7e17ee6b35586023c64bd9ab"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "0b0fbe872b75dd16b98ad81e4e9919173eb6829cccad61a4445c52195d93d01d",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "69d77870ca57915e0f1ae633671540e8c5cab6a098eb551a27fcaa6062dc54c4",
+              "pkgname": "mingw-w64-x86_64-libpsl",
+              "pkgver": "0.21.5-3",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libpsl-0.21.5-3-any/mingw64/bin/libpsl-5.dll"
+          }
+        ],
         "path": "libpsl-5.dll",
         "sha256": "b31fc70eda598a39b65fe2736d815518db0652d641346f75eac40c2a0499b058"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "4d968afe4d1f3b312939d3e693342b37369f398595e0334ba8b447220a2acc50",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-3-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "81aa44a468591c24ee467fa3aa40adbb47ef4cdc433a7f5b540f4da45d197222",
+              "pkgname": "mingw-w64-x86_64-libwebp",
+              "pkgver": "1.6.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libwebp-1.6.0-1-any/mingw64/bin/libsharpyuv-0.dll"
+          }
+        ],
         "path": "libsharpyuv-0.dll",
         "sha256": "ab0c9f61dc69b6bcdff1011e215f8d5fd6e5096aba9be3386ab87f217fbbeffe"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "d78e5ed12dea28c56c55b86c3c1a0c6213af32f2ac7a220a82056808ee2bb666",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-3-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "071df875eee5de15432d15f88d599db080e45717996e48db5d6e514615d2c4a8",
+              "pkgname": "mingw-w64-x86_64-libssh2-wincng",
+              "pkgver": "1.11.1-2",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libssh2-wincng-1.11.1-2-any/mingw64/bin/libssh2-1.dll"
+          }
+        ],
         "path": "libssh2-1.dll",
         "sha256": "ee7fe3e749859334c99e9261689481dd879811122598d22585421f95d29fc7ae"
       },
@@ -520,58 +1101,194 @@
         "sha256": "54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "30ad69a76b70d69a9453d891bf19459e4396a6fc4083983c8736c35f2f3a95fd",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "939c1943af92122b4e4ec58ab719cc9592160d075b06c20361e522c332b70d5d",
+              "pkgname": "mingw-w64-x86_64-libthai",
+              "pkgver": "0.1.30-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libthai-0.1.30-1-any/mingw64/bin/libthai-0.dll"
+          }
+        ],
         "path": "libthai-0.dll",
         "sha256": "5d741974fdec19e0f6cddbcdb539428af0c7392740a056634714c2884157fdb9"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "c209e9f59036b66a73413917418d26f5a7db72c0e458fafb0478eb54edaf1e07",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "0a62d78e78bceb0e8a231e007dec222c8257647c38db2056068c9fad78988f25",
+              "pkgname": "mingw-w64-x86_64-libtiff",
+              "pkgver": "4.7.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libtiff-4.7.2-1-any/mingw64/bin/libtiff-6.dll"
+          }
+        ],
         "path": "libtiff-6.dll",
         "sha256": "47fe69165bf8e211aaa84224f51f145dc894e330fe7ca167f7c99419e0c8c894"
       },
       {
-        "byte_match_found": false,
+        "byte_match_found": true,
         "different_byte_candidates": 0,
-        "matching_packages": [],
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "1d235a9597d141dbbcd4e8f8e935dc592082ccf78ce4d9e39d1c8e5478def3b9",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-3.0-or-later OR GPL-3.0-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "3b8d07f5177221f23fd31318c682de90021f9b8e000f8bbaccbc05ee494015d1",
+              "pkgname": "mingw-w64-x86_64-libunistring",
+              "pkgver": "1.4.2-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libunistring-1.4.2-1-any/mingw64/bin/libunistring-5.dll"
+          }
+        ],
         "path": "libunistring-5.dll",
         "sha256": "b91e2850d3668d4931056a8f4d35783b8ec3eea3735485108a936a072cd16071"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "4d968afe4d1f3b312939d3e693342b37369f398595e0334ba8b447220a2acc50",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-3-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "81aa44a468591c24ee467fa3aa40adbb47ef4cdc433a7f5b540f4da45d197222",
+              "pkgname": "mingw-w64-x86_64-libwebp",
+              "pkgver": "1.6.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libwebp-1.6.0-1-any/mingw64/bin/libwebp-7.dll"
+          }
+        ],
         "path": "libwebp-7.dll",
         "sha256": "c6c21a10f8cfe13270832e64640b82709e1d87b956b5f15af435a6c25acd6bbf"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "4d968afe4d1f3b312939d3e693342b37369f398595e0334ba8b447220a2acc50",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-3-Clause"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "81aa44a468591c24ee467fa3aa40adbb47ef4cdc433a7f5b540f4da45d197222",
+              "pkgname": "mingw-w64-x86_64-libwebp",
+              "pkgver": "1.6.0-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libwebp-1.6.0-1-any/mingw64/bin/libwebpmux-3.dll"
+          }
+        ],
         "path": "libwebpmux-3.dll",
         "sha256": "2c8a2e9d7901ec65330f31f9989c2a07ef0506e903b485fcd8b241a6bab9b88f"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 4,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "1f2541cf1a549a61f09aecde84d4a538e141a66bf6d1b16146001d89ecfa4568",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT AND BSD-3-Clause-Clear"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "051640e65871ac72a217915ea39247a3d0cba568b61deae0a38c0bd442152fab",
+              "pkgname": "mingw-w64-x86_64-libwinpthread",
+              "pkgver": "14.0.0.r220.gd999af622-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libwinpthread-14.0.0.r220.gd999af622-1-any/mingw64/bin/libwinpthread-1.dll"
+          }
+        ],
         "path": "libwinpthread-1.dll",
         "sha256": "6a661d5846d80a91394dbb9b2dab87ba3cc705eac80ad45fe73677bff70cd6d2"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "1abd12ff8df7b1d53dc651e7abc719b7479affb01cd2ba9e4cc5b6d5e0ff4e7e",
+              "licenses_declared_in_pkginfo": [
+                "spdx:BSD-3-Clause OR GPL-2.0-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "e64d3022df101f60218ed83e46367b39cf3900d6dc7cc7d723411d73a3f74ff0",
+              "pkgname": "mingw-w64-x86_64-zstd",
+              "pkgver": "1.5.7-2",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-zstd-1.5.7-2-any/mingw64/bin/libzstd.dll"
+          }
+        ],
         "path": "libzstd.dll",
         "sha256": "b95c223a9548a9ecf51377c962e0bc8f0c51eb0c6f67a296dbc885996f0dd40d"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 3,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "99413465765a90ed47a85e270f2d1cab936963decde935647bfca2c8ff5244d9",
+              "licenses_declared_in_pkginfo": [
+                "spdx:Zlib"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "9dc22d54bc2e29324c7925cdea7e627f896b55674f7b626f52e756aadfc100c3",
+              "pkgname": "mingw-w64-x86_64-zlib",
+              "pkgver": "1.3.2-2",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-zlib-1.3.2-2-any/mingw64/bin/zlib1.dll"
+          }
+        ],
         "path": "zlib1.dll",
         "sha256": "93e9243a44c29200eeacaf9658efe2558581770e4b11ca4b500e18e424a6e3b5"
       }
@@ -587,36 +1304,17 @@
     "isolated_keyring": true,
     "user_keyrings_accessed": false,
     "license_audit_complete": false,
+    "revocation_list_git_blob": "38db966082240362b21a1cd1e66d6dc50d67f34d",
+    "archive_count": 41,
+    "new_signatures_checked": 5,
+    "inherited_signatures_byte_hashes_rechecked": true,
+    "trust_chain_review_complete": false,
     "archives": [
       {
-        "archive": "mingw-w64-x86_64-libb2-0.98.1-3-any.pkg.tar.zst",
-        "archive_sha256": "3c898f08c5f19e25dc6d7e39aa36b6f323141f0e62c5c50f089cd3f89711854c",
-        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libb2-0.98.1-3-any.pkg.tar.zst.sig",
-        "signature_sha256": "531641974e77221fd40545eba8e46b5a121cdaf854ab986c42d2ae6771c85ac1",
-        "gpg_returncode": 0,
-        "valid_signature_fingerprints": [
-          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
-        ],
-        "signature_valid_against_downloaded_keyring": true,
-        "trust_chain_review_complete": false,
-        "status_kinds": [
-          "NEWSIG",
-          "KEY_CONSIDERED",
-          "SIG_ID",
-          "GOODSIG",
-          "VALIDSIG",
-          "TRUST_UNDEFINED"
-        ],
-        "primary_fingerprints": [
-          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
-        ],
-        "signer_listed_revoked": false
-      },
-      {
-        "archive": "mingw-w64-x86_64-jbigkit-2.1-5-any.pkg.tar.zst",
-        "archive_sha256": "3343b02d3b5e5e44304d68f0122f2de1faba2df6c180b8ddc8ef01f9ad5fe75a",
-        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-jbigkit-2.1-5-any.pkg.tar.zst.sig",
-        "signature_sha256": "032d9a43ba99918d62a90a30e1435eaa55666e24d02939190abd546e1c5798fb",
+        "archive": "mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst",
+        "archive_sha256": "f5f2f7e723a08378241d15f0537386950c1a48e2d82bc47bedd632bd61852aba",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "41d40cbb64a05c0e4d41347fa3bb8e2fbe7239c689a91463e2a9316aa9fd381a",
         "gpg_returncode": 0,
         "valid_signature_fingerprints": [
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
@@ -661,14 +1359,18 @@
         "signer_listed_revoked": false
       },
       {
-        "archive": "mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst",
-        "archive_sha256": "f5f2f7e723a08378241d15f0537386950c1a48e2d82bc47bedd632bd61852aba",
-        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-brotli-1.2.0-1-any.pkg.tar.zst.sig",
-        "signature_sha256": "41d40cbb64a05c0e4d41347fa3bb8e2fbe7239c689a91463e2a9316aa9fd381a",
+        "archive": "mingw-w64-x86_64-cairo-1.18.4-4-any.pkg.tar.zst",
+        "archive_sha256": "1487120562e42601a8462d9953098f685c513999a2e472a3524fa96434be3290",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-cairo-1.18.4-4-any.pkg.tar.zst.sig",
+        "signature_sha256": "e1cd597c33798af6cfd240ec0849754135c58824a3a951377ede5209841d1d38",
         "gpg_returncode": 0,
         "valid_signature_fingerprints": [
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
         ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
         "signature_valid_against_downloaded_keyring": true,
         "trust_chain_review_complete": false,
         "status_kinds": [
@@ -678,21 +1380,21 @@
           "GOODSIG",
           "VALIDSIG",
           "TRUST_UNDEFINED"
-        ],
-        "primary_fingerprints": [
-          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
-        ],
-        "signer_listed_revoked": false
+        ]
       },
       {
-        "archive": "mingw-w64-x86_64-giflib-6.1.3-1-any.pkg.tar.zst",
-        "archive_sha256": "bfa540ab9892bbc5161e3f81fcfb0ca71f44bd2e00478b5df79f899825c523f5",
-        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-giflib-6.1.3-1-any.pkg.tar.zst.sig",
-        "signature_sha256": "6ef9fe42c3e71c3f7e5f7d296caf145ca0e8c71d85f9ad574e9c9b4826163042",
+        "archive": "mingw-w64-x86_64-curl-winssl-8.21.0-2-any.pkg.tar.zst",
+        "archive_sha256": "5bc07a331bd27e299dddbcbd6c62d2edaba3da0c09a70ab30d8c71307d1156fd",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-curl-winssl-8.21.0-2-any.pkg.tar.zst.sig",
+        "signature_sha256": "7e41d168effc7e1437f43646fd8ad32f18dfb79874d03d0a4f5b6d0b483dba85",
         "gpg_returncode": 0,
         "valid_signature_fingerprints": [
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
         ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
         "signature_valid_against_downloaded_keyring": true,
         "trust_chain_review_complete": false,
         "status_kinds": [
@@ -702,17 +1404,61 @@
           "GOODSIG",
           "VALIDSIG",
           "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-expat-2.8.2-1-any.pkg.tar.zst",
+        "archive_sha256": "9f25550c738b7695164f4ea237af40512d7c63b4cd97aa417f3e0214930aca4f",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-expat-2.8.2-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "11c1caa69004e7d7a2cc9302e0f70cb55e81fb357bc33b3ceb12a15a4654ceaa",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
         ],
         "primary_fingerprints": [
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
         ],
-        "signer_listed_revoked": false
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
       },
       {
-        "archive": "mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst",
-        "archive_sha256": "fbbf30e9a911c1139ba5c38c5ae008309dd912f6c6b1e05f4310ec698e1b1339",
-        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst.sig",
-        "signature_sha256": "3e02be6740915c2e953a1269ac795d80befe75e8f7c7b65d80016024bf4fd8e4",
+        "archive": "mingw-w64-x86_64-fontconfig-2.18.2-1-any.pkg.tar.zst",
+        "archive_sha256": "dfba8c17600314f2f6fb11b8b963539d89b66d1953ed20a62286bea27b520bee",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-fontconfig-2.18.2-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "0632a30bf4e6541333a715a82dee0d6c71137c413941446883777035c5399c2c",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-freetype-2.14.3-1-any.pkg.tar.zst",
+        "archive_sha256": "b3e310f457c90348fd14b8c1085e9c036016d168812a657fec21f496f7e3de99",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-freetype-2.14.3-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "6388c8f549cf2a85d1e39a7934d1d6c4b4aeccf212a0989011e01cfc4e8175cd",
         "gpg_returncode": 0,
         "valid_signature_fingerprints": [
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
@@ -757,10 +1503,298 @@
         ]
       },
       {
+        "archive": "mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst",
+        "archive_sha256": "be68d7f260633284b910c588c6d82ee304a81c8817a686d2cd9df83f872c27af",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "f4da268315da6eb32c01715830743e6a10c960392eb1e9e57ee33060a6411379",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-giflib-6.1.3-1-any.pkg.tar.zst",
+        "archive_sha256": "bfa540ab9892bbc5161e3f81fcfb0ca71f44bd2e00478b5df79f899825c523f5",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-giflib-6.1.3-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "6ef9fe42c3e71c3f7e5f7d296caf145ca0e8c71d85f9ad574e9c9b4826163042",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false
+      },
+      {
+        "archive": "mingw-w64-x86_64-glib2-2.88.2-1-any.pkg.tar.zst",
+        "archive_sha256": "5855fb26ca86405a1826e2a7b35c068860225bce6a53c698f7094105ad25271a",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-glib2-2.88.2-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "e80c5bc9587e5dffe8410dd1076b2cc5061d57050de849865ea035add6e43c47",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
         "archive": "mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst",
         "archive_sha256": "6ad20d6c16e559f7c4b06fe71248e1201c7edf494d04e5721ed7f9b3f7fd1f74",
         "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst.sig",
         "signature_sha256": "9ff06e3c365451fe5147ff3813cacc84da504b3e76756441130fda0ebe202e13",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-harfbuzz-14.2.1-1-any.pkg.tar.zst",
+        "archive_sha256": "d378464a57f52e52c6016822bf718c6d93c2783c4f778f2b685da6008a969632",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-harfbuzz-14.2.1-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "f0ec8a661566959a3446e489183d710c580995bc11af7927e4443fefedaa07e8",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-icu-78.3-3-any.pkg.tar.zst",
+        "archive_sha256": "b5e805ce81202e48d52bf598345ac5c3ba229f017f03eb23858452b22349c391",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-icu-78.3-3-any.pkg.tar.zst.sig",
+        "signature_sha256": "602681d0b77224bb8a6e6c2eb5a955df6be68fdb080b81dd07f58e3301ee2339",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-jbigkit-2.1-5-any.pkg.tar.zst",
+        "archive_sha256": "3343b02d3b5e5e44304d68f0122f2de1faba2df6c180b8ddc8ef01f9ad5fe75a",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-jbigkit-2.1-5-any.pkg.tar.zst.sig",
+        "signature_sha256": "032d9a43ba99918d62a90a30e1435eaa55666e24d02939190abd546e1c5798fb",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false
+      },
+      {
+        "archive": "mingw-w64-x86_64-leptonica-1.87.0-1-any.pkg.tar.zst",
+        "archive_sha256": "702d6ee60255b083aa37a3cbbe1a53ef253d9119204d0478d025efea2d0c91f9",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-leptonica-1.87.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "bc74f57516abe14c5d18c1162737cb7065344fa9783e09ac6a1c6e2a46a55a6c",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-lerc-4.1.1-1-any.pkg.tar.zst",
+        "archive_sha256": "5bc170650bc02812a7c674a5f7b8ff2781b4bfa259ab2da2264c3008e2a04c72",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-lerc-4.1.1-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "4e30e4d72c6746518a402f0c87ae4fc95a4adda1d29a906e4412881ddeca6cf4",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libarchive-3.8.8-2-any.pkg.tar.zst",
+        "archive_sha256": "25dd8243853b7a744c40aa5dcbfbc91116ee527b9c2e6ee6ee2f7300085611ca",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libarchive-3.8.8-2-any.pkg.tar.zst.sig",
+        "signature_sha256": "30f614e6a0ad1f13367bc57ffadbefff5bdd74c625e1e2c17669b5f6a3b4db32",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libb2-0.98.1-3-any.pkg.tar.zst",
+        "archive_sha256": "3c898f08c5f19e25dc6d7e39aa36b6f323141f0e62c5c50f089cd3f89711854c",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libb2-0.98.1-3-any.pkg.tar.zst.sig",
+        "signature_sha256": "531641974e77221fd40545eba8e46b5a121cdaf854ab986c42d2ae6771c85ac1",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false
+      },
+      {
+        "archive": "mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst",
+        "archive_sha256": "fbbf30e9a911c1139ba5c38c5ae008309dd912f6c6b1e05f4310ec698e1b1339",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "3e02be6740915c2e953a1269ac795d80befe75e8f7c7b65d80016024bf4fd8e4",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libdeflate-1.25-1-any.pkg.tar.zst",
+        "archive_sha256": "75f921f6db5713c3a5d7d8e058684a9c5d31efe6eda131e0d05f408ed74f7475",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libdeflate-1.25-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "b5201aa74414ea904cad5272b2484ccbc793dad52324f25c3111b2e78420604e",
         "gpg_returncode": 0,
         "valid_signature_fingerprints": [
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
@@ -803,9 +1837,464 @@
           "VALIDSIG",
           "TRUST_UNDEFINED"
         ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libiconv-1.19-1-any.pkg.tar.zst",
+        "archive_sha256": "21e334d0911f25de75d3e18e0697648bcecfa9658256d600cad0827d719c2f35",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libiconv-1.19-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "89de5b11d92ed20d7a960d5658cfd98b670f323802ea805c229fdc5f14efc5eb",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libidn2-2.3.8-4-any.pkg.tar.zst",
+        "archive_sha256": "f98a157446f9ac35465022e329cdaf6169b0c9fa19837e9d80aff9d4e5109013",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libidn2-2.3.8-4-any.pkg.tar.zst.sig",
+        "signature_sha256": "b30b2e03097cafc670024cb12f0a27216bdbb92f3c1f2b98d624dec25aae83a2",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst",
+        "archive_sha256": "ef3f55cf5238a8045c8f37796d730e4a5ee619d29ca9254aaa62456e5b5b7e51",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "0ecf6b2d21bf32bf83c13c591dc7315c12a2d13a5d98be476abdfeede75ba680",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libpng-1.6.58-1-any.pkg.tar.zst",
+        "archive_sha256": "d8ae6066f99b3a04b83b8013b554a26a205d7e68580b80823c173ed045ba76a5",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libpng-1.6.58-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "a3fcfdcd469b333f5e8a2af78854b8e5fa51a9496e2f2e8a42a37b6877b9ffa1",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst",
+        "archive_sha256": "2a86f7ce3cd3fabff7eb8e5c0d3eb1134808881a44c3838e1b518b75cb402e35",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst.sig",
+        "signature_sha256": "079f4cf402739116e3518642182aa2944a434129d6dabe2ea76bce455b770e64",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libssh2-wincng-1.11.1-2-any.pkg.tar.zst",
+        "archive_sha256": "3c5e60ffbe4789f97b0defe01f52cfcaf8191bb19c0d070083b21506bf0fc0c1",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libssh2-wincng-1.11.1-2-any.pkg.tar.zst.sig",
+        "signature_sha256": "025d4f0b4573827758bf11318054b44f5952776f1a2f004e2fc5d22442d0575c",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libthai-0.1.30-1-any.pkg.tar.zst",
+        "archive_sha256": "e8cfad91934e24e9a88221b66f2d1c5a310c952ef86631107a632d3ff1738211",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libthai-0.1.30-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "3cf9694cc809a413635de5f17c54eb28e80fff0d2ac03394f5b83dd542503efd",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libtiff-4.7.2-1-any.pkg.tar.zst",
+        "archive_sha256": "ebc466fa5664c1528834c59ee7134ba57df6db224e503b690870e2c613f30c3e",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libtiff-4.7.2-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "3560f520f5d262660162f81dfbfe87d9bed58c4b9a0b1f82f26f58bff062782a",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst",
+        "archive_sha256": "c940cf52fb2b579baa596d3c1d911f7544cbf90f8bd19c260377aa115c65b059",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "a2b54a0a61cd062476f4098491f887b85b5575ba1e7429e1a7e7aac8786014ac",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst",
+        "archive_sha256": "360b1690d41eb497dfe50526460a2424600a6a806cbb76c5b0fec9f14623ac59",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "a940474bd5bf6c513449639c74bd9ee39538d7ece3a9cbcd1c54f8e9e0a1c660",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libwinpthread-14.0.0.r220.gd999af622-1-any.pkg.tar.zst",
+        "archive_sha256": "16bf944184656c6976b3c8b9ca872da49560d8b7cced36a63fe6638c6e63ae45",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libwinpthread-14.0.0.r220.gd999af622-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "1e31a1926d5dc4e40f4c65e2396cc1f92547076889c227bcc0ef7616b83bd659",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-lz4-1.10.0-1-any.pkg.tar.zst",
+        "archive_sha256": "a4c5a3bcd26111554c87591275b8a681bfa4473d1607647e24c22ef6213c055c",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-lz4-1.10.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "b93f8744214febab59babdcb97db3d9e9dad4ddab8be8f48208e3c31a4bf6cad",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-openjpeg2-2.5.4-2-any.pkg.tar.zst",
+        "archive_sha256": "32f8f5dc7df9f1f2d57157717136fbba431e15bc000420c953c00ffdf76ecde4",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-openjpeg2-2.5.4-2-any.pkg.tar.zst.sig",
+        "signature_sha256": "b6961945f56c2fd29bcb61bcfac386d93f293b8b0165ee5072d66764ff0fd5cf",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-pango-1.58.0-1-any.pkg.tar.zst",
+        "archive_sha256": "9344fd35e7c1a14d8220cef4d251c631a22509766aa1134ee446f07333db6235",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pango-1.58.0-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "031c3ea5d098fb450bfdb09f9387b131e8cd441e4b694f4065dabd891cba235e",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-pcre2-10.47-1-any.pkg.tar.zst",
+        "archive_sha256": "7c9e3cd47af02a096c0c1810d1021f63c5fb1d22dbec91fa019d8b37eda00d98",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pcre2-10.47-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "9ad1e1323a7391229767a5ba0c96cb9254b6869abb806e835f7089d7ffebe175",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-pixman-0.46.4-3-any.pkg.tar.zst",
+        "archive_sha256": "435715dd1ca4c55873cf3c38d644615196bc2d238e3366f8ff81cc0811260eb2",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pixman-0.46.4-3-any.pkg.tar.zst.sig",
+        "signature_sha256": "a3fcf42f8648832b20ca4ee5e7fced657e4462a6069c79dde7ee9d0a85a382ad",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-xz-5.8.3-1-any.pkg.tar.zst",
+        "archive_sha256": "075bfaf1c7527f2fdd02ad5b973378e1e8d426ba7b614f122cebd81a8fe5d1c1",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-xz-5.8.3-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "4628a04fd58d0f845af1ca23e7e5740be8a830d8787ae35e7c96a49d3728dc60",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-zlib-1.3.2-2-any.pkg.tar.zst",
+        "archive_sha256": "9e75842a070ba648e986e12424e1c92c9d7d77200e85f6a34eeb600819f2e694",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-zlib-1.3.2-2-any.pkg.tar.zst.sig",
+        "signature_sha256": "c11e9e3e495eefb0d0d1ef53303f28430ef47967c4fe484b3742d59c012f60f8",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-zstd-1.5.7-2-any.pkg.tar.zst",
+        "archive_sha256": "1add6705b344664f6aca108c85f79ab5bdd9e1162662bb06a4cf40a34f6e0907",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-zstd-1.5.7-2-any.pkg.tar.zst.sig",
+        "signature_sha256": "8007e5509c5cc470eb231ad586b61b9cc74e7a6c060792a990a0b20728c67cb3",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
       }
-    ],
-    "revocation_list_git_blob": "38db966082240362b21a1cd1e66d6dc50d67f34d"
+    ]
   },
   "source_jbigkit": {
     "source_archive_url": "https://repo.msys2.org/mingw/sources/mingw-w64-jbigkit-2.1-5.src.tar.zst",
@@ -824,7 +2313,7 @@
     "recipe_sha256": "95e0df2be8fb755c7e9a0ccbba56412fed191d34e13c6a9d55c3469c029425a8",
     "recipe_expected_from_buildinfo": "95e0df2be8fb755c7e9a0ccbba56412fed191d34e13c6a9d55c3469c029425a8",
     "recipe_matches_buildinfo": true,
-    "source_archive_signature_verified": false,
+    "source_archive_signature_verified": true,
     "license_audit_complete": false
   },
   "upstream_jbigkit": {
@@ -835,5 +2324,421 @@
     "trust_chain_review_complete": false,
     "source_signature_returncode": 0,
     "source_signature_valid": true
+  },
+  "installer_byte_evidence": {
+    "format": 1,
+    "installer_executed": false,
+    "financial_data_used": false,
+    "runtime_modified": false,
+    "archive": {
+      "name": "tesseract-ocr-w64-setup-5.5.3.20260724.exe",
+      "url": "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe",
+      "sha": "bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4"
+    },
+    "extractor_msi": {
+      "name": "7z2605-x64.msi",
+      "url": "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-x64.msi",
+      "sha": "3fe4ab99fa15629c652944309a2b2bc6e41fc933fc6b63f5df1ebcf3aea68263"
+    },
+    "local_extractor_sha256": "94205cfc054dd3bbeb978905bc619a65b3f04e9e73bb2717841110b6f46d962e",
+    "local_extractor_dll_sha256": "78bf6b668d75801e3aa180b4ccb16e6d8395fba80dec8a065055bb6f8dfabb82",
+    "native_files": 56,
+    "native_byte_matches": 56,
+    "records": [
+      {
+        "path": "tesseract.exe",
+        "installer_member": "tesseract.exe",
+        "sha256": "c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420",
+        "manifest_sha256": "c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420",
+        "byte_match": true
+      },
+      {
+        "path": "libarchive-13.dll",
+        "installer_member": "libarchive-13.dll",
+        "sha256": "ddabddfdc98e1e1342ce4a7069fb4004de6c870d7bc9f4e95ef243dd18468e97",
+        "manifest_sha256": "ddabddfdc98e1e1342ce4a7069fb4004de6c870d7bc9f4e95ef243dd18468e97",
+        "byte_match": true
+      },
+      {
+        "path": "libb2-1.dll",
+        "installer_member": "libb2-1.dll",
+        "sha256": "77bab532b5421d6cdddb96c3ae9a4bde144eb481ccaf243336c9f8c690a50987",
+        "manifest_sha256": "77bab532b5421d6cdddb96c3ae9a4bde144eb481ccaf243336c9f8c690a50987",
+        "byte_match": true
+      },
+      {
+        "path": "libbrotlicommon.dll",
+        "installer_member": "libbrotlicommon.dll",
+        "sha256": "ca7bc06ead80259971badf2cd0bfc688db9154dad65f139f49a38b4be9976f97",
+        "manifest_sha256": "ca7bc06ead80259971badf2cd0bfc688db9154dad65f139f49a38b4be9976f97",
+        "byte_match": true
+      },
+      {
+        "path": "libbrotlidec.dll",
+        "installer_member": "libbrotlidec.dll",
+        "sha256": "a142dc6cfa77cb907028aa9426f486f3d8de37855e8db2ae2894147908121881",
+        "manifest_sha256": "a142dc6cfa77cb907028aa9426f486f3d8de37855e8db2ae2894147908121881",
+        "byte_match": true
+      },
+      {
+        "path": "libbz2-1.dll",
+        "installer_member": "libbz2-1.dll",
+        "sha256": "b79cd3a7102e359ef6324e98966a67939e58ec2b651ae2847cae84a4dfa453f7",
+        "manifest_sha256": "b79cd3a7102e359ef6324e98966a67939e58ec2b651ae2847cae84a4dfa453f7",
+        "byte_match": true
+      },
+      {
+        "path": "libcairo-2.dll",
+        "installer_member": "libcairo-2.dll",
+        "sha256": "c474166543aed18b389b20122ca2741189504994dafd86cd5ed121e95bd82ce4",
+        "manifest_sha256": "c474166543aed18b389b20122ca2741189504994dafd86cd5ed121e95bd82ce4",
+        "byte_match": true
+      },
+      {
+        "path": "libcurl-4.dll",
+        "installer_member": "libcurl-4.dll",
+        "sha256": "3d302f9690e810fdfd950254e2f0663d0ff768737f350c602a4ed3a06e9b6b2b",
+        "manifest_sha256": "3d302f9690e810fdfd950254e2f0663d0ff768737f350c602a4ed3a06e9b6b2b",
+        "byte_match": true
+      },
+      {
+        "path": "libdatrie-1.dll",
+        "installer_member": "libdatrie-1.dll",
+        "sha256": "2f784872e6404e57847201fe1e7e591bd5b5be4a319ef38ebcb36014ac7f385d",
+        "manifest_sha256": "2f784872e6404e57847201fe1e7e591bd5b5be4a319ef38ebcb36014ac7f385d",
+        "byte_match": true
+      },
+      {
+        "path": "libdeflate.dll",
+        "installer_member": "libdeflate.dll",
+        "sha256": "3f3fc3a73bc3623dc93b37bb321c484d3731d93006fd01c0495d15711826eb44",
+        "manifest_sha256": "3f3fc3a73bc3623dc93b37bb321c484d3731d93006fd01c0495d15711826eb44",
+        "byte_match": true
+      },
+      {
+        "path": "libexpat-1.dll",
+        "installer_member": "libexpat-1.dll",
+        "sha256": "92ae866c6c58dd2d8366aa0e6230ba8d434d5306e8d8c3a08b7e61750fc16153",
+        "manifest_sha256": "92ae866c6c58dd2d8366aa0e6230ba8d434d5306e8d8c3a08b7e61750fc16153",
+        "byte_match": true
+      },
+      {
+        "path": "libffi-8.dll",
+        "installer_member": "libffi-8.dll",
+        "sha256": "390e4bf8abd037abd0e1dd1f311606715e43f8efe812e5c5b8775acf2cb2f21e",
+        "manifest_sha256": "390e4bf8abd037abd0e1dd1f311606715e43f8efe812e5c5b8775acf2cb2f21e",
+        "byte_match": true
+      },
+      {
+        "path": "libfontconfig-1.dll",
+        "installer_member": "libfontconfig-1.dll",
+        "sha256": "661c44249b9b06820554940a984b783b1daae9740a4a2eb265fe77205962486f",
+        "manifest_sha256": "661c44249b9b06820554940a984b783b1daae9740a4a2eb265fe77205962486f",
+        "byte_match": true
+      },
+      {
+        "path": "libfreetype-6.dll",
+        "installer_member": "libfreetype-6.dll",
+        "sha256": "bbb3e6390ee229c867ef31f10e42a49a61a92e434a11d40c6139a2608ebc6194",
+        "manifest_sha256": "bbb3e6390ee229c867ef31f10e42a49a61a92e434a11d40c6139a2608ebc6194",
+        "byte_match": true
+      },
+      {
+        "path": "libfribidi-0.dll",
+        "installer_member": "libfribidi-0.dll",
+        "sha256": "84930fd86a3b46b62794a3bbaff21fbbaeaade5ff7cdc70be7f717ad29af87ed",
+        "manifest_sha256": "84930fd86a3b46b62794a3bbaff21fbbaeaade5ff7cdc70be7f717ad29af87ed",
+        "byte_match": true
+      },
+      {
+        "path": "libgcc_s_seh-1.dll",
+        "installer_member": "libgcc_s_seh-1.dll",
+        "sha256": "172cfdc9d83703ec0a0ca2cee08f6cf2a166b801717ee51a56b3a63b36bc2f83",
+        "manifest_sha256": "172cfdc9d83703ec0a0ca2cee08f6cf2a166b801717ee51a56b3a63b36bc2f83",
+        "byte_match": true
+      },
+      {
+        "path": "libgif-7.dll",
+        "installer_member": "libgif-7.dll",
+        "sha256": "5b3d837ccaab84683dd93fbaddf2d98e1a9f90e0ddb8ea73dc70157adb4d26f1",
+        "manifest_sha256": "5b3d837ccaab84683dd93fbaddf2d98e1a9f90e0ddb8ea73dc70157adb4d26f1",
+        "byte_match": true
+      },
+      {
+        "path": "libgio-2.0-0.dll",
+        "installer_member": "libgio-2.0-0.dll",
+        "sha256": "3dc3d4d477633cc9265b0796f9037a9fa387f4a1e8b7258890987a8c2c21eb0a",
+        "manifest_sha256": "3dc3d4d477633cc9265b0796f9037a9fa387f4a1e8b7258890987a8c2c21eb0a",
+        "byte_match": true
+      },
+      {
+        "path": "libglib-2.0-0.dll",
+        "installer_member": "libglib-2.0-0.dll",
+        "sha256": "43f2015fccfb10e22ecece61855d9ea21835f833b6533bc53ab77b54f4d66c34",
+        "manifest_sha256": "43f2015fccfb10e22ecece61855d9ea21835f833b6533bc53ab77b54f4d66c34",
+        "byte_match": true
+      },
+      {
+        "path": "libgmodule-2.0-0.dll",
+        "installer_member": "libgmodule-2.0-0.dll",
+        "sha256": "69cf44cda7756a6ec4a926e0cf9fe81721f05d65abfab88ff83004fa508bb0e7",
+        "manifest_sha256": "69cf44cda7756a6ec4a926e0cf9fe81721f05d65abfab88ff83004fa508bb0e7",
+        "byte_match": true
+      },
+      {
+        "path": "libgobject-2.0-0.dll",
+        "installer_member": "libgobject-2.0-0.dll",
+        "sha256": "acf20d5ddd3d2e4b4355576f5cf662c18f42746c50f43eaccc0596592616602a",
+        "manifest_sha256": "acf20d5ddd3d2e4b4355576f5cf662c18f42746c50f43eaccc0596592616602a",
+        "byte_match": true
+      },
+      {
+        "path": "libgraphite2.dll",
+        "installer_member": "libgraphite2.dll",
+        "sha256": "063a9ad34a5ec87d038b4646660957395224ecf2cf707917256b7d251a7c5f57",
+        "manifest_sha256": "063a9ad34a5ec87d038b4646660957395224ecf2cf707917256b7d251a7c5f57",
+        "byte_match": true
+      },
+      {
+        "path": "libharfbuzz-0.dll",
+        "installer_member": "libharfbuzz-0.dll",
+        "sha256": "54fb644a1143b3b81d494684f299aca9ff4b72134f12a7b1cfb2bd0f8fa9cef7",
+        "manifest_sha256": "54fb644a1143b3b81d494684f299aca9ff4b72134f12a7b1cfb2bd0f8fa9cef7",
+        "byte_match": true
+      },
+      {
+        "path": "libiconv-2.dll",
+        "installer_member": "libiconv-2.dll",
+        "sha256": "7a282a854e01be726c6cccfe46f548c716aa45b3014818468253aaa4efbcd067",
+        "manifest_sha256": "7a282a854e01be726c6cccfe46f548c716aa45b3014818468253aaa4efbcd067",
+        "byte_match": true
+      },
+      {
+        "path": "libicudt78.dll",
+        "installer_member": "libicudt78.dll",
+        "sha256": "47d19b605a28461d44e0d8c062c465e92c9edfb0244f023a8066f7337d317d0e",
+        "manifest_sha256": "47d19b605a28461d44e0d8c062c465e92c9edfb0244f023a8066f7337d317d0e",
+        "byte_match": true
+      },
+      {
+        "path": "libicuin78.dll",
+        "installer_member": "libicuin78.dll",
+        "sha256": "af3341827897a41ab16667ee0699acdb2b0338c3bf4ecc7f510a324f18755422",
+        "manifest_sha256": "af3341827897a41ab16667ee0699acdb2b0338c3bf4ecc7f510a324f18755422",
+        "byte_match": true
+      },
+      {
+        "path": "libicuuc78.dll",
+        "installer_member": "libicuuc78.dll",
+        "sha256": "3186171e946552e2a5e371cd0bc68bf37bd6e229a85dbb0d3c40231cf0858b49",
+        "manifest_sha256": "3186171e946552e2a5e371cd0bc68bf37bd6e229a85dbb0d3c40231cf0858b49",
+        "byte_match": true
+      },
+      {
+        "path": "libidn2-0.dll",
+        "installer_member": "libidn2-0.dll",
+        "sha256": "9880b52651a0247640a2531d777380f7c35fac7efa7e3979b265ddcb78db8642",
+        "manifest_sha256": "9880b52651a0247640a2531d777380f7c35fac7efa7e3979b265ddcb78db8642",
+        "byte_match": true
+      },
+      {
+        "path": "libintl-8.dll",
+        "installer_member": "libintl-8.dll",
+        "sha256": "0537c3dd2378218508ebe3cc416d72a99ee2d24ae1c5525e23458f32544ef861",
+        "manifest_sha256": "0537c3dd2378218508ebe3cc416d72a99ee2d24ae1c5525e23458f32544ef861",
+        "byte_match": true
+      },
+      {
+        "path": "libjbig-0.dll",
+        "installer_member": "libjbig-0.dll",
+        "sha256": "275a827ba6839d47cfdbe059db1b1b403a92ff26e2b76a29362915487868bef2",
+        "manifest_sha256": "275a827ba6839d47cfdbe059db1b1b403a92ff26e2b76a29362915487868bef2",
+        "byte_match": true
+      },
+      {
+        "path": "libjpeg-8.dll",
+        "installer_member": "libjpeg-8.dll",
+        "sha256": "b564d34adaca83e73af0e2231719dd0198ea6cd074c64b2ba85bfd7182f27db7",
+        "manifest_sha256": "b564d34adaca83e73af0e2231719dd0198ea6cd074c64b2ba85bfd7182f27db7",
+        "byte_match": true
+      },
+      {
+        "path": "libleptonica-6.dll",
+        "installer_member": "libleptonica-6.dll",
+        "sha256": "1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1",
+        "manifest_sha256": "1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1",
+        "byte_match": true
+      },
+      {
+        "path": "libLerc.dll",
+        "installer_member": "libLerc.dll",
+        "sha256": "6887fb5aeabf382a835a4cb693025e8d48d9c90e82ca4eae5d2d8ffb70c6ca9a",
+        "manifest_sha256": "6887fb5aeabf382a835a4cb693025e8d48d9c90e82ca4eae5d2d8ffb70c6ca9a",
+        "byte_match": true
+      },
+      {
+        "path": "liblz4.dll",
+        "installer_member": "liblz4.dll",
+        "sha256": "35f917274bca8f19677ba66f1b3cc3c83568c3249fc43215fc16e76439c8e856",
+        "manifest_sha256": "35f917274bca8f19677ba66f1b3cc3c83568c3249fc43215fc16e76439c8e856",
+        "byte_match": true
+      },
+      {
+        "path": "liblzma-5.dll",
+        "installer_member": "liblzma-5.dll",
+        "sha256": "dc9edb9bd83b0371fe68d96cb3e70cd17b7a5aba958326a18f8210cb812432e9",
+        "manifest_sha256": "dc9edb9bd83b0371fe68d96cb3e70cd17b7a5aba958326a18f8210cb812432e9",
+        "byte_match": true
+      },
+      {
+        "path": "libopenjp2-7.dll",
+        "installer_member": "libopenjp2-7.dll",
+        "sha256": "123587086cb1a25d2a338fb9b7c1d6bda10bf9062625b4f08c6a92b3d9cafe47",
+        "manifest_sha256": "123587086cb1a25d2a338fb9b7c1d6bda10bf9062625b4f08c6a92b3d9cafe47",
+        "byte_match": true
+      },
+      {
+        "path": "libpango-1.0-0.dll",
+        "installer_member": "libpango-1.0-0.dll",
+        "sha256": "a7722692aa345f88cd0cb0296ad144e14b89a25c9926b5c3bac815331bba2127",
+        "manifest_sha256": "a7722692aa345f88cd0cb0296ad144e14b89a25c9926b5c3bac815331bba2127",
+        "byte_match": true
+      },
+      {
+        "path": "libpangocairo-1.0-0.dll",
+        "installer_member": "libpangocairo-1.0-0.dll",
+        "sha256": "f0efa65511bc8f35186e9adf4628fb9ed505b31435a93afe218ae6c348197954",
+        "manifest_sha256": "f0efa65511bc8f35186e9adf4628fb9ed505b31435a93afe218ae6c348197954",
+        "byte_match": true
+      },
+      {
+        "path": "libpangoft2-1.0-0.dll",
+        "installer_member": "libpangoft2-1.0-0.dll",
+        "sha256": "adeeffc8438397998f449f8da1bd3832f4c031215415d7ed21109582dc6908a6",
+        "manifest_sha256": "adeeffc8438397998f449f8da1bd3832f4c031215415d7ed21109582dc6908a6",
+        "byte_match": true
+      },
+      {
+        "path": "libpangowin32-1.0-0.dll",
+        "installer_member": "libpangowin32-1.0-0.dll",
+        "sha256": "08a8ac72c621158d47eb713139e0ad9021c43bef1af01f1365a41fb7f33272c8",
+        "manifest_sha256": "08a8ac72c621158d47eb713139e0ad9021c43bef1af01f1365a41fb7f33272c8",
+        "byte_match": true
+      },
+      {
+        "path": "libpcre2-8-0.dll",
+        "installer_member": "libpcre2-8-0.dll",
+        "sha256": "a499fb8a7eff453d6e4f0842576bc5171d40a1505d8f7f13fff6cee51b738a62",
+        "manifest_sha256": "a499fb8a7eff453d6e4f0842576bc5171d40a1505d8f7f13fff6cee51b738a62",
+        "byte_match": true
+      },
+      {
+        "path": "libpixman-1-0.dll",
+        "installer_member": "libpixman-1-0.dll",
+        "sha256": "55ce45825eb8e825c635416171be4736147a6b0b690469f545d8c4ae8e85b4a3",
+        "manifest_sha256": "55ce45825eb8e825c635416171be4736147a6b0b690469f545d8c4ae8e85b4a3",
+        "byte_match": true
+      },
+      {
+        "path": "libpng16-16.dll",
+        "installer_member": "libpng16-16.dll",
+        "sha256": "3737838ee8d6b893df7bdabf7439775371a57dce7e17ee6b35586023c64bd9ab",
+        "manifest_sha256": "3737838ee8d6b893df7bdabf7439775371a57dce7e17ee6b35586023c64bd9ab",
+        "byte_match": true
+      },
+      {
+        "path": "libpsl-5.dll",
+        "installer_member": "libpsl-5.dll",
+        "sha256": "b31fc70eda598a39b65fe2736d815518db0652d641346f75eac40c2a0499b058",
+        "manifest_sha256": "b31fc70eda598a39b65fe2736d815518db0652d641346f75eac40c2a0499b058",
+        "byte_match": true
+      },
+      {
+        "path": "libsharpyuv-0.dll",
+        "installer_member": "libsharpyuv-0.dll",
+        "sha256": "ab0c9f61dc69b6bcdff1011e215f8d5fd6e5096aba9be3386ab87f217fbbeffe",
+        "manifest_sha256": "ab0c9f61dc69b6bcdff1011e215f8d5fd6e5096aba9be3386ab87f217fbbeffe",
+        "byte_match": true
+      },
+      {
+        "path": "libssh2-1.dll",
+        "installer_member": "libssh2-1.dll",
+        "sha256": "ee7fe3e749859334c99e9261689481dd879811122598d22585421f95d29fc7ae",
+        "manifest_sha256": "ee7fe3e749859334c99e9261689481dd879811122598d22585421f95d29fc7ae",
+        "byte_match": true
+      },
+      {
+        "path": "libstdc++-6.dll",
+        "installer_member": "libstdc++-6.dll",
+        "sha256": "5fe5d4d8f6636eb6f2dc55be99dc5dc8a6c40db1abdf592e84480d1e6985abd0",
+        "manifest_sha256": "5fe5d4d8f6636eb6f2dc55be99dc5dc8a6c40db1abdf592e84480d1e6985abd0",
+        "byte_match": true
+      },
+      {
+        "path": "libtesseract-5.dll",
+        "installer_member": "libtesseract-5.dll",
+        "sha256": "54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46",
+        "manifest_sha256": "54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46",
+        "byte_match": true
+      },
+      {
+        "path": "libthai-0.dll",
+        "installer_member": "libthai-0.dll",
+        "sha256": "5d741974fdec19e0f6cddbcdb539428af0c7392740a056634714c2884157fdb9",
+        "manifest_sha256": "5d741974fdec19e0f6cddbcdb539428af0c7392740a056634714c2884157fdb9",
+        "byte_match": true
+      },
+      {
+        "path": "libtiff-6.dll",
+        "installer_member": "libtiff-6.dll",
+        "sha256": "47fe69165bf8e211aaa84224f51f145dc894e330fe7ca167f7c99419e0c8c894",
+        "manifest_sha256": "47fe69165bf8e211aaa84224f51f145dc894e330fe7ca167f7c99419e0c8c894",
+        "byte_match": true
+      },
+      {
+        "path": "libunistring-5.dll",
+        "installer_member": "libunistring-5.dll",
+        "sha256": "b91e2850d3668d4931056a8f4d35783b8ec3eea3735485108a936a072cd16071",
+        "manifest_sha256": "b91e2850d3668d4931056a8f4d35783b8ec3eea3735485108a936a072cd16071",
+        "byte_match": true
+      },
+      {
+        "path": "libwebp-7.dll",
+        "installer_member": "libwebp-7.dll",
+        "sha256": "c6c21a10f8cfe13270832e64640b82709e1d87b956b5f15af435a6c25acd6bbf",
+        "manifest_sha256": "c6c21a10f8cfe13270832e64640b82709e1d87b956b5f15af435a6c25acd6bbf",
+        "byte_match": true
+      },
+      {
+        "path": "libwebpmux-3.dll",
+        "installer_member": "libwebpmux-3.dll",
+        "sha256": "2c8a2e9d7901ec65330f31f9989c2a07ef0506e903b485fcd8b241a6bab9b88f",
+        "manifest_sha256": "2c8a2e9d7901ec65330f31f9989c2a07ef0506e903b485fcd8b241a6bab9b88f",
+        "byte_match": true
+      },
+      {
+        "path": "libwinpthread-1.dll",
+        "installer_member": "libwinpthread-1.dll",
+        "sha256": "6a661d5846d80a91394dbb9b2dab87ba3cc705eac80ad45fe73677bff70cd6d2",
+        "manifest_sha256": "6a661d5846d80a91394dbb9b2dab87ba3cc705eac80ad45fe73677bff70cd6d2",
+        "byte_match": true
+      },
+      {
+        "path": "libzstd.dll",
+        "installer_member": "libzstd.dll",
+        "sha256": "b95c223a9548a9ecf51377c962e0bc8f0c51eb0c6f67a296dbc885996f0dd40d",
+        "manifest_sha256": "b95c223a9548a9ecf51377c962e0bc8f0c51eb0c6f67a296dbc885996f0dd40d",
+        "byte_match": true
+      },
+      {
+        "path": "zlib1.dll",
+        "installer_member": "zlib1.dll",
+        "sha256": "93e9243a44c29200eeacaf9658efe2558581770e4b11ca4b500e18e424a6e3b5",
+        "manifest_sha256": "93e9243a44c29200eeacaf9658efe2558581770e4b11ca4b500e18e424a6e3b5",
+        "byte_match": true
+      }
+    ],
+    "signature_of_installer_verified": false,
+    "license_audit_complete": false
   }
 }
