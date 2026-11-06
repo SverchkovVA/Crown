@@ -8,10 +8,10 @@
     "application_bundled": false,
     "format": 1,
     "license_audit_complete": false,
-    "native_byte_matches": 6,
+    "native_byte_matches": 10,
     "native_files": 56,
-    "native_unmatched": 50,
-    "package_directories": 10,
+    "native_unmatched": 46,
+    "package_directories": 20,
     "records": [
       {
         "byte_match_found": false,
@@ -138,9 +138,26 @@
         "sha256": "3d302f9690e810fdfd950254e2f0663d0ff768737f350c602a4ed3a06e9b6b2b"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "4b659adac942e8c2aa9b70b1ced2ca561900f7338aaedbfca050c138e3ed12b7",
+              "licenses_declared_in_pkginfo": [
+                "LGPL"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "5136cccb83290c119b8e8983996a0685f6ebec542bf9cf93b4c514b03312c78b",
+              "pkgname": "mingw-w64-x86_64-libdatrie",
+              "pkgver": "0.2.14-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libdatrie-0.2.14-1-any/mingw64/bin/libdatrie-1.dll"
+          }
+        ],
         "path": "libdatrie-1.dll",
         "sha256": "2f784872e6404e57847201fe1e7e591bd5b5be4a319ef38ebcb36014ac7f385d"
       },
@@ -159,9 +176,26 @@
         "sha256": "92ae866c6c58dd2d8366aa0e6230ba8d434d5306e8d8c3a08b7e61750fc16153"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "24e4338c88872b0f43dda43a4eb2c2822be45f2b9817072473611ef92658dad8",
+              "licenses_declared_in_pkginfo": [
+                "spdx:MIT"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "1bd6a71fdaae3575e1141401016e83d2e774e2100ae8f2e6348c950c3ecfdaea",
+              "pkgname": "mingw-w64-x86_64-libffi",
+              "pkgver": "3.7.1-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-libffi-3.7.1-1-any/mingw64/bin/libffi-8.dll"
+          }
+        ],
         "path": "libffi-8.dll",
         "sha256": "390e4bf8abd037abd0e1dd1f311606715e43f8efe812e5c5b8775acf2cb2f21e"
       },
@@ -180,9 +214,26 @@
         "sha256": "bbb3e6390ee229c867ef31f10e42a49a61a92e434a11d40c6139a2608ebc6194"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 2,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "7c35ec9db5512449518b71898387032409f6cc65bdf5d96962b84d7fa7c57122",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "acd78220ad4128c6e84b1ae8ba7547e23b0d2356993d94f3e3d59e6d6c9d7ab8",
+              "pkgname": "mingw-w64-x86_64-fribidi",
+              "pkgver": "1.0.16-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-fribidi-1.0.16-1-any/mingw64/bin/libfribidi-0.dll"
+          }
+        ],
         "path": "libfribidi-0.dll",
         "sha256": "84930fd86a3b46b62794a3bbaff21fbbaeaade5ff7cdc70be7f717ad29af87ed"
       },
@@ -246,9 +297,26 @@
         "sha256": "acf20d5ddd3d2e4b4355576f5cf662c18f42746c50f43eaccc0596592616602a"
       },
       {
-        "byte_match_found": false,
-        "different_byte_candidates": 0,
-        "matching_packages": [],
+        "byte_match_found": true,
+        "different_byte_candidates": 1,
+        "matching_packages": [
+          {
+            "package": {
+              "arch": "any",
+              "buildinfo_sha256": "de94ab266585445a82c92b7c6ce10afc7ff7340f45a58993a9f629ccf4425acb",
+              "licenses_declared_in_pkginfo": [
+                "spdx:LGPL-2.1-or-later"
+              ],
+              "notices_reviewed": false,
+              "package_signature_verified": false,
+              "pkginfo_sha256": "12ee8a0db2c02a56f537b21f0e368387c8ba395ef3f8fb7cf678641622554591",
+              "pkgname": "mingw-w64-x86_64-graphite2",
+              "pkgver": "1.3.15-1",
+              "source_archive_verified": false
+            },
+            "relative_binary": "mingw-w64-x86_64-graphite2-1.3.15-1-any/mingw64/bin/libgraphite2.dll"
+          }
+        ],
         "path": "libgraphite2.dll",
         "sha256": "063a9ad34a5ec87d038b4646660957395224ecf2cf707917256b7d251a7c5f57"
       },
@@ -639,6 +707,102 @@
           "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
         ],
         "signer_listed_revoked": false
+      },
+      {
+        "archive": "mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst",
+        "archive_sha256": "fbbf30e9a911c1139ba5c38c5ae008309dd912f6c6b1e05f4310ec698e1b1339",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libdatrie-0.2.14-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "3e02be6740915c2e953a1269ac795d80befe75e8f7c7b65d80016024bf4fd8e4",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-fribidi-1.0.16-1-any.pkg.tar.zst",
+        "archive_sha256": "82d4f9e431082d2ac2fa7b9eddd73aa0c073bf8ae66b7d137195797ec543dffa",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-fribidi-1.0.16-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "e4bc1836ea3104d71975508c32514bd1ad54a80edc1000c724997e4348f083e8",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst",
+        "archive_sha256": "6ad20d6c16e559f7c4b06fe71248e1201c7edf494d04e5721ed7f9b3f7fd1f74",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "9ff06e3c365451fe5147ff3813cacc84da504b3e76756441130fda0ebe202e13",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
+      },
+      {
+        "archive": "mingw-w64-x86_64-libffi-3.7.1-1-any.pkg.tar.zst",
+        "archive_sha256": "a016df13c67a0438a0b94267f2911c68fd4d7216b4d45fbac7a66af41fe78f44",
+        "signature_url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libffi-3.7.1-1-any.pkg.tar.zst.sig",
+        "signature_sha256": "f34378d1ad2efeafb45de4339550d484618c524c0efc50d4e5ccacfed2fea660",
+        "gpg_returncode": 0,
+        "valid_signature_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "primary_fingerprints": [
+          "5F944B027F7FE2091985AA2EFA11531AA0AA7F57"
+        ],
+        "signer_listed_revoked": false,
+        "signature_valid_against_downloaded_keyring": true,
+        "trust_chain_review_complete": false,
+        "status_kinds": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ]
       }
     ],
     "revocation_list_git_blob": "38db966082240362b21a1cd1e66d6dc50d67f34d"
