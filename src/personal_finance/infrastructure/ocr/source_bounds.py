@@ -1,9 +1,10 @@
-"""Полнота области суммы и примыкающих фрагментов, без изменения полей OCR."""
+"""Геометрия исходной области суммы; слова и координаты OCR не изменяются."""
 
 from dataclasses import replace
+from itertools import pairwise
 
 from personal_finance.domain.ocr import OcrBox
-from personal_finance.domain.ocr_cards import OcrCardDraft
+from personal_finance.domain.ocr_cards import OcrCardDraft, OcrField, OcrIssue
 
 
 def block_clipped_amount(card: OcrCardDraft) -> OcrCardDraft:
@@ -48,5 +49,47 @@ def block_clipped_amount(card: OcrCardDraft) -> OcrCardDraft:
                 return replace(
                     card,
                     blocked_reason="Строка суммы у края изображения. Нужен полный снимок.",
+                )
+    return card
+
+
+def block_disconnected_amount(card: OcrCardDraft) -> OcrCardDraft:
+    """Не соединять числовые разряды из раздельных областей строки."""
+    if card.amount.value is None:
+        return card
+    numeric = sorted(
+        (
+            card.document.words[i].box
+            for i in card.amount.word_indices
+            if any("0" <= char <= "9" for char in card.document.words[i].text)
+        ),
+        key=lambda box: (2 * box.top + box.height, box.left),
+    )
+    rows: list[list[OcrBox]] = []
+    for box in numeric:
+        for row in reversed(rows[-3:]):
+            anchor = row[0]
+            overlap = min(anchor.top + anchor.height, box.top + box.height) - max(
+                anchor.top, box.top
+            )
+            if 2 * overlap >= min(anchor.height, box.height):
+                row.append(box)
+                break
+        else:
+            rows.append([box])
+    # Равные повторные отображения суммы на разных строках не соединяются.
+    for row in rows:
+        for previous, current in pairwise(sorted(row, key=lambda box: box.left)):
+            gap = current.left - previous.left - previous.width
+            if gap > 2 * max(previous.height, current.height):
+                return replace(
+                    card,
+                    amount=OcrField(
+                        None,
+                        card.amount.word_indices,
+                        tuple(dict.fromkeys((*card.amount.issues, OcrIssue.AMBIGUOUS))),
+                    ),
+                    blocked_reason=card.blocked_reason
+                    or "Части суммы находятся в разных колонках. Нужен более чёткий снимок.",
                 )
     return card
