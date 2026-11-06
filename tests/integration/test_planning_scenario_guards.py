@@ -7,6 +7,7 @@ from sqlalchemy import event, text
 
 from personal_finance.application import vault
 from personal_finance.domain.errors import VaultError
+from personal_finance.infrastructure.persistence import migration_runner
 from tests.conftest import PASSWORD
 from tests.integration.test_planning_scenario_migration import snapshot
 from tests.integration.test_planning_scenario_repository import storage as storage
@@ -58,7 +59,7 @@ def test_failed_update_rolls_back_previous_head_and_version(storage, prefix):
     session.check_integrity()
 
 
-def test_schema_0014_reader_refuses_0015_and_preserves_database_and_key(storage):
+def test_schema_0014_reader_refuses_0015_and_preserves_database_and_key(storage, monkeypatch):
     session, repo = storage
     repo.save("Синтетическая цель", goal())
     with session.engine.begin() as connection:
@@ -70,6 +71,11 @@ def test_schema_0014_reader_refuses_0015_and_preserves_database_and_key(storage)
         path: hashlib.sha256(path.read_bytes()).hexdigest()
         for path in (database, root / "data" / "key.json")
     }
+    monkeypatch.setattr(
+        migration_runner,
+        "SUPPORTED_SCHEMAS",
+        tuple(v for v in migration_runner.SUPPORTED_SCHEMAS if v != "0015"),
+    )
     with pytest.raises(VaultError):
         vault.open_vault(root, PASSWORD)
     assert {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in before} == before

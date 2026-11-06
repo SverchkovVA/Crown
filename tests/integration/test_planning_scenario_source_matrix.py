@@ -1,7 +1,7 @@
 """Компонент 0015 после перехода временной копии 0002–0014 к действующей 0014.
 
-Это не сквозное восстановление книги 0015: совместимый reader и подключение
-контейнера намеренно остаются отдельной обязательной работой перед активацией.
+Это компонентная матрица. Настоящее сквозное восстановление и совместимый
+reader проверяются отдельно в test_planning_scenario_upgrade.py до смены HEAD.
 """
 
 from dataclasses import replace
@@ -70,7 +70,7 @@ def test_candidate_preserves_rows_of_staging_copy_from_each_supported_schema(
     assert hashes(root) == source_hash
 
 
-def test_candidate_is_outside_active_alembic_versions():
-    assert SCHEMA_HEAD == "0014" and "0015" not in SUPPORTED_SCHEMAS
+def test_default_head_stays14_while_explicit15_is_registered_for_verification():
+    assert SCHEMA_HEAD == "0014" and "0015" in SUPPORTED_SCHEMAS
     versions = Path(vault.__file__).parents[1] / "infrastructure/persistence/migrations/versions"
-    assert not list(versions.glob("*0015*"))
+    assert len(list(versions.glob("*0015*"))) == 1
