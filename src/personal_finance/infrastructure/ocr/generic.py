@@ -361,6 +361,66 @@ def _is_summary(document: OcrDocument, row: Row) -> bool:
     return len(amounts) == 1 and bool(_TOTAL_CAPTION.fullmatch(_residue(row, amounts[0])))
 
 
+def _summary_caption(row: Row) -> bool:
+    text = row.text.strip(" :·—−-")
+    return bool(_TOTAL_CAPTION.fullmatch(text) or _SUMMARY.fullmatch(text))
+
+
+def _close_rows(first: Row, second: Row) -> bool:
+    return 0 <= second.top - first.bottom <= 2 * max(first.height, second.height)
+
+
+def _same_column(document: OcrDocument, left: tuple[int, ...], right: tuple[int, ...]) -> bool:
+    def edges(refs: tuple[int, ...]) -> tuple[int, int]:
+        return (
+            min(document.words[i].box.left for i in refs),
+            max(document.words[i].box.left + document.words[i].box.width for i in refs),
+        )
+
+    a, b = edges(left), edges(right)
+    overlap = min(a[1], b[1]) - max(a[0], b[0])
+    return 2 * overlap >= min(a[1] - a[0], b[1] - b[0])
+
+
+def _summary_rows(document: OcrDocument, rows: list[Row]) -> set[int]:
+    """Связать отдельную подпись итога только с близкой суммой в её колонке."""
+    amounts = [_money(document, row) for row in rows]
+    captions = {i for i, row in enumerate(rows) if not amounts[i] and _summary_caption(row)}
+    result = {i for i, row in enumerate(rows) if i in captions or _is_summary(document, row)}
+    for index, row in enumerate(rows):
+        if index in result or len(amounts[index]) != 1 or _residue(row, amounts[index][0]):
+            continue
+        previous = rows[index - 1] if index else None
+        recipient_before = bool(
+            previous is not None
+            and _close_rows(previous, row)
+            and not amounts[index - 1]
+            and index - 1 not in result
+            and not (
+                _dates(document, previous)
+                or _DETAILS.match(previous.text)
+                or _HEADING.fullmatch(previous.text)
+                or _HISTORY.fullmatch(previous.text)
+                or re.fullmatch(
+                    r"(?:сводка|итоги|обзор)(?:\s+(?:за|по)\s+.+)?", previous.text, re.I
+                )
+            )
+        )
+        for neighbor_index in (index - 1, index + 1):
+            if neighbor_index not in captions:
+                continue
+            neighbor = rows[neighbor_index]
+            first, second = (neighbor, row) if neighbor_index < index else (row, neighbor)
+            if (
+                _close_rows(first, second)
+                and _same_column(document, amounts[index][0][1], neighbor.refs)
+                and not (neighbor_index > index and recipient_before)
+            ):
+                result.add(index)
+                break
+    return result
+
+
 def _currency_hint(row: Row) -> tuple[str, tuple[int, ...]] | None:
     match = re.fullmatch(
         rf"(?:валюта(?: операции)?\s*:?\s*)?"
@@ -543,6 +603,7 @@ class GenericCardAdapter:
 
     def parse(self, document: OcrDocument) -> OcrCardDraft:
         rows = visual_rows(document)
+        summary_rows = _summary_rows(document, rows)
         candidates = []
         labelled = []
         hints = []
@@ -594,7 +655,7 @@ class GenericCardAdapter:
                 (not secondary or _labelled_operation_date(rows, index))
                 and not bound_amount
                 and not _DETAILS.match(row.text)
-                and not _is_summary(document, row)
+                and index not in summary_rows
             ):
                 dates.extend(_dates(document, row))
             if re.match(
@@ -606,7 +667,7 @@ class GenericCardAdapter:
                 secondary
                 or index in reward_rows
                 or _noncash_quantity(document, row)
-                or _is_summary(document, row)
+                or index in summary_rows
                 or _DETAILS.match(row.text)
                 or re.match(r"^(?:к[еэ]шб[еэ]к|бонусы)\b", row.text, re.I)
             ):
@@ -622,7 +683,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v9") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v10") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -667,14 +728,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v9",
+                "generic-card-v10",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return _contextual(_with_account_direction(result, rows))
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v9")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v10")
         occurred, clock = _date_fields(document, dates)
         empty = replace(
             empty,
@@ -701,6 +762,7 @@ class GenericHistoryAdapter:
 
     def parse(self, document: OcrDocument) -> OcrHistoryDraft:
         rows = visual_rows(document)
+        summary_rows = _summary_rows(document, rows)
         if not self.has_heading(document) and any(
             _FIELD.match(row.text)
             or row.text.casefold() in ("детали операции", "информация об операции")
@@ -739,7 +801,7 @@ class GenericHistoryAdapter:
                 else:
                     unbound_fee = True
                 continue
-            if _is_summary(document, row) or _DETAILS.match(row.text):
+            if index in summary_rows or _DETAILS.match(row.text):
                 fragments += len(monies)
                 continue
             if dates and not monies:
@@ -779,7 +841,7 @@ class GenericHistoryAdapter:
                 if 0 <= row.top - previous.bottom <= 2 * max(row.height, previous.height) and not (
                     _dates(document, previous)
                     or _money(document, previous)
-                    or _is_summary(document, previous)
+                    or index - 1 in summary_rows
                     or _DETAILS.match(previous.text)
                     or _HEADING.fullmatch(previous.text)
                     or _HISTORY.fullmatch(previous.text)
@@ -816,7 +878,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v7",
+                "generic-history-v8",
                 blocked,
             )
             if index + 1 < len(rows):
@@ -844,8 +906,8 @@ class GenericHistoryAdapter:
             )
         money_rows = [
             r
-            for r in rows
-            if _money(document, r) and not _is_summary(document, r) and not _DETAILS.match(r.text)
+            for index, r in enumerate(rows)
+            if _money(document, r) and index not in summary_rows and not _DETAILS.match(r.text)
         ]
         if any(
             _PENDING.search(r.text)
