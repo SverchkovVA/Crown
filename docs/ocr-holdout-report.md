@@ -45,7 +45,8 @@ a5d0c71ada9e6a1bf707d0a827b89c389ff3ada787d19120abb5c753c7e677b1.
 - Windows PowerShell5.1 / PyInstaller / изолированный EXE: passed,30 шагов.
 - Source и EXE с соседним настоящим OCR: passed,по32 шага,Qt/windows.
 - [Полный CI](https://github.com/SverchkovVA/Crown/actions/runs/42159325511)
-  выполняется на момент записи.
+  полностью passed:2152 теста Windows и Linux; четыре технических архива,
+  SHA-256/JUnit/JSON, полнота групп и локальный source-fingerprint сверены.
 - Полный локальный набор на dev53 отдельно не запускался: далее найден
   соседний вариант подписи, итоговый локальный полный прогон нужен для
   следующего среза. Это не утверждение общего локального успеха dev53.
@@ -59,7 +60,7 @@ dev53-summary-before.xml,dev53-summary-targeted.xml,
 dev53-summary-financial-final.xml,dev53-ocr-regressions.xml,
 dev53-source-ocr.json,holdout-baseline-dev52,holdout-regression-dev53,
 dev53-calibration-regression.json.
-Основная сборка artifacts/ocr-dev53-build, EXE-self-test-ocr.json.
+Основная сборка artifacts/ocr-dev53-build, отчёт EXE self-test-ocr.json.
 Запуск кандидата artifacts/start-candidate-ocr-dev53.cmd.
 
 ## Оставшийся вариант и границы
