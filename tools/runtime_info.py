@@ -23,6 +23,7 @@ def source_fingerprint(root: Path) -> str:
         ("src", "*.py"),
         ("src", "*.svg"),
         ("tests", "*.py"),
+        ("tests", "*.json"),
         ("tools", "*.py"),
         ("packaging", "*.ps1"),
         ("packaging", "*.psm1"),

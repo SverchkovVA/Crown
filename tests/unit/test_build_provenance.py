@@ -35,3 +35,18 @@ def test_build_fingerprint_ignores_private_artifacts_and_ordinary_docs(tmp_path)
     (root / "docs").mkdir()
     (root / "docs" / "progress.md").write_text("Описание прогресса", encoding="utf-8")
     assert source_fingerprint(root) == before
+
+
+def test_build_fingerprint_covers_json_test_inputs_and_normalizes_newlines(tmp_path):
+    root = base(tmp_path)
+    before = source_fingerprint(root)
+    folder = root / "tests" / "fixtures"
+    folder.mkdir(parents=True)
+    fixture = folder / "synthetic-expected.json"
+    fixture.write_bytes(b'{"amount_minor": 7315}\n')
+    with_fixture = source_fingerprint(root)
+    assert with_fixture != before
+    fixture.write_bytes(b'{"amount_minor": 7315}\r\n')
+    assert source_fingerprint(root) == with_fixture
+    fixture.write_bytes(b'{"amount_minor": 7316}\n')
+    assert source_fingerprint(root) != with_fixture
