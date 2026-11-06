@@ -101,7 +101,8 @@ def test_ocr_actions_stay_visible_while_content_scrolls(qtbot, session):
             ).__name__
             owner = owner.parentWidget()
     y = dialog.finish.mapTo(window, QPoint(0, 0)).y()
-    content = dialog.findChild(QScrollArea, "inlineContent")
+    content = dialog.findChild(QScrollArea, "ocrScroll")
+    assert content is not None
     content.verticalScrollBar().setValue(content.verticalScrollBar().maximum())
     assert dialog.finish.mapTo(window, QPoint(0, 0)).y() == y
     assert not dialog.isWindow()

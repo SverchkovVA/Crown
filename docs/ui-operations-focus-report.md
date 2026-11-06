@@ -106,3 +106,12 @@ artifacts/sandbox-dev58-verification/check.ps1 и отдельная папка 
 Конфигурация сверена с [документацией Microsoft](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/windows-sandbox-configure-using-wsb-file).
 В госте запускается самопроверка EXE с синтетическими данными и затем окно программы.
 Факт запуска Sandbox пока отсутствует: требуется включение компонента Windows.
+
+## Продолжение квалификации в dev59
+
+В Windows CI dev58 найден аварийный GC в worker; он воспроизведён локально.
+[Наблюдение, решение и ограничения](qt-gc-owner-report.md).
+Выпущен следующий кандидат dev59 с той же компоновкой интерфейса.
+Полные проверки dev58 не passed: один устаревший тест прокрутки и авария CI.
+Sandbox включена пользователем через UAC; Windows требует перезагрузку,
+автоматической перезагрузки не было, Sandbox ещё не запускалась.

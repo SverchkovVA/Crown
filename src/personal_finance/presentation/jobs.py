@@ -5,6 +5,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 from personal_finance.domain.errors import FinanceError
+from personal_finance.presentation.gc_owner import prepare_worker_gc
 
 
 class JobSignals(QObject):
@@ -16,6 +17,7 @@ class JobSignals(QObject):
 class Job(QRunnable):
     def __init__(self, action: Callable[[], object], parent: QObject) -> None:
         super().__init__()
+        prepare_worker_gc()
         self.action = action
         # Qt-владелец в GUI-потоке: Python GC рабочего потока не удаляет QObject.
         self.signals = JobSignals(parent)
