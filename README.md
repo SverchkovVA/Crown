@@ -1,12 +1,13 @@
-# Текущие проверочные срезы — 06.11.2026
+# Проверенный кандидат dev55 — 06.11.2026
 
-[Сравнение проектов](docs/open-source-reference-review.md): стек и архитектура прежние.
-[Интерфейс dev49](docs/ui-refinement-report.md), [OCR dev50](docs/ocr-clock-partial-card-report.md),
-[OCR dev51](docs/ocr-field-evidence-report.md),
-[обратная связь dev52](docs/ocr-review-feedback-report.md).
-UI dev49 и OCR dev50/dev51 прошли полный CI. Dev52 собрана, source/EXE с OCR —
-по 32 шага; связанный GUI — 31 passed. Полный локальный набор и CI прошли: по2123 теста Windows/Linux. Незавершённые проверки указаны
-в отчётах; полная ручная приёмка не объявляется.
+Локальный полный набор:2189 passed;[CI Windows/Linux](https://github.com/SverchkovVA/Crown/actions/runs/42166844365)
+по2189 passed. Сборка и нативные source/EXE с локальным OCR — по32 шага.
+[Ручная проверка и запуск](docs/manual-acceptance-current.md),
+[контрольная точка](docs/development-checkpoint.md),
+[проверки Qt](docs/qt-thread-probe-report.md),
+[исправления OCR](docs/ocr-summary-layout-report.md).
+[Сравнение проектов](docs/open-source-reference-review.md): стек и архитектура сохраняются.
+Полная ручная приёмка не объявляется; ниже — история предыдущих срезов.
 
 # Crown — личные финансы
 
