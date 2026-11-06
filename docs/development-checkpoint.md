@@ -1,3 +1,12 @@
+# Итог dev54 — 06.11.2026
+
+Локальный полный pytest2189 passed;Linux CI2189 passed.
+Windows CI42161840727:2188 passed,1 failure/1 teardown error,не общий passed.
+[Доказательства](ocr-summary-layout-report.md).
+Продолжение — отдельная ветка ocr-ui-stability-dev55,контрольная точка
+основной artifacts/checkpoint-dev55-20261106.json.
+Исходник dev54/bc216a8 и его отчёты сохранены;ниже исторические статусы ожидания.
+
 # OCR dev54 — 06.11.2026, второе и последнее рабочее окно
 
 Ветка ocr-summary-layout-dev54, исходникbc216a8,
