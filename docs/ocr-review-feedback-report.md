@@ -41,9 +41,14 @@ b2df9c651bb930d116fce00f1f70fd988eb690e9.
 - Финальная сборка Windows PowerShell5.1 / PyInstaller passed; изолированный
   EXE — 30 шагов. Исходники и EXE с соседним локальным OCR — по 32 шага passed,
   версия 0.2.0.dev52, Qt/windows.
-- Полный локальный набор на итоговом исходнике ещё выполняется.
+- Полный локальный набор на итоговом исходнике: 2123 passed, exit0,
+  1853.01 с. Один deprecated-вызов QDragEnterEvent в тесте, не ошибка.
 - [Полный CI итогового исходника](https://github.com/SverchkovVA/Crown/actions/runs/42134739032)
-  Linux и полнота групп passed, Windows ещё выполняется.
+  полностью passed: по 2123 теста Windows/Linux, 0 errors/failures/skipped.
+  Группы Linux1043+1080 покрывают весь набор без пересечения.
+  Скачаны четыре технических архива; SHA-256, JUnit/JSON и исходный commit
+  сверены. Отпечаток исходников3190517e9ccb95cd97831f1f1a5799da8e581e2ebbae372e8f52e48848f54f7c
+  совпал с CI. Windows Server / PowerShell5.1: сборка и source/EXE30 passed.
   Более ранний CI42133498382 относится к первой итерации.
 
 Только синтетические книги/изображения. Основная подготовленная «Тестовая»
@@ -57,7 +62,8 @@ Source-self-test: artifacts/dev52-source-ocr.json.
 
 ## Запуск и ручная проверка
 
-Основной artifacts/start-candidate-ocr-dev52.cmd запускает именно финальный каталог.
+Основной artifacts/start-checked-ocr-dev52.cmd запускает проверенный финальный каталог;
+прежний start-candidate-ocr-dev52.cmd ведёт в тот же каталог.
 Сохраняйте соседние _internal и ocr-runtime.
 [Общая ручная приёмка](manual-acceptance-current.md).
 

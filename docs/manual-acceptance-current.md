@@ -2,9 +2,9 @@
 
 06.11.2026. Интерфейс dev49 прошёл полный CI: по 2074 теста Linux и Windows,
 сборка и source/EXE. Свежий кандидат OCR dev52 собран; source/EXE с настоящим
-OCR прошли по 32 шага, связанный GUI31 passed. Полный набор/CI ещё выполняются:
+OCR прошли по 32 шага, связанный GUI31 passed. Полный локальный набор и CI passed:2123 теста на каждой платформе:
 [текущий точный статус](development-checkpoint.md).
-Локальный запуск кандидата: S:\Dev\Crown\artifacts\start-candidate-ocr-dev52.cmd.
+Локальный запуск кандидата: S:\Dev\Crown\artifacts\start-checked-ocr-dev52.cmd.
 Сохраняйте весь каталог программы, _internal и ocr-runtime.
 
 По запросу пользователя уже создана отдельная вымышленная книга «Тестовая»:
