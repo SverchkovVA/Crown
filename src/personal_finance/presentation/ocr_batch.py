@@ -185,6 +185,7 @@ class OcrBatchDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setProperty("warningsAtBottom", True)
+        self.setProperty("ownsContentScrolling", True)
         self.preview, self.importing, self.preferences = preview, importing, preferences
         self.accounts, self.categories = accounts, categories
         classification = classification if importing is not None else None
@@ -419,7 +420,31 @@ class OcrBatchDialog(QDialog):
         )
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.itemSelectionChanged.connect(self._show_source)
-        split.addWidget(self.table)
+        table_panel = QWidget()
+        table_layout = QVBoxLayout(table_panel)
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        self.empty_state = plain(
+            "Строк истории не найдено. Если на снимке одна операция, "
+            "вернитесь назад и выберите «Карточка операции»."
+        )
+        self.empty_state.setObjectName("emptyState")
+        self.empty_state.setAlignment(Qt.AlignmentFlag.AlignTop)
+        table_layout.addWidget(self.empty_state)
+        table_layout.addWidget(self.table, 1)
+        has_rows = bool(self.rows)
+        self.empty_state.setVisible(not has_rows)
+        self.table.setVisible(has_rows)
+        if not has_rows:
+            for row_layout in (common, flow_row):
+                for position in range(row_layout.count()):
+                    layout_item = row_layout.itemAt(position)
+                    child = layout_item.widget() if layout_item is not None else None
+                    if child is not None:
+                        child.hide()
+            if self.use_rules is not None:
+                self.use_rules.hide()
+            self.selection_note.hide()
+        split.addWidget(table_panel)
         split.setSizes([360, 1000])
         body.addWidget(split, 1)
         layout.addWidget(self.content, 1)

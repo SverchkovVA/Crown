@@ -30,12 +30,14 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
     QStackedWidget,
     QTableView,
     QTabWidget,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -1588,8 +1590,11 @@ class MainWindow(QMainWindow):
         self._journal_forms.page_notice = self.journal_feedback
         self.journal_feedback.hide()
         layout.addWidget(self.journal_feedback)
-        recognition = QHBoxLayout()
-        recognition.addStretch()
+        actions = QHBoxLayout()
+        self.add_operation_button = button(
+            "Добавить операцию", lambda: self.add_operation(panel=self._journal_forms), primary=True
+        )
+        actions.addWidget(self.add_operation_button)
         self.ocr_button = button("Распознать снимок", self._toggle_ocr_input)
         self.ocr_button.setAccessibleName("Распознать карточку или историю операций")
         self.ocr_button.setEnabled(bool(self._ocr_actions))
@@ -1598,62 +1603,67 @@ class MainWindow(QMainWindow):
             if self._ocr_actions
             else "В каталоге приложения нет проверенного OCR-модуля."
         )
-        recognition.addWidget(self.ocr_button)
-        layout.addLayout(recognition)
+        actions.addWidget(self.ocr_button)
+        actions.addStretch()
+        self.import_button = button(
+            "Импорт CSV/OFX…", lambda: self.import_statement(panel=self._journal_forms)
+        )
+        self.export_button = button(
+            "Экспорт…", lambda: self.export_journal(panel=self._journal_forms)
+        )
+        self.import_button.setParent(page)
+        self.export_button.setParent(page)
+        self.import_button.hide()
+        self.export_button.hide()
+        self.journal_more = button("Ещё", lambda: None)
+        self.journal_more.setAccessibleName("Дополнительные действия с журналом")
+        menu = QMenu(self.journal_more)
+        self.journal_file_actions: list[tuple[QAction, QPushButton]] = []
+        for source in (self.import_button, self.export_button):
+            file_action = menu.addAction(source.text())
+            file_action.triggered.connect(source.click)
+            self.journal_file_actions.append((file_action, source))
+        menu.aboutToShow.connect(self._update_journal_menu)
+        self.journal_more.setMenu(menu)
+        actions.addWidget(self.journal_more)
+        layout.addLayout(actions)
         self.ocr_input = OcrInputPanel(
             self._ocr_service is not None and self._ocr_service.supports_history, page
         )
         self.ocr_input.submitted.connect(self._recognize_input)
         layout.addWidget(self.ocr_input)
         self.ocr_input.hide()
-        actions = QHBoxLayout()
-        self.add_operation_button = button(
-            "Добавить операцию", lambda: self.add_operation(panel=self._journal_forms), primary=True
-        )
-        self.edit_operation_button = button(
-            "Исправить", lambda: self.edit_operation(panel=self._journal_forms)
-        )
-        self.delete_operation_button = button(
-            "Удалить", lambda: self.delete_operation(panel=self._journal_forms)
-        )
-        self.history_operation_button = button(
-            "История", lambda: self.operation_history(panel=self._journal_forms)
-        )
-        for action in (
-            self.add_operation_button,
-            self.edit_operation_button,
-            self.delete_operation_button,
-            self.history_operation_button,
-        ):
-            actions.addWidget(action)
-        self.show_deleted = QCheckBox("Показывать удалённые")
-        self.show_deleted.toggled.connect(self.refresh)
-        layout.addLayout(actions)
-        refund_row = QHBoxLayout()
-        self.refund_button = button(
-            "Оформить возврат", lambda: self.add_refund(panel=self._journal_forms)
-        )
-        refund_row.addWidget(self.refund_button)
-        self.import_button = button(
-            "Импорт CSV/OFX…", lambda: self.import_statement(panel=self._journal_forms)
-        )
-        refund_row.addWidget(self.import_button)
-        self.export_button = button(
-            "Экспорт…", lambda: self.export_journal(panel=self._journal_forms)
-        )
-        refund_row.addWidget(self.export_button)
-        refund_row.addStretch()
-        layout.addLayout(refund_row)
+
+        filter_summary = QHBoxLayout()
+        self.journal_filters_toggle = QToolButton()
+        self.journal_filters_toggle.setText("Фильтры")
+        self.journal_filters_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.journal_filters_toggle.setArrowType(Qt.ArrowType.DownArrow)
+        self.journal_filters_toggle.setCheckable(True)
+        self.journal_filters_toggle.setAccessibleName("Показать или скрыть фильтры журнала")
+        filter_summary.addWidget(self.journal_filters_toggle)
+        self.query_status = label("Все действующие операции", "muted")
+        filter_summary.addWidget(self.query_status, 1)
+        layout.addLayout(filter_summary)
+        self.journal_filters = QWidget()
+        self.journal_filters.setObjectName("journalFilters")
+        filters = QVBoxLayout(self.journal_filters)
+        filters.setContentsMargins(0, 0, 0, 0)
         filter_row = QHBoxLayout()
-        self.filter_button = button("Фильтр…", lambda: self.edit_query(panel=self._journal_forms))
+        self.filter_button = button(
+            "Настроить условия…", lambda: self.edit_query(panel=self._journal_forms)
+        )
         self.reset_filter_button = button("Сбросить фильтр", self.reset_query)
         filter_row.addWidget(self.filter_button)
         filter_row.addWidget(self.reset_filter_button)
+        self.show_deleted = QCheckBox("Показывать удалённые")
+        self.show_deleted.toggled.connect(self.refresh)
         filter_row.addWidget(self.show_deleted)
         filter_row.addStretch()
-        layout.addLayout(filter_row)
+        filters.addLayout(filter_row)
         saved_row = QHBoxLayout()
         self.saved_filter_combo = QComboBox()
+        self.saved_filter_combo.setAccessibleName("Сохранённые фильтры журнала")
         self.apply_filter_button = button("Применить", self.apply_saved_filter)
         self.save_filter_button = button(
             "Сохранить как…", lambda: self.save_query(panel=self._journal_forms)
@@ -1668,10 +1678,42 @@ class MainWindow(QMainWindow):
             self.update_filter_button,
         ):
             saved_row.addWidget(widget)
-        layout.addLayout(saved_row)
+        filters.addLayout(saved_row)
         self.saved_filter_combo.currentIndexChanged.connect(self._update_saved_filter_actions)
-        self.query_status = label("Все действующие операции", "muted")
-        layout.addWidget(self.query_status)
+        layout.addWidget(self.journal_filters)
+        self.journal_filters.hide()
+        self.journal_filters_toggle.toggled.connect(self.journal_filters.setVisible)
+        self.journal_filters_toggle.toggled.connect(
+            lambda opened: self.journal_filters_toggle.setArrowType(
+                Qt.ArrowType.UpArrow if opened else Qt.ArrowType.DownArrow
+            )
+        )
+
+        self.journal_selection_tools = QWidget()
+        selection = QHBoxLayout(self.journal_selection_tools)
+        selection.setContentsMargins(0, 0, 0, 0)
+        self.edit_operation_button = button(
+            "Исправить", lambda: self.edit_operation(panel=self._journal_forms)
+        )
+        self.refund_button = button(
+            "Оформить возврат", lambda: self.add_refund(panel=self._journal_forms)
+        )
+        self.history_operation_button = button(
+            "История", lambda: self.operation_history(panel=self._journal_forms)
+        )
+        self.delete_operation_button = button(
+            "Удалить", lambda: self.delete_operation(panel=self._journal_forms)
+        )
+        for action in (
+            self.edit_operation_button,
+            self.refund_button,
+            self.history_operation_button,
+        ):
+            selection.addWidget(action)
+        selection.addStretch()
+        selection.addWidget(self.delete_operation_button)
+        layout.addWidget(self.journal_selection_tools)
+        self.journal_selection_tools.hide()
         self.operation_table = QTableView()
         self.operation_model = replace_table(self.operation_table, JOURNAL_HEADERS, [])
         self.operation_table.verticalHeader().hide()
@@ -1695,6 +1737,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.journal_empty)
         layout.addWidget(self.operation_table, 1)
         return wrapper
+
+    def _update_journal_menu(self) -> None:
+        for action, source in self.journal_file_actions:
+            action.setEnabled(source.isEnabled())
+            action.setToolTip(source.toolTip())
 
     def _selected_operation(self) -> Operation | None:
         if not self.operation_table.selectionModel().hasSelection():
@@ -1722,6 +1769,7 @@ class MainWindow(QMainWindow):
             else "Для импорта восстановите копию старой книги в новую папку."
         )
         selected = self._selected_operation() if available else None
+        self.journal_selection_tools.setVisible(selected is not None)
         self.history_operation_button.setEnabled(selected is not None)
         editable = (
             selected is not None
@@ -3070,6 +3118,9 @@ class MainWindow(QMainWindow):
             else "Для журнала создайте резервную копию и восстановите её в новую папку. "
             "Исходная книга сохранится."
         )
+        self.journal_more.setToolTip(self.journal_notice.text())
+        self.journal_notice.setVisible(ledger is None or not ledger.supports_refunds)
+        self._update_journal_menu()
         self._update_journal_actions()
         self.backup_status.setText(self.last_backup)
 

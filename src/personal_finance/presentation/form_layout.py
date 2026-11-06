@@ -79,10 +79,13 @@ def prepare_inline_layout(dialog: QDialog) -> None:
         return
     # Действия остаются детьми dialog: существующие обработчики и findChild работают.
     items = []
+    stretches: dict[int, int] = {}
     while layout.count():
+        stretch = layout.stretch(0)
         item = layout.takeAt(0)
         if item is not None:
             items.append(item)
+            stretches[id(item)] = stretch
     actions = [
         item
         for item in items
@@ -109,9 +112,9 @@ def prepare_inline_layout(dialog: QDialog) -> None:
         ):
             sticky.append(item)
         elif widget is not None:
-            body.addWidget(widget)
+            body.addWidget(widget, stretches[id(item)])
         elif (child_layout := item.layout()) is not None:
-            body.addLayout(child_layout)
+            body.addLayout(child_layout, stretches[id(item)])
         else:
             body.addItem(item)
     scroll = QScrollArea(dialog)
@@ -130,6 +133,15 @@ def prepare_inline_layout(dialog: QDialog) -> None:
             if isinstance(widget, QDialogButtonBox):
                 _style_buttons(widget)
             bottom.addWidget(widget)
-    layout.addWidget(scroll, 1)
+    if dialog.property("ownsContentScrolling"):
+        # Таблица и поля уже имеют собственную прокрутку. Внешний QScrollArea
+        # повторно вычисляет heightForWidth растянутого splitter и создаёт
+        # пустую вертикальную область даже при нулевом числе строк.
+        scroll.takeWidget()
+        scroll.deleteLater()
+        content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
+        layout.addWidget(content, 1)
+    else:
+        layout.addWidget(scroll, 1)
     layout.addWidget(footer)
     dialog.setProperty("inlineLayoutPrepared", True)

@@ -151,6 +151,7 @@ class OcrPreviewDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self.setProperty("warningsAtBottom", True)
+        self.setProperty("ownsContentScrolling", True)
         self.preview = preview
         self.review_defaults = review_defaults or OcrReviewDefaults.for_today()
         suggestions = suggest_corrections(preview.card, self.review_defaults)
@@ -208,7 +209,7 @@ class OcrPreviewDialog(QDialog):
             preview.card.blocked_reason
             or "Оценка слов не гарантирует правильность суммы или даты. "
             + (
-                "Четыре обязательных поля нужно подтвердить вручную."
+                "Сверьте сумму, валюту, движение денег и дату с изображением."
                 if self.review_defaults.confirm_fields
                 else "Флажки проверки полей отключены в настройках. "
                 "Проверьте значения перед продолжением."
@@ -299,11 +300,20 @@ class OcrPreviewDialog(QDialog):
         split.addWidget(scroll)
         split.setSizes([590, 530])
         layout.addWidget(split, 1)
+        self.check_all = QPushButton("Проверить все поля")
+        self.check_all.setAccessibleName("Подтвердить проверку всех обязательных полей карточки")
+        self.check_all.setToolTip(
+            "Нажмите после сверки суммы, валюты, движения денег и даты с изображением."
+        )
+        self.check_all.setVisible(self.review_defaults.confirm_fields)
+        self.check_all.clicked.connect(self._check_all)
         self.validation_note = plain("")
         self.validation_note.setAccessibleName("Состояние проверки OCR")
         layout.addWidget(self.validation_note)
         box = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         box.button(QDialogButtonBox.StandardButton.Cancel).setText("Закрыть")
+        box.addButton(self.check_all, QDialogButtonBox.ButtonRole.ActionRole)
+        self.check_all.setVisible(self.review_defaults.confirm_fields)
         self.finish = box.addButton("Завершить проверку", QDialogButtonBox.ButtonRole.AcceptRole)
         self.finish.clicked.connect(self._validate)
         self.finish.setObjectName("primary" if not allow_financial_prepare else "")
@@ -330,6 +340,10 @@ class OcrPreviewDialog(QDialog):
         if name in self.checks:
             self.checks[name].setChecked(False)
         self._update()
+
+    def _check_all(self) -> None:
+        for check in self.checks.values():
+            check.setChecked(True)
 
     def _checked_fields(self) -> frozenset[str]:
         return (
@@ -369,7 +383,8 @@ class OcrPreviewDialog(QDialog):
             self._feedback(self.preview.card.blocked_reason, error=True)
         elif self.review_defaults.confirm_fields and len(self._checked_fields()) != 4:
             self._feedback(
-                "Для продолжения отметьте четыре поля. После правки поля его нужно проверить снова."
+                "Сверьте поля с изображением и нажмите «Проверить все поля». "
+                "После правки проверьте поле снова."
             )
         else:
             try:
