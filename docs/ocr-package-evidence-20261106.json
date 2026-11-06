@@ -5182,5 +5182,237 @@
     "package_scripts_executed": false,
     "runtime_modified": false,
     "license_audit_complete": false
+  },
+  "debian_gcc_evidence": {
+    "byte_evidence": {
+      "format": 1,
+      "package_url": "https://deb.debian.org/debian/pool/main/g/gcc-mingw-w64/gcc-mingw-w64-x86-64-posix-runtime_14.2.0-19+27+b1_amd64.deb",
+      "archive_sha256": "c898d96177574a8a7238564a1e799d8ddfed5a3d2ea005510305f9ad466a6f59",
+      "metadata": {
+        "Package": "gcc-mingw-w64-x86-64-posix-runtime",
+        "Source": "gcc-mingw-w64 (27)",
+        "Version": "14.2.0-19+27+b1",
+        "Architecture": "amd64"
+      },
+      "native_byte_matches": 2,
+      "records": [
+        {
+          "file": "libgcc_s_seh-1.dll",
+          "package_member": "./usr/lib/gcc/x86_64-w64-mingw32/14-posix/libgcc_s_seh-1.dll",
+          "sha256": "172cfdc9d83703ec0a0ca2cee08f6cf2a166b801717ee51a56b3a63b36bc2f83",
+          "manifest_sha256": "172cfdc9d83703ec0a0ca2cee08f6cf2a166b801717ee51a56b3a63b36bc2f83",
+          "byte_match": true
+        },
+        {
+          "file": "libstdc++-6.dll",
+          "package_member": "./usr/lib/gcc/x86_64-w64-mingw32/14-posix/libstdc++-6.dll",
+          "sha256": "5fe5d4d8f6636eb6f2dc55be99dc5dc8a6c40db1abdf592e84480d1e6985abd0",
+          "manifest_sha256": "5fe5d4d8f6636eb6f2dc55be99dc5dc8a6c40db1abdf592e84480d1e6985abd0",
+          "byte_match": true
+        }
+      ],
+      "copyright_files": [],
+      "package_scripts_executed": false,
+      "runtime_modified": false,
+      "package_index_signature_verified": false,
+      "license_audit_complete": false
+    },
+    "signed_index": {
+      "format": 1,
+      "official_key_page": "https://ftp-master.debian.org/keys.html",
+      "keys": [
+        {
+          "url": "https://ftp-master.debian.org/keys/archive-key-12.asc",
+          "sha256": "c2a9a16fde95e037bafd0fa6b7e31f41b4ff1e85851de5558f19a2a2f0e955e2",
+          "primary_fingerprint": "B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8"
+        },
+        {
+          "url": "https://ftp-master.debian.org/keys/archive-key-13.asc",
+          "sha256": "6f1d277429dd7ffedcc6f8688a7ad9a458859b1139ffa026d1eeaadcbffb0da7",
+          "primary_fingerprint": "04B54C3CDCA79751B16BC6B5225629DF75B188BD"
+        },
+        {
+          "url": "https://ftp-master.debian.org/keys/release-13.asc",
+          "sha256": "4d097bb93f83d731f475c5b92a0c2fcf108cfce1d4932792fca72d00b48d198b",
+          "primary_fingerprint": "41587F7DB8C774BCCF131416762F67A0B2C39DE4"
+        }
+      ],
+      "gpg_version": "gpg (GnuPG) 2.4.9",
+      "inrelease_sha256": "0584fba32e13e0ab8285fb16c27adea1ec03a73669c18702821094fd6ca86675",
+      "gpg_exit_code": 0,
+      "valid_signatures": [
+        {
+          "signing_fingerprint": "4CB50190207B4758A3F73A796ED0E7B82643E131",
+          "primary_fingerprint": "B8B80B5B623EAB6AD8775C45B7C5D7D6350947F8"
+        },
+        {
+          "signing_fingerprint": "B8E5F13176D2A7A75220028078DBA3BC47EF2265",
+          "primary_fingerprint": "04B54C3CDCA79751B16BC6B5225629DF75B188BD"
+        },
+        {
+          "signing_fingerprint": "41587F7DB8C774BCCF131416762F67A0B2C39DE4",
+          "primary_fingerprint": "41587F7DB8C774BCCF131416762F67A0B2C39DE4"
+        }
+      ],
+      "release_fields": {
+        "Origin": "Debian",
+        "Suite": "stable",
+        "Version": "13.7",
+        "Codename": "trixie",
+        "Date": "Sat, 12 Sep 2026 07:55:41 UTC"
+      },
+      "package_index_sha256": "7778d3e3f303b7ddb8ce0fe7c8d57473a076c6bf2e8f241f75421d2396352498",
+      "package_index_bytes": 9678380,
+      "selected_packages": [
+        {
+          "Package": "gcc-mingw-w64-base",
+          "Source": "gcc-mingw-w64 (27)",
+          "Version": "14.2.0-19+27+b1",
+          "Architecture": "amd64",
+          "Filename": "pool/main/g/gcc-mingw-w64/gcc-mingw-w64-base_14.2.0-19+27+b1_amd64.deb",
+          "Size": "194268",
+          "SHA256": "8d2c64b886ab4a435a78ddc4cd3b510f149b65fbd6be8472e8f460627562718a"
+        },
+        {
+          "Package": "gcc-mingw-w64-x86-64-posix-runtime",
+          "Source": "gcc-mingw-w64 (27)",
+          "Version": "14.2.0-19+27+b1",
+          "Architecture": "amd64",
+          "Filename": "pool/main/g/gcc-mingw-w64/gcc-mingw-w64-x86-64-posix-runtime_14.2.0-19+27+b1_amd64.deb",
+          "Size": "13037152",
+          "SHA256": "c898d96177574a8a7238564a1e799d8ddfed5a3d2ea005510305f9ad466a6f59"
+        }
+      ],
+      "exact_runtime_deb_verified": true,
+      "user_keyrings_accessed": false,
+      "auto_key_retrieval": false,
+      "package_scripts_executed": false,
+      "runtime_modified": false,
+      "external_trust_policy_complete": false,
+      "license_audit_complete": false
+    },
+    "source_evidence": {
+      "format": 1,
+      "release_signature_evidence": "debian-signed-index-20261106-v2/evidence.json",
+      "sources_index_url": "https://deb.debian.org/debian/dists/trixie/main/source/Sources.xz",
+      "sources_index_sha256": "6002f81f463a2d976d84b34170367cc16da2d60bd0ba9ab9d868d6e1c1a935d9",
+      "sources_index_bytes": 10540436,
+      "runtime_control_built_using": "gcc-14 (= 14.2.0-19)",
+      "wrapper_exact_source_found": true,
+      "compiler_exact_source_found": true,
+      "source_packages": [
+        {
+          "Package": "gcc-14",
+          "Version": "14.2.0-12",
+          "Directory": "pool/main/g/gcc-14",
+          "Checksums-Sha256": "\n bd9560d7103cf389e090c15a8466ffa98a4992282a0d03a4d5f86e59e4cfe22a 47361 gcc-14_14.2.0-12.dsc\n e162a5ef3f0077ecae598c6556908d2ab80841532df3398072a96a6df6e6aa29 94299633 gcc-14_14.2.0.orig.tar.gz\n 5468b4d838a7b168ecfcc031c50f7c9c33ff35e29545508a9979afe7667b7fc2 2476312 gcc-14_14.2.0-12.debian.tar.xz",
+          "Build-Depends": "debhelper (>= 11), dpkg-dev (>= 1.17.14), g++-multilib [amd64 i386 mips mips64 mips64el mips64r6 mips64r6el mipsel mipsn32 mipsn32el mipsn32r6 mipsn32r6el mipsr6 mipsr6el powerpc ppc64 s390 s390x sparc sparc64 x32] <!cross>, libc6.1-dev (>= 2.23-1~) [alpha ia64] | libc0.3-dev (>= 2.23-1~) [hurd-amd64 hurd-i386] | libc6-dev (>= 2.23-1~), libc6-dev-amd64 [i386 x32], libc6-dev-sparc64 [sparc], libc6-dev-sparc [sparc64], libc6-dev-s390 [s390x], libc6-dev-s390x [s390], libc6-dev-i386 [amd64 x32], libc6-dev-powerpc [ppc64], libc6-dev-ppc64 [powerpc], lib32gcc-s1 [amd64 ppc64 mipsn32 mipsn32el mips64 mips64el mipsn32r6 mipsn32r6el mips64r6 mips64r6el s390x sparc64 x32], libn32gcc-s1 [mips mipsel mips64 mips64el mipsr6 mipsr6el mips64r6 mips64r6el], lib64gcc-s1 [i386 mips mipsel mipsn32 mipsn32el mipsr6 mipsr6el mipsn32r6 mipsn32r6el powerpc sparc s390 x32], libc6-dev-mips64 [mips mipsel mipsn32 mipsn32el mipsr6 mipsr6el mipsn32r6 mipsn32r6el], libc6-dev-mipsn32 [mips mipsel mips64 mips64el mipsr6 mipsr6el mips64r6 mips64r6el], libc6-dev-mips32 [mipsn32 mipsn32el mips64 mips64el mipsn32r6 mipsn32r6el mips64r6 mips64r6el], libc6-dev-x32 [amd64 i386], libx32gcc-s1 [amd64 i386], libc6.1-dbg [alpha ia64] | libc0.3-dbg [hurd-amd64 hurd-i386] | libc6-dbg, linux-libc-dev [m68k], m4, libtool, autoconf2.69, dwz, libunwind8-dev [ia64], libatomic-ops-dev [ia64], gawk, lzma, xz-utils, patchutils, libzstd-dev, zlib1g-dev, systemtap-sdt-dev [linux-any], binutils:native (>= 2.39), binutils-hppa64-linux-gnu:native (>= 2.39) [hppa amd64 i386 x32], gperf, bison, flex, gettext, nvptx-tools [amd64 arm64 ppc64el], amdgcn-tools-18 (>= 18.2) [amd64], texinfo, locales-all, sharutils, procps, gnat-14:native [!arc !ia64 !sh3 !sh3eb !sh4eb !m68k], g++-14:native [!m68k], gnat-13:native [m68k], g++-13:native [m68k], netbase, gdc-14:native [!alpha !arc !ia64 !m68k !sh4 !s390 !sparc64 !hurd-amd64 !hurd-i386], python3:any, cargo [!alpha !hppa !ia64 !m68k !sh4 !x32], libisl-dev (>= 0.20), libmpc-dev (>= 1.0), libmpfr-dev (>= 3.0.0-9~), libgmp-dev (>= 2:5.0.1~), lib32z1-dev [amd64], lib64z1-dev [i386], unzip <!nocheck>, dejagnu [!alpha] <!nocheck>, git <!nocheck>, coreutils, chrpath, lsb-release, quilt, time, pkgconf, libgc-dev, g++-14-for-host <cross>, gobjc-14-for-host [!avr] <cross>, gfortran-14-for-host <cross>, gdc-14-for-host [!alpha !arc !ia64 !m68k !sh4 !s390 !sparc64 !hurd-amd64 !hurd-i386] <cross>, gccgo-14-for-host [!arc !avr !hppa !loong64 !m68k !sh4] <cross>, gnat-14-for-host [!arc !ia64 !sh3 !sh3eb !sh4eb] <cross>, gm2-14-for-host [!powerpc !ppc64 !sh4] <cross>"
+        },
+        {
+          "Package": "gcc-14",
+          "Version": "14.2.0-13",
+          "Directory": "pool/main/g/gcc-14",
+          "Checksums-Sha256": "\n e59f1866c520967415747e68844fcb559e9d82816b0f4b892556624447034756 47356 gcc-14_14.2.0-13.dsc\n e162a5ef3f0077ecae598c6556908d2ab80841532df3398072a96a6df6e6aa29 94299633 gcc-14_14.2.0.orig.tar.gz\n 81936415464caae883edcb2143130b165bdd3f827d1ed7766618c76b6b016004 2503528 gcc-14_14.2.0-13.debian.tar.xz",
+          "Build-Depends": "debhelper (>= 11), dpkg-dev (>= 1.17.14), g++-multilib [amd64 i386 mips mips64 mips64el mips64r6 mips64r6el mipsel mipsn32 mipsn32el mipsn32r6 mipsn32r6el mipsr6 mipsr6el powerpc ppc64 s390 s390x sparc sparc64 x32] <!cross>, libc6.1-dev (>= 2.23-1~) [alpha ia64] | libc0.3-dev (>= 2.23-1~) [hurd-amd64 hurd-i386] | libc6-dev (>= 2.23-1~), libc6-dev-amd64 [i386 x32], libc6-dev-sparc64 [sparc], libc6-dev-sparc [sparc64], libc6-dev-s390 [s390x], libc6-dev-s390x [s390], libc6-dev-i386 [amd64 x32], libc6-dev-powerpc [ppc64], libc6-dev-ppc64 [powerpc], lib32gcc-s1 [amd64 ppc64 mipsn32 mipsn32el mips64 mips64el mipsn32r6 mipsn32r6el mips64r6 mips64r6el s390x sparc64 x32], libn32gcc-s1 [mips mipsel mips64 mips64el mipsr6 mipsr6el mips64r6 mips64r6el], lib64gcc-s1 [i386 mips mipsel mipsn32 mipsn32el mipsr6 mipsr6el mipsn32r6 mipsn32r6el powerpc sparc s390 x32], libc6-dev-mips64 [mips mipsel mipsn32 mipsn32el mipsr6 mipsr6el mipsn32r6 mipsn32r6el], libc6-dev-mipsn32 [mips mipsel mips64 mips64el mipsr6 mipsr6el mips64r6 mips64r6el], libc6-dev-mips32 [mipsn32 mipsn32el mips64 mips64el mipsn32r6 mipsn32r6el mips64r6 mips64r6el], libc6-dev-x32 [amd64 i386], libx32gcc-s1 [amd64 i386], libc6.1-dbg [alpha ia64] | libc0.3-dbg [hurd-amd64 hurd-i386] | libc6-dbg, linux-libc-dev [m68k], m4, libtool, autoconf2.69, dwz, libunwind8-dev [ia64], libatomic-ops-dev [ia64], gawk, lzma, xz-utils, patchutils, libzstd-dev, zlib1g-dev, systemtap-sdt-dev [linux-any], binutils:native (>= 2.39), binutils-hppa64-linux-gnu:native (>= 2.39) [hppa amd64 i386 x32], gperf, bison, flex, gettext, nvptx-tools [amd64 arm64 ppc64el], amdgcn-tools-18 (>= 18.2) [amd64], texinfo, locales-all, sharutils, procps, gnat-14:native [!arc !ia64 !sh3 !sh3eb !sh4eb !m68k], g++-14:native [!m68k], gnat-13:native [m68k], g++-13:native [m68k], netbase, gdc-14:native [!alpha !arc !ia64 !m68k !sh4 !s390 !sparc64 !hurd-amd64 !hurd-i386], python3:any, cargo [!alpha !hppa !ia64 !m68k !sh4 !x32], libisl-dev (>= 0.20), libmpc-dev (>= 1.0), libmpfr-dev (>= 3.0.0-9~), libgmp-dev (>= 2:5.0.1~), lib32z1-dev [amd64], lib64z1-dev [i386], unzip <!nocheck>, dejagnu <!nocheck>, git <!nocheck>, coreutils, chrpath, lsb-release, quilt, time, pkgconf, libgc-dev, g++-14-for-host <cross>, gobjc-14-for-host [!avr] <cross>, gfortran-14-for-host <cross>, gdc-14-for-host [!alpha !arc !ia64 !m68k !sh4 !s390 !sparc64 !hurd-amd64 !hurd-i386] <cross>, gccgo-14-for-host [!arc !avr !hppa !loong64 !m68k !sh4] <cross>, gnat-14-for-host [!arc !ia64 !sh3 !sh3eb !sh4eb] <cross>, gm2-14-for-host [!powerpc !ppc64 !sh4] <cross>"
+        },
+        {
+          "Package": "gcc-14",
+          "Version": "14.2.0-19",
+          "Directory": "pool/main/g/gcc-14",
+          "Checksums-Sha256": "\n 7db1e202cce66617e9134a662c877a3a773de5b612fd52179815877e0ecfb847 47347 gcc-14_14.2.0-19.dsc\n e162a5ef3f0077ecae598c6556908d2ab80841532df3398072a96a6df6e6aa29 94299633 gcc-14_14.2.0.orig.tar.gz\n 31cbab4bafa48aa1c540497bd8098cbcf98e673778f927651ed944709f687781 2577016 gcc-14_14.2.0-19.debian.tar.xz",
+          "Build-Depends": "debhelper (>= 11), dpkg-dev (>= 1.17.14), g++-multilib [amd64 i386 mips mips64 mips64el mips64r6 mips64r6el mipsel mipsn32 mipsn32el mipsn32r6 mipsn32r6el mipsr6 mipsr6el powerpc ppc64 s390 s390x sparc sparc64 x32] <!cross>, libc6.1-dev (>= 2.23-1~) [alpha ia64] | libc0.3-dev (>= 2.23-1~) [hurd-amd64 hurd-i386] | libc6-dev (>= 2.23-1~), libc6-dev-amd64 [i386 x32], libc6-dev-sparc64 [sparc], libc6-dev-sparc [sparc64], libc6-dev-s390 [s390x], libc6-dev-s390x [s390], libc6-dev-i386 [amd64 x32], libc6-dev-powerpc [ppc64], libc6-dev-ppc64 [powerpc], lib32gcc-s1 [amd64 ppc64 mipsn32 mipsn32el mips64 mips64el mipsn32r6 mipsn32r6el mips64r6 mips64r6el s390x sparc64 x32], libn32gcc-s1 [mips mipsel mips64 mips64el mipsr6 mipsr6el mips64r6 mips64r6el], lib64gcc-s1 [i386 mips mipsel mipsn32 mipsn32el mipsr6 mipsr6el mipsn32r6 mipsn32r6el powerpc sparc s390 x32], libc6-dev-mips64 [mips mipsel mipsn32 mipsn32el mipsr6 mipsr6el mipsn32r6 mipsn32r6el], libc6-dev-mipsn32 [mips mipsel mips64 mips64el mipsr6 mipsr6el mips64r6 mips64r6el], libc6-dev-mips32 [mipsn32 mipsn32el mips64 mips64el mipsn32r6 mipsn32r6el mips64r6 mips64r6el], libc6-dev-x32 [amd64 i386], libx32gcc-s1 [amd64 i386], libc6.1-dbg [alpha ia64] | libc0.3-dbg [hurd-amd64 hurd-i386] | libc6-dbg, linux-libc-dev [m68k], m4, libtool, autoconf2.69, dwz, libunwind8-dev [ia64], libatomic-ops-dev [ia64], gawk, lzma, xz-utils, patchutils, libzstd-dev, zlib1g-dev, systemtap-sdt-dev [linux-any], binutils:native (>= 2.39), binutils-hppa64-linux-gnu:native (>= 2.39) [hppa amd64 i386 x32], gperf, bison, flex, gettext, nvptx-tools [amd64 arm64 ppc64el], amdgcn-tools-19 [amd64], texinfo, locales-all, sharutils, procps, gnat-14:native [!arc !ia64 !sh3 !sh3eb !sh4eb !m68k], g++-14:native [!m68k], gnat-13:native [m68k], g++-13:native [m68k], netbase, gdc-14:native [!alpha !arc !ia64 !m68k !sh4 !s390 !sparc64 !hurd-amd64 !hurd-i386], python3:any, cargo [!alpha !hppa !ia64 !m68k !sh4 !x32], libisl-dev (>= 0.20), libmpc-dev (>= 1.0), libmpfr-dev (>= 3.0.0-9~), libgmp-dev (>= 2:5.0.1~), lib32z1-dev [amd64], lib64z1-dev [i386], unzip <!nocheck>, dejagnu <!nocheck>, git <!nocheck>, coreutils, chrpath, lsb-release, quilt, time, pkgconf, libgc-dev, g++-14-for-host <cross>, gobjc-14-for-host [!avr] <cross>, gfortran-14-for-host <cross>, gdc-14-for-host [!alpha !arc !ia64 !m68k !sh4 !s390 !sparc64 !hurd-amd64 !hurd-i386] <cross>, gccgo-14-for-host [!arc !avr !hppa !loong64 !m68k !sh4] <cross>, gnat-14-for-host [!arc !ia64 !sh3 !sh3eb !sh4eb] <cross>, gm2-14-for-host [!powerpc !ppc64 !sh4] <cross>"
+        },
+        {
+          "Package": "gcc-mingw-w64",
+          "Version": "27",
+          "Directory": "pool/main/g/gcc-mingw-w64",
+          "Checksums-Sha256": "\n 492f2ba821e43a3d40817841bd32caa5d49673fe66921bf5ba9c8b81c391dfea 7737 gcc-mingw-w64_27.dsc\n c1bf57cbe5f952ee5a7fa8b3e91dd031474e5ce61f468628f48b00e5bcbe8e30 36248 gcc-mingw-w64_27.tar.xz",
+          "Build-Depends": "binutils-mingw-w64-i686 (>= 2.30~), binutils-mingw-w64-ucrt64, binutils-mingw-w64-x86-64 (>= 2.30~), bison, debhelper-compat (= 10), flex, g++-14 <!stage1>, gcc-14-source, gnat-14 [alpha amd64 arm64 armel armhf hppa i386 mips64el mipsel ppc64 ppc64el riscv64 s390x sh4 sparc64 x32] <!stage1>, libelf-dev, libgmp-dev, libisl-dev, libmpc-dev, libmpfr-dev, mingw-w64-i686-dev <!stage1>, mingw-w64-ucrt64-dev <!stage1>, mingw-w64-x86-64-dev <!stage1>, xz-utils, zlib1g-dev"
+        }
+      ],
+      "source_files": [
+        {
+          "name": "gcc-mingw-w64_27.dsc",
+          "bytes": 7737,
+          "sha256": "492f2ba821e43a3d40817841bd32caa5d49673fe66921bf5ba9c8b81c391dfea",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-mingw-w64/gcc-mingw-w64_27.dsc",
+          "downloaded": true
+        },
+        {
+          "name": "gcc-mingw-w64_27.tar.xz",
+          "bytes": 36248,
+          "sha256": "c1bf57cbe5f952ee5a7fa8b3e91dd031474e5ce61f468628f48b00e5bcbe8e30",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-mingw-w64/gcc-mingw-w64_27.tar.xz",
+          "downloaded": true
+        },
+        {
+          "name": "gcc-14_14.2.0-19.dsc",
+          "bytes": 47347,
+          "sha256": "7db1e202cce66617e9134a662c877a3a773de5b612fd52179815877e0ecfb847",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0-19.dsc",
+          "downloaded": true
+        },
+        {
+          "name": "gcc-14_14.2.0.orig.tar.gz",
+          "bytes": 94299633,
+          "sha256": "e162a5ef3f0077ecae598c6556908d2ab80841532df3398072a96a6df6e6aa29",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0.orig.tar.gz",
+          "downloaded": false
+        },
+        {
+          "name": "gcc-14_14.2.0-19.debian.tar.xz",
+          "bytes": 2577016,
+          "sha256": "31cbab4bafa48aa1c540497bd8098cbcf98e673778f927651ed944709f687781",
+          "url": "https://deb.debian.org/debian/pool/main/g/gcc-14/gcc-14_14.2.0-19.debian.tar.xz",
+          "downloaded": false
+        }
+      ],
+      "downloaded_bytes": 91332,
+      "package_scripts_executed": false,
+      "runtime_modified": false,
+      "license_audit_complete": false
+    },
+    "notice_evidence": {
+      "format": 1,
+      "package": {
+        "Package": "gcc-mingw-w64-base",
+        "Source": "gcc-mingw-w64 (27)",
+        "Version": "14.2.0-19+27+b1",
+        "Architecture": "amd64",
+        "Filename": "pool/main/g/gcc-mingw-w64/gcc-mingw-w64-base_14.2.0-19+27+b1_amd64.deb",
+        "Size": "194268",
+        "SHA256": "8d2c64b886ab4a435a78ddc4cd3b510f149b65fbd6be8472e8f460627562718a"
+      },
+      "url": "https://deb.debian.org/debian/pool/main/g/gcc-mingw-w64/gcc-mingw-w64-base_14.2.0-19+27+b1_amd64.deb",
+      "archive_sha256": "8d2c64b886ab4a435a78ddc4cd3b510f149b65fbd6be8472e8f460627562718a",
+      "files": [
+        {
+          "member": "./usr/share/doc/gcc-mingw-w64-base/README.Debian",
+          "bytes": 1541,
+          "sha256": "e0a3e3c1e4b73dc6aac574223cda88cd3571119aa7fc68f9d2c7148980020bad"
+        },
+        {
+          "member": "./usr/share/doc/gcc-mingw-w64-base/changelog.Debian.gz",
+          "bytes": 3821,
+          "sha256": "3c1132ebff9b4220be64e19a7f159bacc741dca191fbf062f3eb28463f665bb8"
+        },
+        {
+          "member": "./usr/share/doc/gcc-mingw-w64-base/copyright",
+          "bytes": 75729,
+          "sha256": "f891d7e0c56f503a92c7258d540b3d8215852d8387cbca8f1f07c6f4b6e67da6"
+        }
+      ],
+      "scripts_executed": false,
+      "runtime_modified": false,
+      "license_audit_complete": false
+    },
+    "native_files_mapped_to_msys2_or_debian_packages": 54,
+    "remaining_custom_installer_files": [
+      "tesseract.exe",
+      "libtesseract-5.dll"
+    ],
+    "runtime_modified": false,
+    "license_audit_complete": false,
+    "trust_chain_review_complete": false
   }
 }
