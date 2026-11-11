@@ -78,8 +78,10 @@ def check_packaged_ocr_preview() -> None:
         generic_document = replace(
             vtb_history_document,
             words=(
-                *vtb_history_document.words[:-1],
-                replace(vtb_history_document.words[-1], text="−473 , 15"),
+                vtb_history_document.words[0],
+                replace(vtb_history_document.words[1], text="27.10.2026. −725,50 RUB"),
+                vtb_history_document.words[2],
+                replace(vtb_history_document.words[3], text="−473 , 15"),
             ),
         )
         generic = GenericHistoryAdapter().parse(generic_document)
@@ -88,8 +90,10 @@ def check_packaged_ocr_preview() -> None:
             or len(generic.cards) != 1
             or generic.cards[0].amount.value != 47315
             or generic.cards[0].currency.value is not None
+            or generic.cards[0].occurred_on.value != date(2026, 10, 27)
+            or generic.unassigned_fragments != 1
         ):
-            raise RuntimeError("Неверный разбор дробной суммы общего профиля.")
+            raise RuntimeError("Дневной итог, дата или дробная сумма разобраны неверно.")
         disconnected = replace(
             vtb_document,
             words=(

@@ -16,7 +16,8 @@ from tests.ocr_fixtures import document, png_image
 
 def preview(*, with_operations=False, position="inline"):
     image = png_image()
-    lines = ["История операций", "27.10.2026"]
+    day = "27.10.2026. −725,50 RUB" if with_operations else "27.10.2026"
+    lines = ["История операций", day]
     if position == "inline":
         lines.extend(("Траты −5 009,00 RUB", "Доходы +5 600,00 RUB"))
     elif position == "before":
@@ -55,7 +56,7 @@ def test_summary_only_cannot_start_financial_job(qtbot, session, position):
 def test_only_individual_rows_are_saved_audited_and_not_repeated(qtbot, session, position):
     source = preview(with_operations=True, position=position)
     dialog, account = dialog_for(qtbot, session, preview=source)
-    assert len(dialog.rows) == 2 and source.history.unassigned_fragments == 2
+    assert len(dialog.rows) == 2 and source.history.unassigned_fragments == 3
     dialog.prepare()
     qtbot.waitUntil(lambda: dialog._job is None and dialog.saved_count == 2, timeout=15000)
     assert len(session.ledger.operations()) == 2
@@ -68,7 +69,7 @@ def test_only_individual_rows_are_saved_audited_and_not_repeated(qtbot, session,
             connection.exec_driver_sql("SELECT evidence_json FROM ocr_records").scalars().all()
         )
     assert len(payloads) == 2 and all(
-        json.loads(p)["adapter"] == "generic-history-v11" for p in payloads
+        json.loads(p)["adapter"] == "generic-history-v12" for p in payloads
     )
     data = [json.loads(payload) for payload in payloads]
     assert len({entry["document_sha256"] for entry in data}) == 1

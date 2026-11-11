@@ -696,7 +696,7 @@ class GenericCardAdapter:
                 )
         # Одна подписанная сумма и одно равное повторное отображение в карточке.
         if len(candidates) == 2 and len(labelled) == 1:
-            checks = [_draft(document, m, [], "", (), "generic-card-v12") for m in candidates]
+            checks = [_draft(document, m, [], "", (), "generic-card-v13") for m in candidates]
             if (
                 checks[0].amount.value is not None
                 and checks[0].amount.value == checks[1].amount.value
@@ -741,14 +741,14 @@ class GenericCardAdapter:
                 dates,
                 description,
                 description_refs,
-                "generic-card-v12",
+                "generic-card-v13",
                 blocked,
                 direction,
             )
             for hint in hints:
                 result = _with_currency(result, hint)
             return _contextual(_with_account_direction(result, rows))
-        empty = parse_rub_fields(document, [], adapter_id="generic-card-v12")
+        empty = parse_rub_fields(document, [], adapter_id="generic-card-v13")
         occurred, clock = _date_fields(document, dates)
         empty = replace(
             empty,
@@ -896,7 +896,7 @@ class GenericHistoryAdapter:
                 chosen,
                 description,
                 tuple(dict.fromkeys(description_refs)),
-                "generic-history-v11",
+                "generic-history-v12",
                 blocked,
             )
             if index + 1 < len(rows):

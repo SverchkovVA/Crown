@@ -26,7 +26,15 @@ _BODY = (
 )
 _CLOCK = r"(?:\s*(?:,|в)?\s*(?P<hour>[0-9]{1,2}):(?P<minute>[0-9]{2})(?::(?P<second>[0-9]{2}))?)?"
 _FULL = re.compile(_BODY + _CLOCK, re.I)
-_SCAN = re.compile(r"(?<![\w./-])" + _BODY + _CLOCK + r"(?![\w./:-])(?!\s+[0-9])", re.I)
+# Точка после даты — пунктуация, только если дальше пробел или конец строки.
+# В источник попадает весь диапазон, в календарный разбор — только сама дата.
+_SCAN = re.compile(
+    r"(?<![\w./-])(?P<value>"
+    + _BODY
+    + _CLOCK
+    + r")(?:(?<!\.)[ \t\u00a0\u202f]*\.(?=\s|$))?(?![\w./:-])(?!\s+[0-9])",
+    re.I,
+)
 _DAY_PREFIX = re.compile(
     r"^(?:сегодня|вчера|пн|вт|ср|чт|пт|сб|вс|понедельник|вторник|среда|четверг|"
     r"пятница|суббота|воскресенье),?\s+",
@@ -81,4 +89,4 @@ def parse_date(text: str) -> DateParts | None:
 
 def date_spans(text: str) -> list[tuple[int, int, str]]:
     # Неверный календарь тоже найден: поле получит INVALID, а не дату прежнего раздела.
-    return [(m.start(), m.end(), m.group()) for m in _SCAN.finditer(text)]
+    return [(m.start(), m.end(), m["value"]) for m in _SCAN.finditer(text)]

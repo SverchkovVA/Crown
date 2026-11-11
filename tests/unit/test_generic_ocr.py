@@ -7,7 +7,7 @@ from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_c
 from personal_finance.domain.ocr import OcrBox, OcrDocument, OcrWord
 from personal_finance.domain.ocr_cards import CashDirection, OcrIssue
 from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, GenericHistoryAdapter
-from personal_finance.infrastructure.ocr.generic_dates import parse_date
+from personal_finance.infrastructure.ocr.generic_dates import date_spans, parse_date
 from tests.ocr_fixtures import ENGINE, document
 
 
@@ -392,7 +392,7 @@ def test_card_exact_russian_currency_forms(currency):
         card.occurred_on.value,
         card.local_time.value,
     ) == (47315, "RUB", CashDirection.OUT, date(2026, 10, 22), time(9, 18))
-    assert card.adapter == "generic-card-v12"
+    assert card.adapter == "generic-card-v13"
     assert card.currency.word_indices and card.amount.word_indices
     assert any(currency in card.document.words[i].text for i in card.currency.word_indices)
 
@@ -433,7 +433,7 @@ def test_history_currency_forms_and_date_header(currency):
     assert all(
         c.currency.value == "RUB"
         and c.occurred_on.value == date(2026, 10, 22)
-        and c.adapter == "generic-history-v11"
+        and c.adapter == "generic-history-v12"
         for c in value.cards
     )
 
@@ -668,3 +668,21 @@ def test_valid_thousands_after_date_remain_one_exact_amount():
         and card.amount.value == 12347315
         and card.occurred_on.value == date(2026, 10, 22)
     )
+
+
+@pytest.mark.parametrize(
+    "text", ["27.10.2026.123", "27.10.2026..", "27.10.2026./", "27.10.2026.12:42"]
+)
+def test_period_inside_a_damaged_date_is_not_a_separator(text):
+    assert not date_spans(text)
+
+
+def test_card_keeps_source_date_and_time_before_a_final_period():
+    source = document(("Детали операции", "Списано: 473,15 RUB", "27.10.2026 14:35."))
+    card = GenericCardAdapter().parse(source)
+    assert not card.blocked_reason
+    assert card.amount.value == 47315
+    assert card.occurred_on.value == date(2026, 10, 27)
+    assert card.local_time.value == time(14, 35)
+    assert card.local_time.word_indices == (2,)
+    assert card.document is source and source.words[2].text == "27.10.2026 14:35."

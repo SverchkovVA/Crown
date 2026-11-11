@@ -88,3 +88,35 @@ def test_unbound_fee_before_heading_still_blocks_history():
     result = GenericHistoryAdapter().parse(source)
     assert result.blocked_reason
     assert [c.amount.value for c in result.cards] == [7315]
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "27 октября 2026. —725,50 RUB",
+        "27.10.2026. —725,50 RUB",
+        "2026-10-27. 725,50 RUB",
+        "27 октября 2026 . —725,50 RUB",
+    ],
+)
+def test_final_period_does_not_turn_the_daily_total_into_an_operation(header):
+    source = document(("История операций", header, "Учебный магазин −73,15 RUB"))
+    history = GenericHistoryAdapter().parse(source)
+    assert not history.blocked_reason
+    assert len(history.cards) == 1
+    (entry,) = history.cards
+    assert entry.amount.value == 7315
+    assert entry.occurred_on.value == date(2026, 10, 27)
+    assert entry.occurred_on.word_indices == (1,)
+    assert history.unassigned_fragments == 1
+    assert history.document is source and source.words[1].text == header
+
+
+def test_dated_transaction_with_description_after_the_period_is_not_a_daily_total():
+    source = document(("История операций", "27 октября 2026. Учебный магазин —73,15 RUB"))
+    history = GenericHistoryAdapter().parse(source)
+    (entry,) = history.cards
+    assert not history.blocked_reason
+    assert entry.occurred_on.value == date(2026, 10, 27)
+    assert entry.description.value == "Учебный магазин"
+    assert entry.amount.value == 7315
