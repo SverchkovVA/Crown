@@ -18,6 +18,8 @@ GROUP_COUNT = 2
 def _run_group(root: Path, temporary: Path, index: int) -> int:
     group = root / f"group-{index}"
     group.mkdir()
+    isolated = temporary / group.name
+    isolated.mkdir()
     runner = Path(__file__).with_name("run_test_group.py")
     command = [
         sys.executable,
@@ -34,9 +36,9 @@ def _run_group(root: Path, temporary: Path, index: int) -> int:
         "-o",
         "faulthandler_exit_on_timeout=true",
         "-o",
-        f"cache_dir={temporary / group.name / 'cache'}",
+        f"cache_dir={isolated / 'cache'}",
         "--basetemp",
-        str(temporary / group.name / "pytest"),
+        str(isolated / "pytest"),
         "--junitxml",
         str(group / "tests.xml"),
         "tests",
