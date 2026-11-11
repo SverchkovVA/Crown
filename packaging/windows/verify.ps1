@@ -1,5 +1,5 @@
 ﻿#requires -Version 5.1
-param([switch]$Headless)
+param([switch]$Headless, [switch]$ParallelTests)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'process_helpers.psm1') -Force
@@ -14,6 +14,7 @@ $script:report = [ordered]@{
     started_at_utc = [DateTime]::UtcNow.ToString('o'); completed_at_utc = $null
     stage3_complete = $false; windows11_manual_acceptance = 'pending'
     clean_machine_without_python = 'pending'; uses_real_financial_data = $false
+    parallel_tests = [bool]$ParallelTests
     headless = [bool]$Headless; platform = $null; runtime = $null; uv_version = $null
     source_self_test = $null; frozen_self_test = $null; executable = $null
     steps = $steps
@@ -74,9 +75,13 @@ try {
     Invoke-VerificationStep '04-lint' $python @('-m', 'ruff', 'check', 'src', 'tests', 'tools') $environment
     Invoke-VerificationStep '05-format' $python @('-m', 'ruff', 'format', '--check', 'src', 'tests', 'tools') $environment
     Invoke-VerificationStep '06-types' $python @('-m', 'mypy', 'src/personal_finance') $environment
-    Invoke-VerificationStep '07-tests' $python @('-m', 'pytest', '-vv', `
-        '-o', 'faulthandler_timeout=90', '-o', 'faulthandler_exit_on_timeout=true', `
-        '--junitxml', (Join-Path $runRoot 'tests.xml')) $environment 3600
+    if ($ParallelTests) {
+        Invoke-VerificationStep '07-tests' $python @('tools/run_windows_test_groups.py', $runRoot) $environment 3600
+    } else {
+        Invoke-VerificationStep '07-tests' $python @('-m', 'pytest', '-vv', `
+            '-o', 'faulthandler_timeout=90', '-o', 'faulthandler_exit_on_timeout=true', `
+            '--junitxml', (Join-Path $runRoot 'tests.xml')) $environment 3600
+    }
     $qtPlatform = $(if ($Headless) { 'offscreen' } else { 'windows' })
     $nativeEnvironment = @{ PYTHONUTF8 = '1'; QT_QPA_PLATFORM = $qtPlatform }
     $sourceReport = Join-Path $runRoot 'source-self-test.json'
