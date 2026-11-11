@@ -1,7 +1,9 @@
 """Ограниченное повторное чтение суммы из неизменного изображения истории."""
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
+from itertools import islice
 
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QImage
@@ -150,6 +152,20 @@ def _matches_position(region: QRect, original: QRect, reread: QRect) -> bool:
     return 2 * overlap.width() >= reread.width() and 2 * overlap.height() >= reread.height()
 
 
+def _candidates(cards: tuple[OcrCardDraft, ...]) -> Iterator[tuple[int, _Candidate]]:
+    with_possible_currency = []
+    for index, card in enumerate(cards):
+        candidate = _candidate(card)
+        if candidate is None:
+            continue
+        if candidate.possible_currency is None:
+            yield index, candidate
+        else:
+            # Расширенная проверка использует остаток общего лимита.
+            with_possible_currency.append((index, candidate))
+    yield from with_possible_currency
+
+
 class HistoryAmountReread:
     """Второй проход сообщает о конфликте; ничего не исправляет и не сохраняет."""
 
@@ -167,14 +183,8 @@ class HistoryAmountReread:
 
         pixels: QImage | None = None
         cards = list(history.cards)
-        attempts = 0
         changed = False
-        for index, card in enumerate(cards):
-            if attempts >= MAX_AMOUNT_REREADS:
-                break
-            candidate = _candidate(card)
-            if candidate is None:
-                continue
+        for index, candidate in islice(_candidates(history.cards), MAX_AMOUNT_REREADS):
             if pixels is None:
                 pixels = QImage.fromData(image.png)
                 if pixels.isNull() or (pixels.width(), pixels.height()) != (
@@ -182,7 +192,6 @@ class HistoryAmountReread:
                     image.height,
                 ):
                     return history
-            attempts += 1
             try:
                 conflict = self._differs(pixels, candidate)
             except FinanceError:
@@ -190,6 +199,7 @@ class HistoryAmountReread:
                 # ошибки не продолжаем повторные вызовы на остальных строках.
                 break
             if conflict:
+                card = cards[index]
                 cards[index] = replace(
                     card,
                     amount=replace(

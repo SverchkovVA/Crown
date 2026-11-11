@@ -1,5 +1,6 @@
 """Разделение источника суммы и соседнего короткого слова."""
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -10,7 +11,7 @@ from personal_finance.domain.ocr_cards import OcrIssue
 from personal_finance.infrastructure.ocr.amount_reread import HistoryAmountReread
 from personal_finance.infrastructure.ocr.generic import GenericHistoryAdapter
 from tests.ocr_fixtures import ENGINE, png_image
-from tests.unit.test_ocr_amount_reread import RegionEngine
+from tests.unit.test_ocr_amount_reread import RegionEngine, example
 
 
 def dated_example(*, suffix_left=386, confidence=51, merchant=False, separate_date=False):
@@ -131,3 +132,31 @@ def test_distant_short_description_stays_outside_the_existing_amount_crop():
     assert HistoryAmountReread(Ocr(engine))(image, initial) is initial
     assert len(engine.calls) == 1
     assert (engine.calls[0].width, engine.calls[0].height) == (112, 34)
+
+
+def test_dated_amount_does_not_consume_budget_of_existing_amount_checks():
+    image, source = dated_example()
+    _, standalone = example(("−149087",) * 3)
+    later_words = tuple(
+        replace(
+            word,
+            box=replace(word.box, top=word.box.top + 240),
+            line_key=(2, *word.line_key[1:]),
+        )
+        for word in standalone.words[2:]
+    )
+    initial = GenericHistoryAdapter().parse(replace(source, words=source.words + later_words))
+    standalone_engine = RegionEngine()
+    dated_engine = DatedRegionEngine()
+
+    class RegionByWidth:
+        def recognize(self, crop):
+            engine = dated_engine if crop.width == 164 else standalone_engine
+            return engine.recognize(crop)
+
+    result = HistoryAmountReread(Ocr(RegionByWidth()))(image, initial)
+
+    assert len(standalone_engine.calls) == 3
+    assert not dated_engine.calls
+    assert [bool(card.blocked_reason) for card in result.cards] == [False, False, True, True, True]
+    assert result.cards[0] is initial.cards[0]
