@@ -90,7 +90,7 @@ jobs:
         with:
           version: '0.12.23'
       - shell: powershell
-        run: ./packaging/windows/verify.ps1 -Headless
+        run: ./packaging/windows/verify.ps1 -Headless -ParallelTests
       - name: Каталог проверенной сборки
         id: windows_bundle
         shell: powershell
@@ -115,6 +115,9 @@ jobs:
             artifacts/windows-check-*/*.json
             artifacts/windows-check-*/*.log
             artifacts/windows-check-*/tests.xml
+            artifacts/windows-check-*/windows-test-groups/group-*/manifest.json
+            artifacts/windows-check-*/windows-test-groups/group-*/tests.xml
+            artifacts/windows-check-*/windows-test-groups/group-*/*.log
             artifacts/windows-check-*/bundle/*.json
             artifacts/windows-check-*/bundle/*.log
           if-no-files-found: warn
