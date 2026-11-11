@@ -37,9 +37,9 @@ Headless-прогон CI отдельно отмечается в JSON. Прог
 Windows CI ограничивает шаг pytest 60 минутами, всю задачу — 75 минутами.
 Успех headless CI не заменяет ручную приёмку на Windows 11.
 
-Для dev62 перенос полного каталога с ocr-runtime подтверждён в Windows
+Для dev64 перенос полного каталога с ocr-runtime подтверждён в Windows
 Sandbox без сети, Python и uv: стартовое окно запустилось, 32 шага
-самопроверки EXE прошли. [Проверка dev62](ocr-spatial-amount-report.md).
+самопроверки EXE прошли. [Проверка dev64](ocr-amount-reread-report.md).
 Публичный CI-архив не включает отдельный комплект OCR.
 
 ## Приёмка Windows 11

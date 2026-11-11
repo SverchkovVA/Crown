@@ -1,6 +1,6 @@
-Проверенный кандидат 11.11.2026 — dev62/520e7ca: CI Windows/Linux по 2511
+Проверенный кандидат 11.11.2026 — dev64/62653e4: CI Windows/Linux по 2539
 тестов, локальные source/EXE с OCR по 32 шага, запуск в чистой Windows
-Sandbox без сети, Python и uv. [Отчёт](ocr-spatial-amount-report.md).
+Sandbox без сети, Python и uv. [Отчёт](ocr-amount-reread-report.md).
 Схема по умолчанию 0014; далее сохранена история предыдущих срезов.
 
 # Этап 5: первый технический срез локального OCR
