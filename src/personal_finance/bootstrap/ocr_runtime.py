@@ -9,6 +9,10 @@ from personal_finance.application.ocr_cards import CardRecognition
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ocr import OcrEngineInfo, require_sha256
 from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
+from personal_finance.infrastructure.ocr.amount_reread import (
+    AMOUNT_REREAD_TIMEOUT_SECONDS,
+    HistoryAmountReread,
+)
 from personal_finance.infrastructure.ocr.generic import GenericCardAdapter, GenericHistoryAdapter
 from personal_finance.infrastructure.ocr.images import load_ocr_image
 from personal_finance.infrastructure.ocr.t_bank import TBankCardAdapter
@@ -104,6 +108,9 @@ def recognitions_for_directory(directory: Path) -> tuple[CardRecognition, ...]:
             fallback_ocr=fallback,
             auto_history_hint=GenericHistoryAdapter.has_heading,
             retry_missing_card=GenericCardAdapter.can_retry,
+            history_reread=HistoryAmountReread(
+                Ocr(TesseractEngine(runtime, timeout_seconds=AMOUNT_REREAD_TIMEOUT_SECONDS))
+            ),
         ),
         CardRecognition(
             ocr,

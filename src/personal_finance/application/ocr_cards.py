@@ -7,7 +7,7 @@ from typing import Protocol
 
 from personal_finance.application.ocr import Ocr
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.ocr import LoadedOcrImage, OcrDocument
+from personal_finance.domain.ocr import LoadedOcrImage, OcrDocument, OcrImage
 from personal_finance.domain.ocr_cards import OcrCardDraft, OcrHistoryDraft
 from personal_finance.domain.ocr_profiles import PROFILE_PREFIXES
 
@@ -67,6 +67,7 @@ class CardRecognition:
         fallback_ocr: Ocr | None = None,
         auto_history_hint: Callable[[OcrDocument], bool] | None = None,
         retry_missing_card: Callable[[OcrCardDraft], bool] | None = None,
+        history_reread: Callable[[OcrImage, OcrHistoryDraft], OcrHistoryDraft] | None = None,
     ) -> None:
         require_bank_name(bank_name)
         self.bank_name = bank_name
@@ -75,6 +76,7 @@ class CardRecognition:
         self._fallback_ocr = fallback_ocr
         self._auto_history_hint = auto_history_hint
         self._retry_missing_card = retry_missing_card
+        self._history_reread = history_reread
 
     def preview(self, path: Path) -> OcrCardPreview:
         return self.preview_image(self._loader(path))
@@ -99,7 +101,7 @@ class CardRecognition:
                     and self._auto_history_hint(document)
                 )
             ):
-                return OcrHistoryPreview(source, history, self.bank_name)
+                return self._history_preview(source, history)
         return self._card_preview(source, document)
 
     def _card_preview(self, source: LoadedOcrImage, document: OcrDocument) -> OcrCardPreview:
@@ -154,4 +156,14 @@ class CardRecognition:
         history = self._history_adapter.parse(document)
         if history.document != document:
             raise ValidationError("Адаптер вернул другую историю.")
+        return self._history_preview(source, history)
+
+    def _history_preview(
+        self, source: LoadedOcrImage, history: OcrHistoryDraft
+    ) -> OcrHistoryPreview:
+        if self._history_reread is not None and not history.blocked_reason:
+            checked = self._history_reread(source.image, history)
+            if checked.document is not history.document:
+                raise ValidationError("Проверка OCR вернула другую историю.")
+            history = checked
         return OcrHistoryPreview(source, history, self.bank_name)
