@@ -1,9 +1,9 @@
 """План накоплений с равными ежемесячными пополнениями, без процентов."""
 
-from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date
 
+from personal_finance.domain.calendar_dates import add_calendar_months
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import Money
 
@@ -48,14 +48,6 @@ class SavingsGoalProjection:
     at_deadline_minor: int | None
 
 
-def _payment_date(anchor: date, months_after: int) -> date | None:
-    month_index = (anchor.year - 1) * 12 + anchor.month - 1 + months_after
-    if month_index > 9999 * 12 - 1:
-        return None
-    year, month = month_index // 12 + 1, month_index % 12 + 1
-    return date(year, month, min(anchor.day, monthrange(year, month)[1]))
-
-
 def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection:
     if not isinstance(scenario, SavingsGoalScenario):
         raise ValidationError("Укажите условия цели накоплений.")
@@ -66,7 +58,7 @@ def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection
         count = 0
     elif monthly:
         count = (remaining + monthly - 1) // monthly
-    reached_on = _payment_date(scenario.as_of, count) if count is not None else None
+    reached_on = add_calendar_months(scenario.as_of, count) if count is not None else None
     payments = None
     required = None
     projected = None
@@ -75,7 +67,7 @@ def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection
         payments = (
             (deadline.year - scenario.as_of.year) * 12 + deadline.month - scenario.as_of.month
         )
-        last = _payment_date(scenario.as_of, payments)
+        last = add_calendar_months(scenario.as_of, payments)
         if payments and last is not None and last > deadline:
             payments -= 1
         if remaining == 0:
@@ -87,7 +79,7 @@ def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection
         scenario,
         remaining,
         min(scenario.current.minor, scenario.target.minor) * 10000 // scenario.target.minor,
-        _payment_date(scenario.as_of, 1),
+        add_calendar_months(scenario.as_of, 1),
         count,
         reached_on,
         payments,

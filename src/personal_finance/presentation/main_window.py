@@ -84,6 +84,7 @@ from personal_finance.domain.organization import SavedFilter, Tag
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.query import OperationQuery
 from personal_finance.domain.reconciliation import Reconciliation
+from personal_finance.domain.recurring_payments import PaymentForecast, forecast_payments
 from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.domain.savings_goals import SavingsGoalProjection, project_savings_goal
 from personal_finance.infrastructure.backup.container import (
@@ -166,6 +167,10 @@ from personal_finance.presentation.query_dialog import QueryDialog
 from personal_finance.presentation.reconciliation import (
     ReconciliationInputDialog,
     ReconciliationResultDialog,
+)
+from personal_finance.presentation.recurring_payments import (
+    PaymentCalendarDialog,
+    PaymentCalendarOptions,
 )
 from personal_finance.presentation.savings_goals import SavingsGoalDialog, SavingsGoalOptions
 from personal_finance.presentation.tables import ACCOUNT_HEADERS, JOURNAL_HEADERS, replace_table
@@ -293,6 +298,7 @@ class MainWindow(QMainWindow):
         self.saved_planning_action = command(
             "Сохранённые бюджеты и цели…", self.request_saved_planning
         )
+        self.payment_calendar_action = command("Календарь платежей…", self.request_payment_calendar)
         self.deposit_action = command(
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
         )
@@ -308,6 +314,7 @@ class MainWindow(QMainWindow):
             self.budget_action,
             self.savings_goal_action,
             self.saved_planning_action,
+            self.payment_calendar_action,
             self.saved_deposits_action,
         ):
             action.setEnabled(False)
@@ -333,6 +340,7 @@ class MainWindow(QMainWindow):
         self.account_position_action.setEnabled(enabled)
         self.budget_action.setEnabled(enabled)
         self.savings_goal_action.setEnabled(enabled)
+        self.payment_calendar_action.setEnabled(enabled)
         planning_enabled = (
             not self._busy
             and self.session is not None
@@ -469,6 +477,31 @@ class MainWindow(QMainWindow):
                 return
             self._panel_job(
                 panel, lambda: project_savings_goal(request), show, "Расчёт цели накоплений…"
+            )
+
+        dialog.calculationRequested.connect(calculate)
+        present_form(dialog, panel)
+
+    def request_payment_calendar(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        dialog = PaymentCalendarOptions(self)
+        panel = self._report_forms
+
+        def show(result: PaymentForecast) -> None:
+            if self.session is session:
+                present_form(PaymentCalendarDialog(result, self), panel)
+
+        def calculate() -> None:
+            request = dialog.request
+            if self._busy or self.session is not session or request is None:
+                return
+            self._panel_job(
+                panel,
+                lambda: forecast_payments(*request),
+                show,
+                "Расчёт календаря платежей…",
             )
 
         dialog.calculationRequested.connect(calculate)
@@ -1238,6 +1271,7 @@ class MainWindow(QMainWindow):
                     self.budget_action,
                     self.savings_goal_action,
                     self.saved_planning_action,
+                    self.payment_calendar_action,
                     self.deposit_action,
                     self.saved_deposits_action,
                 ),

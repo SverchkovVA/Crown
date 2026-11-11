@@ -1,4 +1,4 @@
-"""Синтетическая самопроверка бюджета и состояния счетов без записи книги."""
+"""Синтетическая проверка отчётов и расчётов планирования без записи книги."""
 
 import hashlib
 from datetime import date
@@ -9,9 +9,16 @@ from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.models import Money
+from personal_finance.domain.recurring_payments import (
+    PaymentDirection,
+    PaymentSchedule,
+    RepeatUnit,
+    forecast_payments,
+)
 from personal_finance.domain.savings_goals import SavingsGoalScenario, project_savings_goal
 from personal_finance.presentation.account_position import AccountPositionDialog
 from personal_finance.presentation.budget import BudgetDialog
+from personal_finance.presentation.recurring_payments import PaymentCalendarDialog
 from personal_finance.presentation.savings_goals import SavingsGoalDialog
 
 
@@ -51,14 +58,36 @@ def check_planning_reports(
         or goal.progress_basis_points != 3333
     ):
         raise RuntimeError("Сценарий цели не совпал с календарными пополнениями.")
+    first_payment = date(2026, 1, 31)
+    payment_dates = (first_payment, date(2026, 2, 28), date(2026, 3, 31))
+    forecast = forecast_payments(
+        (
+            PaymentSchedule(
+                "Синтетическая подписка",
+                Money(12345),
+                PaymentDirection.EXPENSE,
+                first_payment,
+                RepeatUnit.MONTHS,
+            ),
+        ),
+        ReportPeriod(first_payment, payment_dates[-1]),
+    )
+    if (
+        tuple(event.occurs_on for event in forecast.events) != payment_dates
+        or forecast.totals[0].net_minor != -37035
+    ):
+        raise RuntimeError("Календарь платежей не совпал с проверочными датами и суммами.")
     budget_dialog = BudgetDialog(budget, accounts, categories)
     position_dialog = AccountPositionDialog(position, categories)
     goal_dialog = SavingsGoalDialog(goal)
-    dialogs = (budget_dialog, position_dialog, goal_dialog)
+    calendar_dialog = PaymentCalendarDialog(forecast)
+    dialogs = (budget_dialog, position_dialog, goal_dialog, calendar_dialog)
     try:
-        if budget_dialog.sources.model().rowCount() != len(
-            budget.sources
-        ) or position_dialog.accounts.model().rowCount() != len(accounts):
+        if (
+            budget_dialog.sources.model().rowCount() != len(budget.sources)
+            or position_dialog.accounts.model().rowCount() != len(accounts)
+            or calendar_dialog.table.model().rowCount() != len(payment_dates)
+        ):
             raise RuntimeError("Учтённые строки недоступны в интерфейсе отчётов.")
     finally:
         for dialog in dialogs:
