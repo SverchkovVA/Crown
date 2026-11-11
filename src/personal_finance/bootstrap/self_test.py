@@ -897,23 +897,6 @@ def self_test(
                         chart_dialog.reject()
                         chart_dialog.deleteLater()
                         QCoreApplication.sendPostedEvents(chart_dialog, QEvent.Type.DeferredDelete)
-                with _step(report, "reopen_with_recovery_code"):
-                    source.close()
-                    source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
-                    if {a.id for a in source.catalog.accounts()} != {account.id, reserve.id}:
-                        raise RuntimeError("Не сохранилась идентичность счетов.")
-                with _step(report, "reject_wrong_password"):
-                    source.close()
-                    try:
-                        unexpected = open_vault(
-                            root / "Исходная книга.pfvault", "заведомо неверная тестовая фраза"
-                        )
-                    except InvalidCredentials:
-                        pass
-                    else:
-                        unexpected.close()
-                        raise RuntimeError("Неверный пароль был принят.")
-                    source = open_vault(root / "Исходная книга.pfvault", "тестовая фраза сборки")
                 with _step(report, "persist_planning_scenarios"):
                     planning = source.planning_scenarios
                     if planning is None:
@@ -936,6 +919,23 @@ def self_test(
                         or _balances(source) != expected_balances
                     ):
                         raise RuntimeError("Сохранение бюджета и цели не прошло проверку.")
+                with _step(report, "reopen_with_recovery_code"):
+                    source.close()
+                    source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
+                    if {a.id for a in source.catalog.accounts()} != {account.id, reserve.id}:
+                        raise RuntimeError("Не сохранилась идентичность счетов.")
+                with _step(report, "reject_wrong_password"):
+                    source.close()
+                    try:
+                        unexpected = open_vault(
+                            root / "Исходная книга.pfvault", "заведомо неверная тестовая фраза"
+                        )
+                    except InvalidCredentials:
+                        pass
+                    else:
+                        unexpected.close()
+                        raise RuntimeError("Неверный пароль был принят.")
+                    source = open_vault(root / "Исходная книга.pfvault", "тестовая фраза сборки")
                 with _step(report, "create_verified_backup"):
                     backup = create_backup(
                         source, root / "Копия книги.pfbackup", "пароль проверочной копии"
