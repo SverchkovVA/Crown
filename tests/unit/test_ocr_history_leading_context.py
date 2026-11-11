@@ -120,3 +120,16 @@ def test_dated_transaction_with_description_after_the_period_is_not_a_daily_tota
     assert entry.occurred_on.value == date(2026, 10, 27)
     assert entry.description.value == "Учебный магазин"
     assert entry.amount.value == 7315
+
+
+@pytest.mark.parametrize("caption_first", [False, True])
+def test_dated_total_next_to_summary_caption_still_supplies_the_day(caption_first):
+    header = "27.10.2026. −725,50 RUB"
+    summary = ("Траты", header) if caption_first else (header, "Траты")
+    source = document(("История операций", *summary, "Учебный магазин −73,15 RUB"))
+    history = GenericHistoryAdapter().parse(source)
+    (entry,) = history.cards
+    assert not history.blocked_reason
+    assert entry.amount.value == 7315
+    assert entry.occurred_on.value == date(2026, 10, 27)
+    assert history.unassigned_fragments == 1

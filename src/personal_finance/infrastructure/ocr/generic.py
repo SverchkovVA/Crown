@@ -392,6 +392,9 @@ def _summary_rows(document: OcrDocument, rows: list[Row]) -> set[int]:
     for index, row in enumerate(rows):
         if index in result or len(amounts[index]) != 1 or _residue(row, amounts[index][0]):
             continue
+        # Дневной итог сохраняет дату для следующих строк, даже рядом с подписью сводки.
+        if _dates(document, row):
+            continue
         previous = rows[index - 1] if index else None
         recipient_before = bool(
             previous is not None
