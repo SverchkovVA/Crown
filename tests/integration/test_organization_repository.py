@@ -21,6 +21,7 @@ from personal_finance.infrastructure.backup.container import (
 )
 from personal_finance.infrastructure.persistence import migration_runner
 from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from personal_finance.infrastructure.persistence.organization_repository import (
     SqlOrganizationRepository,
 )
@@ -320,7 +321,7 @@ def test_source6_is_unchanged_and_only_restored_copy_supports_tags(tmp_path, mon
         backup = create_backup(source, tmp_path / "old6.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0006"
         restored, _ = restore_backup(backup, tmp_path / "new8.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0014" and restored.organization is not None
+        assert restored.schema_revision == SCHEMA_HEAD and restored.organization is not None
         assert restored.ledger.add(value, command_id=command) == opening
         restored.organization.add_tag("Новый тег")
         assert restored.periods.states()[0].is_closed

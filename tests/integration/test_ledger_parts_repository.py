@@ -18,6 +18,7 @@ from personal_finance.infrastructure.backup.container import (
 )
 from personal_finance.infrastructure.persistence import migration_runner
 from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 
 DAY = date(2026, 10, 27)
@@ -202,7 +203,7 @@ def test_published_schema3_keeps_hashes_and_receipts_when_only_copy_is_upgraded(
         backup = create_backup(source, tmp_path / "old3.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0003"
         restored, _ = restore_backup(backup, tmp_path / "new4.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0014" and restored.ledger.supports_splits
+        assert restored.schema_revision == SCHEMA_HEAD and restored.ledger.supports_splits
         assert restored.ledger.operations() == [operation]
         assert restored.ledger.add(simple, command_id=command) == operation
         replacement = restored.ledger.replace(

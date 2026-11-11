@@ -18,6 +18,7 @@ from personal_finance.infrastructure.backup.container import (
     verify_backup,
 )
 from personal_finance.infrastructure.persistence import migration_runner
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 from tests.unit.test_deposits import scenario
 
@@ -277,12 +278,12 @@ def test_integrity_checks_scenario_payload_through_vault(tmp_path, monkeypatch):
         session.close()
 
 
-def test_default_new_book_uses14(tmp_path):
+def test_default_new_book_supports_deposits_and_bonuses(tmp_path):
     session, _ = vault.create_vault(
-        tmp_path / "default14.pfvault", "Новая вымышленная книга", PASSWORD
+        tmp_path / "default.pfvault", "Новая вымышленная книга", PASSWORD
     )
     try:
-        assert session.schema_revision == "0014" and session.deposit_scenarios is not None
+        assert session.schema_revision == SCHEMA_HEAD and session.deposit_scenarios is not None
         assert session.bonuses is not None and session.bonuses.entries() == []
         assert session.deposit_scenarios.items() == [] and session.catalog.institutions() == []
         session.check_integrity()

@@ -19,6 +19,7 @@ from personal_finance.infrastructure.backup.container import (
     verify_backup,
 )
 from personal_finance.infrastructure.persistence import ledger_repository, migration_runner
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from personal_finance.infrastructure.persistence.period_repository import SqlPeriodRepository
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 
@@ -324,7 +325,7 @@ def test_old5_is_unchanged_and_only_restored_copy_gets_periods(tmp_path, monkeyp
         backup = create_backup(source, tmp_path / "old5.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0005"
         restored, _ = restore_backup(backup, tmp_path / "new6.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0014" and restored.periods is not None
+        assert restored.schema_revision == SCHEMA_HEAD and restored.periods is not None
         assert restored.ledger.add(returned.draft, command_id=command) == returned
         restored.periods.close(MONTH)
         assert [hashlib.sha256(p.read_bytes()).hexdigest() for p in files] == hashes

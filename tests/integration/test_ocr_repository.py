@@ -29,6 +29,7 @@ from personal_finance.infrastructure.backup.container import (
     verify_backup,
 )
 from personal_finance.infrastructure.ocr.t_bank_history import TBankHistoryAdapter
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 from tests.ocr_fixtures import card, history_document
 
@@ -467,7 +468,7 @@ def test_backup_restore_keeps_audit_dedup_and_receipts_under_new_replica(
     command = str(uuid4())
     result = session.ocr_importing.confirm(value, command_id=command)
     backup = create_backup(session, tmp_path / "ocr.pfbackup", BACKUP_PASSWORD)
-    assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0014"
+    assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == SCHEMA_HEAD
     restored, _ = restore_backup(
         backup, tmp_path / "restored-ocr.pfvault", BACKUP_PASSWORD, PASSWORD
     )

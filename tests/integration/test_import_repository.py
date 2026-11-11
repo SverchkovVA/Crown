@@ -29,6 +29,7 @@ from personal_finance.infrastructure.backup.container import (
 )
 from personal_finance.infrastructure.persistence import migration_runner
 from personal_finance.infrastructure.persistence.import_repository import SqlImportRepository
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 
 DAY = date(2026, 1, 15)
@@ -392,7 +393,7 @@ def test_schema7_is_read_unchanged_and_only_restored_copy_gets_import(tmp_path, 
         backup = create_backup(old, tmp_path / "old7.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0007"
         restored, _ = restore_backup(backup, tmp_path / "new8.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.schema_revision == "0014" and restored.importing is not None
+        assert restored.schema_revision == SCHEMA_HEAD and restored.importing is not None
         assert restored.organization.tags() == [tag]
         assert [hashlib.sha256(p.read_bytes()).hexdigest() for p in files] == before
         restored.check_integrity()

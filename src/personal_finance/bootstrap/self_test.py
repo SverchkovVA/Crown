@@ -57,7 +57,9 @@ from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.domain.ocr_imports import OcrImportStatus
 from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.planning_scenarios import BudgetScenario
 from personal_finance.domain.query import OperationQuery
+from personal_finance.domain.savings_goals import SavingsGoalScenario
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
 from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
@@ -912,6 +914,28 @@ def self_test(
                         unexpected.close()
                         raise RuntimeError("Неверный пароль был принят.")
                     source = open_vault(root / "Исходная книга.pfvault", "тестовая фраза сборки")
+                with _step(report, "persist_planning_scenarios"):
+                    planning = source.planning_scenarios
+                    if planning is None:
+                        raise RuntimeError("Хранилище бюджетов и целей недоступно в новой книге.")
+                    before_planning = ledger.operations(include_deleted=True)
+                    budget = planning.save(
+                        "Синтетический бюджет",
+                        BudgetScenario(ReportPeriod(month.start, month.end), Money(30000)),
+                    )
+                    goal_draft = SavingsGoalScenario(
+                        date(2026, 1, 31), Money(10000), Money(30000), Money(10000)
+                    )
+                    goal_command = str(uuid4())
+                    goal = planning.save("Синтетическая цель", goal_draft, command_id=goal_command)
+                    archived_goal = planning.archive(goal.id, goal.revision_id)
+                    if (
+                        planning.get(budget.id) != budget
+                        or planning.history(goal.id) != [goal, archived_goal]
+                        or ledger.operations(include_deleted=True) != before_planning
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Сохранение бюджета и цели не прошло проверку.")
                 with _step(report, "create_verified_backup"):
                     backup = create_backup(
                         source, root / "Копия книги.pfbackup", "пароль проверочной копии"
@@ -925,6 +949,17 @@ def self_test(
                     )
                 try:
                     with _step(report, "check_restored_data"):
+                        restored_planning = restored.planning_scenarios
+                        if (
+                            restored_planning is None
+                            or restored_planning.get(budget.id) != budget
+                            or restored_planning.history(goal.id) != [goal, archived_goal]
+                            or restored_planning.save(
+                                "Синтетическая цель", goal_draft, command_id=goal_command
+                            )
+                            != goal
+                        ):
+                            raise RuntimeError("Бюджет, цель или история не восстановлены.")
                         restored_bonuses = restored.bonuses
                         if (
                             restored_bonuses is None

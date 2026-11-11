@@ -28,7 +28,10 @@ from personal_finance.infrastructure.backup.container import (
 from personal_finance.infrastructure.persistence.classification_repository import (
     SqlClassificationRepository,
 )
-from personal_finance.infrastructure.persistence.migration_runner import initialize_schema
+from personal_finance.infrastructure.persistence.migration_runner import (
+    SCHEMA_HEAD,
+    initialize_schema,
+)
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 from tests.integration.test_category_rule_migration import upgrade_rules
 
@@ -285,7 +288,7 @@ def test_old8_is_unchanged_and_only_restored_copy_gets_rules(tmp_path, monkeypat
         backup = create_backup(old, tmp_path / "old8.pfbackup", BACKUP_PASSWORD)
         assert verify_backup(backup, BACKUP_PASSWORD)["schema"] == "0008"
         restored, _ = restore_backup(backup, tmp_path / "new9.pfvault", BACKUP_PASSWORD, PASSWORD)
-        assert restored.classification is not None and restored.schema_revision == "0014"
+        assert restored.classification is not None and restored.schema_revision == SCHEMA_HEAD
         assert restored.ledger.operations() == [operation]
         restored.classification.save(
             CategoryRule(str(uuid4()), "Новое правило", OperationKind.EXPENSE, "тест", category)

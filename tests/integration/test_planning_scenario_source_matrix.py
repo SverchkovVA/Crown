@@ -1,7 +1,6 @@
-"""Компонент 0015 после перехода временной копии 0002–0014 к действующей 0014.
+"""Компонент 0015 на временной копии после исторического перехода к 0014.
 
-Это компонентная матрица. Настоящее сквозное восстановление и совместимый
-reader проверяются отдельно в test_planning_scenario_upgrade.py до смены HEAD.
+Сквозной путь до текущей схемы проверяется отдельно в test_planning_scenario_upgrade.py.
 """
 
 from dataclasses import replace
@@ -13,6 +12,7 @@ import pytest
 
 from personal_finance.application import vault
 from personal_finance.domain.models import AccountKind
+from personal_finance.infrastructure.persistence import migration_runner
 from personal_finance.infrastructure.persistence.database import make_engine
 from personal_finance.infrastructure.persistence.migration_runner import (
     SCHEMA_HEAD,
@@ -47,7 +47,9 @@ def test_candidate_preserves_rows_of_staging_copy_from_each_supported_schema(
     copytree(root, target)
     engine = make_engine(target / "data" / "ledger.sqlite3", key)
     try:
-        upgrade_restored_schema(engine, version)
+        with monkeypatch.context() as patch:
+            patch.setattr(migration_runner, "SCHEMA_HEAD", "0014")
+            upgrade_restored_schema(engine, version)
         before = snapshot(engine)
         with staging_connection(engine):
             v0015_planning.upgrade()
@@ -70,7 +72,7 @@ def test_candidate_preserves_rows_of_staging_copy_from_each_supported_schema(
     assert hashes(root) == source_hash
 
 
-def test_default_head_stays14_while_explicit15_is_registered_for_verification():
-    assert SCHEMA_HEAD == "0014" and "0015" in SUPPORTED_SCHEMAS
+def test_default15_is_registered():
+    assert SCHEMA_HEAD == "0015" and SCHEMA_HEAD in SUPPORTED_SCHEMAS
     versions = Path(vault.__file__).parents[1] / "infrastructure/persistence/migrations/versions"
     assert len(list(versions.glob("*0015*"))) == 1

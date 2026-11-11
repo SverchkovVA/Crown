@@ -1,4 +1,4 @@
-"""Явная 0015 для сквозной проверки; SCHEMA_HEAD пока остаётся 0014."""
+"""Схема 0015 хранит версии условий бюджетов и целей накоплений."""
 
 from personal_finance.infrastructure.persistence.migrations.candidates import v0015_planning
 

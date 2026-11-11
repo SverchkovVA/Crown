@@ -11,6 +11,7 @@ from personal_finance.infrastructure.backup.container import (
     verify_backup,
 )
 from personal_finance.infrastructure.persistence import migration_runner
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 
 
@@ -52,7 +53,7 @@ def test_old_book_opens_unchanged_and_restore_upgrades_only_new_folder(legacy_se
         "новый пароль новой схемы",
     )
     try:
-        assert restored.schema_revision == "0014"
+        assert restored.schema_revision == SCHEMA_HEAD
         assert restored.book_id == source.book_id
         assert restored.replica_id != source.replica_id
         assert restored.catalog.accounts() == source.catalog.accounts()
