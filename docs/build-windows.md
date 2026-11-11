@@ -4,7 +4,7 @@
 Первый пользовательский прогон подтвердил установку и импорт sqlcipher3 для
 Windows. Приёмка основы указана в docs/stage-3-report.md; первая поставка
 журнала — docs/stage-4-report.md; разделение — docs/stage-4-split-report.md; возвраты — docs/stage-4-refund-report.md; закрытые месяцы — docs/stage-4-period-report.md; сверка — docs/stage-4-reconciliation-report.md; теги/фильтры — docs/stage-4-organization-report.md; импорт — docs/stage-4-import-report.md; экспорт — docs/stage-4-export-report.md; основа 0.2.0.dev9
-с правилами — docs/stage-4-classification-report.md; текущая опытная dev28
+с правилами — docs/stage-4-classification-report.md; прежняя опытная dev28
 с месячными остатками — docs/stage-6-cashflow-months-report.md; доставка модуля:
 docs/stage-5-frozen-ocr-report.md.
 
@@ -34,7 +34,13 @@ Headless-прогон CI отдельно отмечается в JSON. Прог
 [SverchkovVA/Crown Actions](https://github.com/SverchkovVA/Crown/actions).
 После каждого Windows-прогона CI сохраняет артефакт windows-check с отчётами
 и журналами только синтетических тестов; срок хранения — 14 дней.
+Windows CI ограничивает шаг pytest 60 минутами, всю задачу — 75 минутами.
 Успех headless CI не заменяет ручную приёмку на Windows 11.
+
+Для dev62 перенос полного каталога с ocr-runtime подтверждён в Windows
+Sandbox без сети, Python и uv: стартовое окно запустилось, 32 шага
+самопроверки EXE прошли. [Проверка dev62](ocr-spatial-amount-report.md).
+Публичный CI-архив не включает отдельный комплект OCR.
 
 ## Приёмка Windows 11
 
@@ -109,9 +115,10 @@ recognize_local_synthetic_image: всего 26. Последний строит 
 книги из распознавания не изменяются. Шрифт/лицензия уже поставляются Matplotlib.
 Проверка из пустой папки с PATH только System32 не заменяет чистую Windows.
 
-До проверки всех лицензий DLL и чистой Windows комплект остаётся локальным
-кандидатом, установщик/подпись/обновления относятся к этапу 9. Нынешний бюджет
-tests — 40 минут, job CI — 50; значение 30/40 выше относится к dev13.
+На этапе dev21 аудит лицензий DLL и перенос на чистую Windows ещё не были
+завершены. Бюджет того среза: 40 минут на тесты и 50 на задачу CI;
+значение 30/40 выше относится к dev13. Установщик, подпись и обновления
+относятся к этапу 9.
 [Фактические проверки](stage-5-frozen-ocr-report.md).
 
 ## Dev22: формы рубля, поставка прежняя
