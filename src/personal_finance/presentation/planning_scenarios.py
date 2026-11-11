@@ -78,11 +78,11 @@ class SavedPlanningDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(
             _label(
-                "Здесь сохраняются условия расчёта. Бюджет пересчитывается по журналу; "
-                "накопления цели задаются вручную. Сохранение не меняет денежные остатки."
+                "Бюджет пересчитывается по журналу. Для цели вы сами указываете сумму накоплений."
             )
         )
         filters = QHBoxLayout()
+        filters.setSpacing(8)
         self.kind = QComboBox()
         self.kind.setAccessibleName("Вид сохранённых условий")
         for value, title in KIND_LABELS.items():
@@ -112,6 +112,7 @@ class SavedPlanningDialog(QDialog):
         layout.addWidget(self.selection_info)
         self.buttons: dict[PlanningAction, QPushButton] = {}
         grid = QGridLayout()
+        grid.setSpacing(6)
         for index, (action, title) in enumerate(
             [
                 (PlanningAction.CREATE, "Создать"),
@@ -124,16 +125,13 @@ class SavedPlanningDialog(QDialog):
             ]
         ):
             button = QPushButton(title)
+            if action is PlanningAction.CREATE:
+                button.setObjectName("primary")
             button.setAutoDefault(False)
             button.clicked.connect(lambda checked=False, action=action: self.choose(action))
             self.buttons[action] = button
             grid.addWidget(button, index // 4, index % 4)
         layout.addLayout(grid)
-        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        close.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
-        close.button(QDialogButtonBox.StandardButton.Close).setAutoDefault(False)
-        close.rejected.connect(self.reject)
-        layout.addWidget(close)
         self.kind.currentIndexChanged.connect(self.refresh)
         self.search.textChanged.connect(self.refresh)
         self.archived.toggled.connect(self.refresh)
@@ -268,15 +266,13 @@ class PlanningHistoryDialog(QDialog):
         )
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table, 1)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons = QDialogButtonBox()
         self.calculate = buttons.addButton("Рассчитать", QDialogButtonBox.ButtonRole.ActionRole)
         self.copy = buttons.addButton("Создать копию", QDialogButtonBox.ButtonRole.ActionRole)
         for button in (self.calculate, self.copy):
             button.setAutoDefault(False)
         self.calculate.clicked.connect(lambda: self.choose(PlanningAction.CALCULATE))
         self.copy.clicked.connect(lambda: self.choose(PlanningAction.COPY))
-        buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
-        buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.table.selectionModel().selectionChanged.connect(self._selection)
         self._selection()

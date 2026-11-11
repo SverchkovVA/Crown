@@ -1,8 +1,4 @@
-"""Подготовленный процесс сохранённых условий; подключение к книге отложено.
-
-Сервис передаётся явно. Этот модуль не меняет SCHEMA_HEAD, VaultSession,
-резервирование или меню приложения. Все формы размещаются внутри отчётов.
-"""
+"""Сохранённые условия бюджета и цели во встроенных формах отчётов."""
 
 from __future__ import annotations
 
@@ -218,7 +214,7 @@ class PlanningScenariosController:
 
     def _saved(self, result: SavedPlanningScenario) -> None:
         self.kind = result.kind
-        self.notice = "Условия сохранены. Финансовые операции и остатки не изменены."
+        self.notice = "Условия сохранены."
         self.open()
 
     def _calculate(self, scenario: PlanningScenario) -> PlanningCalculation:
@@ -245,13 +241,12 @@ class PlanningScenariosController:
         dialog = self._report_dialog(value)
         layout = dialog.layout()
         assert isinstance(layout, QVBoxLayout)
-        layout.insertWidget(
-            0,
-            _label(
-                f"Условия: {record.name} · версия {record.revision_id}. "
-                "Расчёт бюджета использует текущие принятые операции."
-            ),
-        )
+        text = f"Условия: {record.name}"
+        if record.kind is PlanningKind.BUDGET:
+            text += " · Расчёт по текущему журналу"
+        summary = _label(text)
+        summary.setToolTip(f"Версия условий: {record.revision_id}")
+        layout.insertWidget(0, summary)
         present_form(dialog, self.panel, lambda _: self.open())
 
     def _history(self, records: list[SavedPlanningScenario]) -> None:
@@ -429,7 +424,7 @@ class PlanningScenariosController:
                 dialog.deleteLater()
                 if form is not None:
                     self.kind = planning_kind(scenario)
-                    self.notice = "Условия сохранены. Финансовые операции и остатки не изменены."
+                    self.notice = "Условия сохранены."
                     form.reject()
                 else:
                     self._saved(value)

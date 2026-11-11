@@ -1,4 +1,4 @@
-"""Изолированный GUI-компонент с SQLCipher-книгой; без активации 0015 в меню."""
+"""Работа с условиями бюджета и цели через отчёты настоящей SQLCipher-книги."""
 
 from datetime import date
 
@@ -6,9 +6,8 @@ import pytest
 from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QPushButton
 
-from personal_finance.application.planning_scenarios import PlanningScenarios
 from personal_finance.domain.analytics import ReportPeriod
-from personal_finance.domain.models import Money
+from personal_finance.domain.models import AccountKind, Money
 from personal_finance.domain.planning_scenarios import BudgetScenario, PlanningKind
 from personal_finance.presentation.budget import BudgetDialog
 from personal_finance.presentation.main_window import MainWindow
@@ -17,36 +16,32 @@ from personal_finance.presentation.planning_options import (
     SavingsGoalScenarioOptions,
 )
 from personal_finance.presentation.planning_scenarios import PlanningAction, SavedPlanningDialog
-from personal_finance.presentation.planning_scenarios_workflow import (
-    PlanningNameDialog,
-    PlanningScenariosController,
-)
+from personal_finance.presentation.planning_scenarios_workflow import PlanningNameDialog
 from personal_finance.presentation.savings_goals import SavingsGoalDialog
 from tests.gui.test_planning_scenarios_workflow import current
-from tests.integration.test_planning_scenario_repository import storage as storage
+from tests.integration.test_deposit_scenario_upgrade import create_at
 from tests.unit.test_planning_scenarios import goal
 
 
 @pytest.mark.parametrize("kind", [PlanningKind.BUDGET, PlanningKind.SAVINGS_GOAL])
-def test_embedded_recalculate_then_save_preserves_conditions_and_journal(storage, qtbot, kind):
-    session, repo = storage
+def test_embedded_recalculate_then_save_preserves_conditions_and_journal(session, qtbot, kind):
+    repo = session.planning_scenarios
+    assert repo is not None
+    session.catalog.add_account("Синтетический счёт", AccountKind.CASH)
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
     window.activate_session(session)
     window.navigation.setCurrentRow(2)
-    controller = PlanningScenariosController(
-        window,
-        session,
-        PlanningScenarios(repo),
-        window._report_forms,
-    )
-    controller.kind = kind
     before = session.ledger.operations(), session.ledger.balances()
     try:
-        controller.open()
+        entry = next(b for b in window.report_buttons if b.text() == "Сохранённые бюджеты и цели…")
+        assert entry.isVisible() and entry.isEnabled()
+        entry.click()
         qtbot.waitUntil(lambda: not window._busy)
         listing = current(window, SavedPlanningDialog)
+        listing.kind.setCurrentIndex(listing.kind.findData(kind.value))
+        assert listing.kind.currentData() == kind.value
         listing.buttons[PlanningAction.CREATE].click()
         qtbot.waitUntil(lambda: not window._busy)
         if kind is PlanningKind.BUDGET:
@@ -97,8 +92,24 @@ def test_embedded_recalculate_then_save_preserves_conditions_and_journal(storage
         record = repo.items(kind=kind)[0]
         assert record.scenario == expected and record.name == "Условия для проверки"
         assert (session.ledger.operations(), session.ledger.balances()) == before
-        repo.check_integrity()
         session.check_integrity()
     finally:
         window._report_forms.clear()
         window.session = None
+
+
+def test_reports_keep_calculators_available_in_existing_0014(qtbot, tmp_path, monkeypatch):
+    session, _ = create_at(monkeypatch, tmp_path / "old.pfvault", "0014")
+    window = MainWindow()
+    qtbot.addWidget(window)
+    try:
+        window.activate_session(session)
+        window.navigation.setCurrentRow(2)
+        assert not window.saved_planning_action.isEnabled()
+        assert window.budget_action.isEnabled() and window.savings_goal_action.isEnabled()
+        window.request_saved_planning()
+        assert window._report_forms.stack.count() == 0
+        assert session.schema_revision == "0014" and session.planning_scenarios is None
+    finally:
+        window.session = None
+        session.close()

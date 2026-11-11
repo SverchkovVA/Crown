@@ -161,6 +161,7 @@ from personal_finance.presentation.periods import (
     PeriodHistoryDialog,
     PeriodPage,
 )
+from personal_finance.presentation.planning_scenarios_workflow import PlanningScenariosController
 from personal_finance.presentation.query_dialog import QueryDialog
 from personal_finance.presentation.reconciliation import (
     ReconciliationInputDialog,
@@ -289,6 +290,9 @@ class MainWindow(QMainWindow):
         self.savings_goal_action = command(
             "Цель накоплений…", lambda: self.request_savings_goal(panel=self._report_forms)
         )
+        self.saved_planning_action = command(
+            "Сохранённые бюджеты и цели…", self.request_saved_planning
+        )
         self.deposit_action = command(
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
         )
@@ -303,6 +307,7 @@ class MainWindow(QMainWindow):
             self.account_position_action,
             self.budget_action,
             self.savings_goal_action,
+            self.saved_planning_action,
             self.saved_deposits_action,
         ):
             action.setEnabled(False)
@@ -328,6 +333,17 @@ class MainWindow(QMainWindow):
         self.account_position_action.setEnabled(enabled)
         self.budget_action.setEnabled(enabled)
         self.savings_goal_action.setEnabled(enabled)
+        planning_enabled = (
+            not self._busy
+            and self.session is not None
+            and getattr(self.session, "planning_scenarios", None) is not None
+        )
+        self.saved_planning_action.setEnabled(planning_enabled)
+        self.saved_planning_action.setToolTip(
+            "Условия, история и повторный расчёт."
+            if planning_enabled
+            else "Сохранение доступно в новой книге или в копии, восстановленной в новую папку."
+        )
         self.deposit_action.setEnabled(not self._busy)
         saved_enabled = (
             not self._busy
@@ -626,6 +642,14 @@ class MainWindow(QMainWindow):
             return
         dialog = CashFlowDialog(result[0], result[1], self, categories=result[2])
         present_form(dialog, panel)
+
+    def request_saved_planning(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.planning_scenarios is None:
+            return
+        PlanningScenariosController(
+            self, session, session.planning_scenarios, self._report_forms
+        ).open()
 
     def request_saved_deposits(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
@@ -1195,22 +1219,44 @@ class MainWindow(QMainWindow):
     def _reports_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addWidget(label("Отчёты", "heading"))
-        layout.addWidget(label("Выберите отчёт или сценарий расчёта."))
+        groups = QHBoxLayout()
+        groups.setSpacing(24)
         self.report_buttons: list[QPushButton] = []
-        for action in (
-            self.report_action,
-            self.compare_action,
-            self.cash_flow_action,
-            self.account_position_action,
-            self.budget_action,
-            self.savings_goal_action,
-            self.deposit_action,
-            self.saved_deposits_action,
+        for title, actions in (
+            (
+                "Аналитика",
+                (
+                    self.report_action,
+                    self.compare_action,
+                    self.cash_flow_action,
+                    self.account_position_action,
+                ),
+            ),
+            (
+                "Планирование",
+                (
+                    self.budget_action,
+                    self.savings_goal_action,
+                    self.saved_planning_action,
+                    self.deposit_action,
+                    self.saved_deposits_action,
+                ),
+            ),
         ):
-            widget = self._action_button(action)
-            self.report_buttons.append(widget)
-            layout.addWidget(widget)
+            column = QVBoxLayout()
+            column.setSpacing(6)
+            heading = label(title)
+            font = heading.font()
+            font.setBold(True)
+            heading.setFont(font)
+            column.addWidget(heading)
+            for action in actions:
+                widget = self._action_button(action)
+                self.report_buttons.append(widget)
+                column.addWidget(widget)
+            column.addStretch()
+            groups.addLayout(column, 1)
+        layout.addLayout(groups)
         layout.addStretch()
         return page
 
