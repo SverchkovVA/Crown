@@ -267,11 +267,15 @@ def project_investments(
             raise ValidationError("Инвестиционный счёт повторяется в отчёте.")
         account_by_id[account.id] = account
     security_by_id: dict[str, Security] = {}
+    currencies: dict[str, Currency] = {}
     for security in securities:
         if not isinstance(security, Security):
             raise ValidationError("Укажите данные инструмента.")
         if security.id in security_by_id:
             raise ValidationError("Инструмент повторяется в отчёте.")
+        currency = security.currency
+        if currencies.setdefault(currency.code, currency) != currency:
+            raise ValidationError("Одинаковый код валюты указан с разной точностью.")
         security_by_id[security.id] = security
 
     event_ids: set[str] = set()
