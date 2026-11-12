@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import date
 
-from PySide6.QtCore import QDate, Signal
+from PySide6.QtCore import QDate, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -341,11 +341,21 @@ class PaymentCalendarOptions(QDialog):
 
 
 class PaymentCalendarDialog(QDialog):
-    def __init__(self, forecast: PaymentForecast, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        forecast: PaymentForecast,
+        parent: QWidget | None = None,
+        *,
+        calendar_name: str | None = None,
+    ) -> None:
         super().__init__(parent)
         self.forecast = forecast
         self.setWindowTitle("Календарь платежей · Прогноз")
         layout = QVBoxLayout(self)
+        if calendar_name is not None:
+            calendar = _label(calendar_name)
+            calendar.setTextFormat(Qt.TextFormat.PlainText)
+            layout.addWidget(calendar)
         layout.addWidget(
             _label(f"{date_text(forecast.period.start)} — {date_text(forecast.period.end)}")
         )

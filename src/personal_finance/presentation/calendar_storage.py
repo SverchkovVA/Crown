@@ -3,24 +3,37 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QDialog, QHeaderView, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QHeaderView, QPushButton, QVBoxLayout
 
 from personal_finance.application.planning_scenarios import PlanningScenarios
 from personal_finance.application.vault import VaultSession
+from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import RUB
 from personal_finance.domain.planning_scenarios import PlanningKind, SavedPlanningScenario
-from personal_finance.domain.recurring_payments import PaymentCalendarScenario
+from personal_finance.domain.recurring_payments import (
+    PaymentCalendarScenario,
+    PaymentForecast,
+    forecast_payments,
+)
 from personal_finance.presentation.analytics import _label
 from personal_finance.presentation.inline_forms import InlineForms, present_form
 from personal_finance.presentation.planning_scenarios_workflow import PlanningNameDialog
-from personal_finance.presentation.recurring_payments import PaymentCalendarOptions, _table
+from personal_finance.presentation.recurring_payments import (
+    PaymentCalendarDialog,
+    PaymentCalendarOptions,
+    _table,
+)
 from personal_finance.presentation.tables import replace_table
 
 if TYPE_CHECKING:
     from personal_finance.presentation.main_window import MainWindow
+
+
+UPCOMING_DAYS = 14
 
 
 class SavedCalendarsDialog(QDialog):
@@ -31,6 +44,7 @@ class SavedCalendarsDialog(QDialog):
             record for record in records if isinstance(record.scenario, PaymentCalendarScenario)
         )
         self.selected: SavedPlanningScenario | None = None
+        self.show_upcoming = False
         layout = QVBoxLayout(self)
         self.table = _table("Сохранённые календари платежей")
         replace_table(
@@ -49,18 +63,27 @@ class SavedCalendarsDialog(QDialog):
         layout.addWidget(self.table, 1)
         self.open_button = QPushButton("Открыть календарь")
         self.open_button.setObjectName("primary")
-        self.open_button.setEnabled(False)
-        self.table.selectionModel().selectionChanged.connect(self._update_open)
-        self.open_button.clicked.connect(self._open)
-        layout.addWidget(self.open_button)
+        self.upcoming_button = QPushButton(f"Ближайшие {UPCOMING_DAYS} дней")
+        self.table.selectionModel().selectionChanged.connect(self._update_actions)
+        self.open_button.clicked.connect(lambda: self._select(upcoming=False))
+        self.upcoming_button.clicked.connect(lambda: self._select(upcoming=True))
+        self._update_actions()
+        actions = QHBoxLayout()
+        actions.addStretch()
+        actions.addWidget(self.upcoming_button)
+        actions.addWidget(self.open_button)
+        layout.addLayout(actions)
 
-    def _update_open(self) -> None:
-        self.open_button.setEnabled(bool(self.table.selectionModel().selectedRows()))
+    def _update_actions(self) -> None:
+        selected = bool(self.table.selectionModel().selectedRows())
+        self.open_button.setEnabled(selected)
+        self.upcoming_button.setEnabled(selected)
 
-    def _open(self) -> None:
+    def _select(self, *, upcoming: bool) -> None:
         rows = self.table.selectionModel().selectedRows()
         if rows:
             self.selected = self.records[rows[0].row()]
+            self.show_upcoming = upcoming
             self.accept()
 
 
@@ -107,9 +130,12 @@ class CalendarStorage:
                     return
                 selected = dialog.selected
                 value = selected.scenario
-                if not isinstance(value, PaymentCalendarScenario) or any(
-                    schedule.amount.currency != RUB for schedule in value.schedules
-                ):
+                if not isinstance(value, PaymentCalendarScenario):
+                    return
+                if dialog.show_upcoming:
+                    self._upcoming(selected.name, value)
+                    return
+                if any(schedule.amount.currency != RUB for schedule in value.schedules):
                     self.panel.message("Этот календарь содержит платежи в валюте, отличной от RUB.")
                     return
                 self.open_record(selected)
@@ -117,6 +143,24 @@ class CalendarStorage:
             present_form(dialog, self.panel, completed)
 
         self.window._panel_job(self.panel, load, show, "Загрузка сохранённых календарей…")
+
+    def _upcoming(self, name: str, calendar: PaymentCalendarScenario) -> None:
+        today = date.today()
+        horizon = min(UPCOMING_DAYS - 1, (date.max - today).days)
+        period = ReportPeriod(today, today + timedelta(days=horizon))
+
+        def show(forecast: PaymentForecast) -> None:
+            if self.current():
+                view = PaymentCalendarDialog(forecast, self.window, calendar_name=name)
+                view.setWindowTitle("Ближайшие платежи")
+                present_form(view, self.panel)
+
+        self.window._panel_job(
+            self.panel,
+            lambda: forecast_payments(calendar.schedules, period),
+            show,
+            "Расчёт ближайших платежей…",
+        )
 
     def save(self) -> None:
         if not self.current() or self.window._busy:

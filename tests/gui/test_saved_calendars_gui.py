@@ -1,11 +1,23 @@
 from contextlib import closing
+from datetime import date, timedelta
 
 from personal_finance.application import vault
+from personal_finance.domain.models import Currency, Money
 from personal_finance.domain.planning_scenarios import PlanningKind
+from personal_finance.domain.recurring_payments import (
+    PaymentCalendarScenario,
+    PaymentDirection,
+    PaymentSchedule,
+)
+from personal_finance.presentation import calendar_storage
 from personal_finance.presentation.calendar_storage import SavedCalendarsDialog
 from personal_finance.presentation.main_window import MainWindow
 from personal_finance.presentation.planning_scenarios_workflow import PlanningNameDialog
-from personal_finance.presentation.recurring_payments import PaymentCalendarOptions, ScheduleEditor
+from personal_finance.presentation.recurring_payments import (
+    PaymentCalendarDialog,
+    PaymentCalendarOptions,
+    ScheduleEditor,
+)
 from tests.conftest import PASSWORD
 from tests.gui.test_planning_scenarios_workflow import current
 from tests.integration.test_deposit_scenario_upgrade import create_at
@@ -40,7 +52,7 @@ def test_save_open_and_update_calendar_via_embedded_forms(tmp_path, monkeypatch,
         options.open_saved.click()
         qtbot.waitUntil(lambda: not window._busy, timeout=15000)
         empty = current(window, SavedCalendarsDialog)
-        assert not empty.open_button.isEnabled()
+        assert not empty.open_button.isEnabled() and not empty.upcoming_button.isEnabled()
         empty.reject()
 
         add_payment(window, options, "Учебная подписка", "120,01")
@@ -103,6 +115,71 @@ def test_calendar_in_existing_0015_keeps_existing_draft_workflow(qtbot, tmp_path
         add_payment(window, options, "Только черновик", "6,50")
         assert options.calculate.isEnabled()
         assert session.planning_scenarios.items(kind=PlanningKind.PAYMENT_CALENDAR) == []
+    finally:
+        window._report_forms.clear()
+        window.session = None
+        session.close()
+
+
+def test_upcoming_payments_use_only_selected_saved_calendar(qtbot, tmp_path, monkeypatch):
+    today = date(2026, 11, 12)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return today
+
+    monkeypatch.setattr(calendar_storage, "date", FixedDate)
+    session, _ = vault.create_vault(tmp_path / "upcoming.pfvault", "Проверочная книга", PASSWORD)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    window.activate_session(session)
+    try:
+        service = session.planning_scenarios
+        assert service is not None
+        schedule = PaymentCalendarScenario(
+            tuple(
+                PaymentSchedule(name, amount, PaymentDirection.EXPENSE, today + timedelta(days=day))
+                for day, name, amount in [
+                    (-1, "Прошлый платёж", Money(100)),
+                    (0, "Сегодня", Money(201)),
+                    (13, "Последний день", Money(450, Currency("JPY", 0))),
+                    (14, "После горизонта", Money(300)),
+                ]
+            )
+        )
+        chosen = service.save("Выбранный", schedule)
+        service.save(
+            "Другой",
+            PaymentCalendarScenario(
+                (PaymentSchedule("Другой сценарий", Money(900), PaymentDirection.INCOME, today),)
+            ),
+        )
+        operations, balances = session.ledger.operations(), session.ledger.balances()
+        options = enter_calendar(window)
+        options.open_saved.click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+        picker = current(window, SavedCalendarsDialog)
+        assert not picker.upcoming_button.isEnabled()
+        picker.table.selectRow(picker.records.index(chosen))
+        assert picker.upcoming_button.isEnabled()
+        picker.upcoming_button.click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+        report = current(window, PaymentCalendarDialog)
+        assert report.windowTitle() == "Ближайшие платежи"
+        assert report.forecast.period.start == today
+        assert report.forecast.period.end == today + timedelta(days=13)
+        assert [event.schedule.name for event in report.forecast.events] == [
+            "Сегодня",
+            "Последний день",
+        ]
+        assert {row.currency.code: row.expense_minor for row in report.forecast.totals} == {
+            "JPY": 450,
+            "RUB": 201,
+        }
+        assert service.history(chosen.id) == [chosen]
+        assert (session.ledger.operations(), session.ledger.balances()) == (operations, balances)
     finally:
         window._report_forms.clear()
         window.session = None
