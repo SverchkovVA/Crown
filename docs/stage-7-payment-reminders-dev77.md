@@ -29,8 +29,11 @@
   Использован тот же сеанс, который был создан для dev76. Гость прошёл
   повторную проверку отсутствия установленного Python, uv и сетевых маршрутов.
   Проверены обе темы при 100%, 125% и 150% в нативном Qt.
-- [CI dev77](https://github.com/SverchkovVA/Crown/actions/runs/43291779082)
-  выполняется. Dev76 прошла полный локальный повтор, 2627 тестов, а также
+- [CI dev77](https://github.com/SverchkovVA/Crown/actions/runs/43291779082) прошёл по
+  2630 тестов на Windows и Linux. Сверены исходник, SHA-256 четырёх архивов,
+  JSON, JUnit и одинаковый набор тестов. Проверенный запуск —
+  artifacts/start-checked-planning-dev77.cmd.
+- Dev76 прошла полный локальный повтор, 2627 тестов, а также
   [CI и чистую Windows](stage-7-combined-forecast-dev76.md).
 
 Проверка в интерфейсе описана в [приёмке этапа](stage-7-acceptance.md).
