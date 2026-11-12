@@ -83,9 +83,14 @@ from personal_finance.domain.ocr_imports import OcrImportPreview, OcrImportResul
 from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.organization import SavedFilter, Tag
 from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.planning_scenarios import SavedPlanningScenario
 from personal_finance.domain.query import OperationQuery
 from personal_finance.domain.reconciliation import Reconciliation
-from personal_finance.domain.recurring_payments import PaymentForecast, forecast_payments
+from personal_finance.domain.recurring_payments import (
+    PaymentCalendarScenario,
+    PaymentForecast,
+    forecast_payments,
+)
 from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.domain.savings_goals import SavingsGoalProjection, project_savings_goal
 from personal_finance.infrastructure.backup.container import (
@@ -109,6 +114,7 @@ from personal_finance.presentation.analytics_comparison import (
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
+from personal_finance.presentation.calendar_storage import CalendarStorage
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -484,11 +490,22 @@ class MainWindow(QMainWindow):
         dialog.calculationRequested.connect(calculate)
         present_form(dialog, panel)
 
-    def request_payment_calendar(self) -> None:
+    def request_payment_calendar(self, *, record: SavedPlanningScenario | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
-        dialog = PaymentCalendarOptions(self, accounts=session.catalog.accounts())
+        service = session.planning_scenarios if session.schema_revision == "0016" else None
+        scenario = None if record is None else record.scenario
+        if record is not None and (
+            service is None or not isinstance(scenario, PaymentCalendarScenario)
+        ):
+            return
+        dialog = PaymentCalendarOptions(
+            self,
+            accounts=session.catalog.accounts(),
+            schedules=scenario.schedules if isinstance(scenario, PaymentCalendarScenario) else (),
+            storage=service is not None,
+        )
         analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
         panel = self._report_forms
 
@@ -525,6 +542,18 @@ class MainWindow(QMainWindow):
             self._panel_job(panel, build, show, "Расчёт календаря платежей…")
 
         dialog.calculationRequested.connect(calculate)
+        if service is not None:
+            if record is not None:
+                dialog.set_saved_name(record.name)
+            CalendarStorage(
+                self,
+                session,
+                panel,
+                dialog,
+                service,
+                record,
+                lambda selected: self.request_payment_calendar(record=selected),
+            )
         present_form(dialog, panel)
 
     def request_budget(self, *, panel: InlineForms | None = None) -> None:

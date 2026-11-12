@@ -61,14 +61,16 @@ class PlanningCalculation:
 
 
 class PlanningNameDialog(QDialog):
-    def __init__(self, name: str, parent: MainWindow) -> None:
+    def __init__(
+        self, name: str, parent: MainWindow, *, label: str = "Название бюджета или цели"
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Название бюджета или цели")
+        self.setWindowTitle(label)
         layout = QVBoxLayout(self)
         layout.addWidget(_label("Название сохранённых условий в этой книге:"))
         self.name = QLineEdit(name)
         self.name.setMaxLength(120)
-        self.name.setAccessibleName("Название бюджета или цели")
+        self.name.setAccessibleName(label)
         layout.addWidget(self.name)
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
@@ -86,7 +88,7 @@ class PlanningNameDialog(QDialog):
         try:
             name = validate_name(self.name.text())
             if len(name.casefold()) > 240:
-                raise ValidationError("Сократите название бюджета или цели.")
+                raise ValidationError("Сократите название сохранённых условий.")
         except ValidationError as error:
             self.feedback.setText(str(error))
             self.name.setFocus()

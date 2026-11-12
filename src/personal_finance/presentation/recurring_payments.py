@@ -24,6 +24,8 @@ from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import RUB, Account, Money
 from personal_finance.domain.recurring_payments import (
+    MAX_CALENDAR_SCHEDULES,
+    MAX_SAVED_REPEAT_INTERVAL,
     PaymentDirection,
     PaymentForecast,
     PaymentSchedule,
@@ -120,7 +122,7 @@ class ScheduleEditor(QDialog):
         self.first = _date_input(first, "Первый платёж")
         self.last = _date_input(last, "Последний день расписания")
         self.interval = QSpinBox()
-        self.interval.setRange(1, 1200)
+        self.interval.setRange(1, MAX_SAVED_REPEAT_INTERVAL)
         self.interval.setValue(schedule.interval if schedule else 1)
         self.interval.setAccessibleName("Интервал повторения")
         self.has_last = QCheckBox("Задать дату окончания")
@@ -176,10 +178,18 @@ class ScheduleEditor(QDialog):
 class PaymentCalendarOptions(QDialog):
     calculationRequested = Signal()
 
-    def __init__(self, parent: QWidget, *, accounts: Sequence[Account] = ()) -> None:
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        accounts: Sequence[Account] = (),
+        schedules: Sequence[PaymentSchedule] = (),
+        storage: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Календарь платежей · Условия")
-        self.schedules: list[PaymentSchedule] = []
+        self.schedules = list(schedules)
+        self.storage = storage
         self.request: tuple[tuple[PaymentSchedule, ...], ReportPeriod, Account | None] | None = None
         layout = QVBoxLayout(self)
         dates = QHBoxLayout()
@@ -211,9 +221,23 @@ class PaymentCalendarOptions(QDialog):
         )
         self.balance_hint.hide()
         layout.addWidget(self.balance_hint)
+        self.storage_title = _label("Черновик календаря")
+        self.open_saved = QPushButton("Открыть сохранённый…", self)
+        self.save_calendar = QPushButton("Сохранить календарь…", self)
+        if storage:
+            storage_row = QHBoxLayout()
+            storage_row.setSpacing(6)
+            storage_row.addWidget(self.storage_title, 1)
+            storage_row.addWidget(self.open_saved)
+            storage_row.addWidget(self.save_calendar)
+            layout.addLayout(storage_row)
+        else:
+            self.open_saved.hide()
+            self.save_calendar.hide()
         self.table = _table("Условия ожидаемых платежей")
         layout.addWidget(self.table, 1)
-        layout.addWidget(_label("Расписание хранится до закрытия календаря."))
+        if not storage:
+            layout.addWidget(_label("Расписание хранится до закрытия календаря."))
         actions = QHBoxLayout()
         actions.setSpacing(6)
         self.add = QPushButton("Добавить платёж")
@@ -264,6 +288,12 @@ class PaymentCalendarOptions(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._update_calculate()
         self._selection_changed()
+        self.save_calendar.setEnabled(self.storage and bool(self.schedules))
+        self.add.setEnabled(not self.storage or len(self.schedules) < MAX_CALENDAR_SCHEDULES)
+
+    def set_saved_name(self, name: str) -> None:
+        self.storage_title.setText(name)
+        self.save_calendar.setText("Сохранить изменения…")
 
     def _update_calculate(self) -> None:
         has_account = self.account.currentData() is not None
