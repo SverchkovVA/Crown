@@ -25,6 +25,7 @@ SUPPORTED_SCHEMAS = (
     "0013",
     "0014",
     "0015",
+    "0016",
 )
 
 
@@ -73,6 +74,8 @@ def upgrade_restored_schema(engine: Engine, expected: str) -> None:
         raise UnsupportedFormat("Схема базы не соответствует описанию резервной копии.")
     if current == SCHEMA_HEAD:
         return
+    if current > SCHEMA_HEAD:
+        raise UnsupportedFormat("Для восстановления копии нужна версия с этой схемой по умолчанию.")
     config = _configuration()
     with engine.connect() as connection:
         driver = connection.connection.driver_connection

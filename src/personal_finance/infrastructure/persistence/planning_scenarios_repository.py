@@ -1,4 +1,4 @@
-"""Атомарные версии условий бюджета и цели и защита повторных команд."""
+"""Атомарные версии условий планирования и защита повторных команд."""
 
 import hashlib
 from threading import RLock
@@ -47,7 +47,16 @@ def definition_hash(
 
 
 class SqlPlanningScenariosRepository:
-    def __init__(self, engine: Engine, book_id: str, replica_id: str, mutex: RLock) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        book_id: str,
+        replica_id: str,
+        mutex: RLock,
+        *,
+        supports_calendars: bool = False,
+    ) -> None:
+        self._supports_calendars = supports_calendars
         self._engine, self._book_id, self._replica_id, self._mutex = (
             engine,
             book_id,
@@ -285,11 +294,13 @@ class SqlPlanningScenariosRepository:
     ) -> SavedPlanningScenario:
         name = validate_name(name)
         if len(name.casefold()) > 240:
-            raise ValidationError("Сократите название бюджета или цели.")
+            raise ValidationError("Сократите название условий планирования.")
         if type(is_deleted) is not bool:
             raise ValidationError("Некорректные данные условий планирования.")
         scenario = planning_from_json(planning_json(scenario))
         kind = planning_kind(scenario)
+        if kind is PlanningKind.PAYMENT_CALENDAR and not self._supports_calendars:
+            raise ValidationError("Сохранение календарей доступно в книге со схемой 0016.")
         command_id = str(uuid4()) if command_id is None else command_id
         require_identifier(command_id)
         if (identifier is None) != (expected_revision_id is None):
@@ -327,7 +338,7 @@ class SqlPlanningScenariosRepository:
             if identifier is not None:
                 current = self._current(connection, identifier)
                 if current.kind != kind:
-                    raise ValidationError("Нельзя заменить бюджет целью или цель бюджетом.")
+                    raise ValidationError("Вид сохранённых условий нельзя изменить.")
                 if current.revision_id != expected_revision_id:
                     raise ValidationError(
                         "Условия планирования изменены. Обновите список и повторите действие."

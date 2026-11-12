@@ -11,6 +11,8 @@ from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import Currency, Money, validate_name
 
 MAX_FORECAST_EVENTS = 10000
+MAX_CALENDAR_SCHEDULES = 1000
+MAX_SAVED_REPEAT_INTERVAL = 1200
 
 
 class PaymentDirection(StrEnum):
@@ -54,6 +56,28 @@ class PaymentSchedule:
             raise ValidationError("Интервал повтора должен быть положительным целым числом.")
         if self.unit is RepeatUnit.ONCE and (self.interval != 1 or self.last_on is not None):
             raise ValidationError("Для разового платежа укажите только дату первого платежа.")
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentCalendarScenario:
+    schedules: tuple[PaymentSchedule, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.schedules, tuple)
+            or not 1 <= len(self.schedules) <= MAX_CALENDAR_SCHEDULES
+        ):
+            raise ValidationError("Для сохранения календаря добавьте от 1 до 1000 платежей.")
+        descriptions: dict[str, Currency] = {}
+        for schedule in self.schedules:
+            if (
+                not isinstance(schedule, PaymentSchedule)
+                or schedule.interval > MAX_SAVED_REPEAT_INTERVAL
+            ):
+                raise ValidationError("Проверьте платежи и интервалы сохранённого календаря.")
+            currency = schedule.amount.currency
+            if descriptions.setdefault(currency.code, currency) != currency:
+                raise ValidationError("Одинаковый код валюты указан с разной точностью.")
 
 
 @dataclass(frozen=True, slots=True)

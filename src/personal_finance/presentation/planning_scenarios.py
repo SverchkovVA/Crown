@@ -26,6 +26,7 @@ from personal_finance.domain.planning_scenarios import (
     PlanningKind,
     SavedPlanningScenario,
 )
+from personal_finance.domain.savings_goals import SavingsGoalScenario
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.analytics_cashflow import _size
 from personal_finance.presentation.deposit_scenarios import date_text
@@ -66,6 +67,7 @@ class SavedPlanningDialog(QDialog):
         super().__init__(parent)
         if (
             not isinstance(kind, PlanningKind)
+            or kind not in KIND_LABELS
             or any(not isinstance(v, SavedPlanningScenario) for v in records)
             or len({v.id for v in records}) != len(records)
         ):
@@ -153,13 +155,15 @@ class SavedPlanningDialog(QDialog):
             if isinstance(scenario, BudgetScenario):
                 period = date_text(scenario.period.start) + " — " + date_text(scenario.period.end)
                 amount = scenario.limit
-            else:
+            elif isinstance(scenario, SavingsGoalScenario):
                 period = (
                     date_text(scenario.as_of) + " — " + date_text(scenario.deadline)
                     if scenario.deadline is not None
                     else "С " + date_text(scenario.as_of)
                 )
                 amount = scenario.target
+            else:
+                raise ValidationError("Неизвестный вид условий для этого списка.")
             rows.append(
                 [
                     record.name,

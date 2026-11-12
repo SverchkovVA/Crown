@@ -141,6 +141,7 @@ class VaultSession:
                         "0013",
                         "0014",
                         "0015",
+                        "0016",
                     ),
                     supports_refunds=self.schema_revision
                     in (
@@ -155,6 +156,7 @@ class VaultSession:
                         "0013",
                         "0014",
                         "0015",
+                        "0016",
                     ),
                     supports_periods=self.schema_revision
                     in (
@@ -168,9 +170,21 @@ class VaultSession:
                         "0013",
                         "0014",
                         "0015",
+                        "0016",
                     ),
                     supports_tags=self.schema_revision
-                    in ("0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015"),
+                    in (
+                        "0007",
+                        "0008",
+                        "0009",
+                        "0010",
+                        "0011",
+                        "0012",
+                        "0013",
+                        "0014",
+                        "0015",
+                        "0016",
+                    ),
                 )
                 if self.schema_revision
                 in (
@@ -187,6 +201,7 @@ class VaultSession:
                     "0013",
                     "0014",
                     "0015",
+                    "0016",
                 )
                 else None
             )
@@ -205,14 +220,26 @@ class VaultSession:
             self.importing = (
                 Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
                 if self.schema_revision
-                in ("0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015")
+                in ("0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016")
                 and ledger_repository is not None
                 else None
             )
             self.periods = (
                 Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
                 if self.schema_revision
-                in ("0006", "0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015")
+                in (
+                    "0006",
+                    "0007",
+                    "0008",
+                    "0009",
+                    "0010",
+                    "0011",
+                    "0012",
+                    "0013",
+                    "0014",
+                    "0015",
+                    "0016",
+                )
                 else None
             )
             self.organization = (
@@ -220,7 +247,7 @@ class VaultSession:
                     SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
                 if self.schema_revision
-                in ("0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015")
+                in ("0007", "0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016")
                 else None
             )
             self.classification = (
@@ -229,7 +256,8 @@ class VaultSession:
                     self.mutex,
                     self.ensure_open,
                 )
-                if self.schema_revision in ("0009", "0010", "0011", "0012", "0013", "0014", "0015")
+                if self.schema_revision
+                in ("0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016")
                 else None
             )
             ocr_repository = (
@@ -239,16 +267,17 @@ class VaultSession:
                     self.mutex,
                     ledger_repository,
                     supports_batches=self.schema_revision
-                    in ("0011", "0012", "0013", "0014", "0015"),
+                    in ("0011", "0012", "0013", "0014", "0015", "0016"),
                     supports_universal=self.schema_revision
                     in (
                         "0012",
                         "0013",
                         "0014",
                         "0015",
+                        "0016",
                     ),
                 )
-                if self.schema_revision in ("0010", "0011", "0012", "0013", "0014", "0015")
+                if self.schema_revision in ("0010", "0011", "0012", "0013", "0014", "0015", "0016")
                 and ledger_repository is not None
                 else None
             )
@@ -257,7 +286,7 @@ class VaultSession:
             )
             self.ocr_settings = (
                 SqlOcrSettings(self.engine, book_id, self.mutex, ocr_repository)
-                if self.schema_revision in ("0011", "0012", "0013", "0014", "0015")
+                if self.schema_revision in ("0011", "0012", "0013", "0014", "0015", "0016")
                 and ocr_repository is not None
                 else None
             )
@@ -265,21 +294,25 @@ class VaultSession:
                 DepositScenarios(
                     SqlDepositScenariosRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision in ("0013", "0014", "0015")
+                if self.schema_revision in ("0013", "0014", "0015", "0016")
                 else None
             )
             self.bonuses = (
                 Bonuses(SqlBonusRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision in ("0014", "0015")
+                if self.schema_revision in ("0014", "0015", "0016")
                 else None
             )
             self.planning_scenarios = (
                 PlanningScenarios(
                     SqlPlanningScenariosRepository(
-                        self.engine, book_id, self.replica_id, self.mutex
+                        self.engine,
+                        book_id,
+                        self.replica_id,
+                        self.mutex,
+                        supports_calendars=self.schema_revision == "0016",
                     )
                 )
-                if self.schema_revision == "0015"
+                if self.schema_revision in ("0015", "0016")
                 else None
             )
         except Exception:

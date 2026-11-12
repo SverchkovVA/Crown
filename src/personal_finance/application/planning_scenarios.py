@@ -1,4 +1,4 @@
-"""Команды условий бюджета и цели; финансовые операции не создаются."""
+"""Команды для версионных условий планирования."""
 
 from typing import Protocol
 
@@ -68,7 +68,7 @@ class PlanningScenarios:
             else None
         )
         if current is not None and current.kind != planning_kind(scenario):
-            raise ValidationError("Нельзя заменить бюджет целью или цель бюджетом.")
+            raise ValidationError("Вид сохранённых условий нельзя изменить.")
         return self._repository.save(
             name,
             scenario,

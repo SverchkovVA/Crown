@@ -22,7 +22,11 @@ from personal_finance.domain.planning_scenarios import (
     SavedPlanningScenario,
     planning_kind,
 )
-from personal_finance.domain.savings_goals import SavingsGoalProjection, project_savings_goal
+from personal_finance.domain.savings_goals import (
+    SavingsGoalProjection,
+    SavingsGoalScenario,
+    project_savings_goal,
+)
 from personal_finance.presentation.analytics import _label
 from personal_finance.presentation.budget import BudgetDialog
 from personal_finance.presentation.inline_forms import InlineForms, present_form
@@ -229,7 +233,9 @@ class PlanningScenariosController:
                 self.session.catalog.accounts(),
                 self.session.catalog.categories(),
             )
-        return PlanningCalculation(project_savings_goal(scenario), [], [])
+        if isinstance(scenario, SavingsGoalScenario):
+            return PlanningCalculation(project_savings_goal(scenario), [], [])
+        raise ValidationError("Выберите бюджет или цель накоплений.")
 
     def _report_dialog(self, value: PlanningCalculation) -> BudgetDialog | SavingsGoalDialog:
         report = value.report
@@ -282,7 +288,9 @@ class PlanningScenariosController:
                     )
                 else:
                     scenario_goal = record.scenario if record is not None else None
-                    if isinstance(scenario_goal, BudgetScenario):
+                    if scenario_goal is not None and not isinstance(
+                        scenario_goal, SavingsGoalScenario
+                    ):
                         raise ValidationError("Для этой формы выберите цель.")
                     form = SavingsGoalScenarioOptions(self.window, scenario=scenario_goal)
             except ValidationError as error:

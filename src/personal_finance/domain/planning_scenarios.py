@@ -1,4 +1,4 @@
-"""Строгий формат сохраняемых условий бюджета и цели, без SQL и проводок."""
+"""Строгий формат сохраняемых условий планирования."""
 
 import json
 from dataclasses import dataclass, field
@@ -10,6 +10,13 @@ from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import Currency, Money
 from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.recurring_payments import (
+    MAX_CALENDAR_SCHEDULES,
+    PaymentCalendarScenario,
+    PaymentDirection,
+    PaymentSchedule,
+    RepeatUnit,
+)
 from personal_finance.domain.savings_goals import SavingsGoalScenario
 
 MAX_PLANNING_JSON = 4 * 1024 * 1024
@@ -19,6 +26,7 @@ MAX_SCOPE_IDENTIFIERS = 10000
 class PlanningKind(StrEnum):
     BUDGET = "budget"
     SAVINGS_GOAL = "savings_goal"
+    PAYMENT_CALENDAR = "payment_calendar"
 
 
 class BudgetPeriodMode(StrEnum):
@@ -55,7 +63,7 @@ class BudgetScenario:
                 )
 
 
-PlanningScenario = BudgetScenario | SavingsGoalScenario
+PlanningScenario = BudgetScenario | SavingsGoalScenario | PaymentCalendarScenario
 
 
 def planning_kind(value: PlanningScenario) -> PlanningKind:
@@ -63,20 +71,43 @@ def planning_kind(value: PlanningScenario) -> PlanningKind:
         return PlanningKind.BUDGET
     if isinstance(value, SavingsGoalScenario):
         return PlanningKind.SAVINGS_GOAL
-    raise ValidationError("Передайте условия бюджета или цели накоплений.")
+    if isinstance(value, PaymentCalendarScenario):
+        return PlanningKind.PAYMENT_CALENDAR
+    raise ValidationError("Передайте условия бюджета, цели или календаря платежей.")
+
+
+_ALGORITHMS = {
+    PlanningKind.BUDGET: "budget-postings-v1",
+    PlanningKind.SAVINGS_GOAL: "monthly-contribution-v1",
+    PlanningKind.PAYMENT_CALENDAR: "calendar-anchors-v1",
+}
+
+
+def _currency_payload(currency: Currency) -> dict[str, Any]:
+    return {"code": currency.code, "exponent": currency.exponent}
+
+
+def _schedule_payload(schedule: PaymentSchedule) -> dict[str, Any]:
+    return {
+        "name": schedule.name,
+        "amount_minor": schedule.amount.minor,
+        "currency": _currency_payload(schedule.amount.currency),
+        "direction": schedule.direction.value,
+        "first_on": schedule.first_on.isoformat(),
+        "unit": schedule.unit.value,
+        "interval": schedule.interval,
+        "last_on": None if schedule.last_on is None else schedule.last_on.isoformat(),
+    }
 
 
 def planning_payload(value: PlanningScenario) -> dict[str, Any]:
     kind = planning_kind(value)
+    result: dict[str, Any] = {"format": 1, "kind": kind.value, "algorithm": _ALGORITHMS[kind]}
+    if isinstance(value, PaymentCalendarScenario):
+        result["schedules"] = [_schedule_payload(schedule) for schedule in value.schedules]
+        return result
     currency = value.limit.currency if isinstance(value, BudgetScenario) else value.target.currency
-    result: dict[str, Any] = {
-        "format": 1,
-        "kind": kind.value,
-        "algorithm": (
-            "budget-postings-v1" if kind == PlanningKind.BUDGET else "monthly-contribution-v1"
-        ),
-        "currency": {"code": currency.code, "exponent": currency.exponent},
-    }
+    result["currency"] = _currency_payload(currency)
     if isinstance(value, BudgetScenario):
         result.update(
             period_mode=value.period_mode.value,
@@ -101,8 +132,9 @@ def planning_payload(value: PlanningScenario) -> dict[str, Any]:
     return result
 
 
-_COMMON = frozenset({"format", "kind", "algorithm", "currency"})
+_COMMON = frozenset({"format", "kind", "algorithm"})
 _BUDGET_FIELDS = _COMMON | {
+    "currency",
     "period_mode",
     "start",
     "end",
@@ -110,7 +142,32 @@ _BUDGET_FIELDS = _COMMON | {
     "account_ids",
     "category_ids",
 }
-_GOAL_FIELDS = _COMMON | {"as_of", "current_minor", "target_minor", "monthly_minor", "deadline"}
+_GOAL_FIELDS = _COMMON | {
+    "currency",
+    "as_of",
+    "current_minor",
+    "target_minor",
+    "monthly_minor",
+    "deadline",
+}
+_CALENDAR_FIELDS = _COMMON | {"schedules"}
+_FIELDS = {
+    PlanningKind.BUDGET: _BUDGET_FIELDS,
+    PlanningKind.SAVINGS_GOAL: _GOAL_FIELDS,
+    PlanningKind.PAYMENT_CALENDAR: _CALENDAR_FIELDS,
+}
+_SCHEDULE_FIELDS = frozenset(
+    {
+        "name",
+        "amount_minor",
+        "currency",
+        "direction",
+        "first_on",
+        "unit",
+        "interval",
+        "last_on",
+    }
+)
 
 
 def _object(value: object, fields: frozenset[str]) -> dict[str, Any]:
@@ -154,24 +211,47 @@ def _identifiers(value: object) -> frozenset[str] | None:
     return frozenset(values)
 
 
+def _currency(raw: object) -> Currency:
+    value = _object(raw, frozenset({"code", "exponent"}))
+    return Currency(_text(value["code"], 3), _integer(value["exponent"]))
+
+
+def _read_calendar(raw: object) -> PaymentCalendarScenario:
+    if type(raw) is not list or not 1 <= len(raw) <= MAX_CALENDAR_SCHEDULES:
+        raise ValidationError("Проверьте число платежей сохранённого календаря.")
+    schedules = []
+    for item in raw:
+        value = _object(item, _SCHEDULE_FIELDS)
+        schedules.append(
+            PaymentSchedule(
+                _text(value["name"], 120),
+                Money(_integer(value["amount_minor"]), _currency(value["currency"])),
+                PaymentDirection(_text(value["direction"])),
+                _day(value["first_on"]),
+                RepeatUnit(_text(value["unit"])),
+                _integer(value["interval"]),
+                None if value["last_on"] is None else _day(value["last_on"]),
+            )
+        )
+    return PaymentCalendarScenario(tuple(schedules))
+
+
 def planning_from_payload(raw: object) -> PlanningScenario:
     if type(raw) is not dict:
         raise ValidationError("Неверные условия планирования.")
     try:
         kind = PlanningKind(_text(raw.get("kind"), 32))
-        value = _object(raw, _BUDGET_FIELDS if kind == PlanningKind.BUDGET else _GOAL_FIELDS)
+        value = _object(raw, _FIELDS[kind])
         if type(value["format"]) is not int or value["format"] != 1:
             raise ValidationError("Неизвестная версия формата условий планирования.")
         algorithm = _text(value["algorithm"])
-        expected = (
-            "budget-postings-v1" if kind == PlanningKind.BUDGET else "monthly-contribution-v1"
-        )
-        if algorithm != expected:
+        if algorithm != _ALGORITHMS[kind]:
             raise ValidationError("Неизвестная версия расчёта условий планирования.")
-        c = _object(value["currency"], frozenset({"code", "exponent"}))
-        currency = Currency(_text(c["code"], 3), _integer(c["exponent"]))
         result: PlanningScenario
-        if kind == PlanningKind.BUDGET:
+        if kind == PlanningKind.PAYMENT_CALENDAR:
+            result = _read_calendar(value["schedules"])
+        elif kind == PlanningKind.BUDGET:
+            currency = _currency(value["currency"])
             result = BudgetScenario(
                 ReportPeriod(_day(value["start"]), _day(value["end"])),
                 Money(_integer(value["limit_minor"]), currency),
@@ -181,6 +261,7 @@ def planning_from_payload(raw: object) -> PlanningScenario:
                 BudgetPeriodMode(_text(value["period_mode"])),
             )
         else:
+            currency = _currency(value["currency"])
             result = SavingsGoalScenario(
                 _day(value["as_of"]),
                 Money(_integer(value["current_minor"]), currency),
