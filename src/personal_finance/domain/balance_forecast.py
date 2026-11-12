@@ -8,7 +8,7 @@ from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashMovement, cash_flow_report
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import Operation, require_identifier
-from personal_finance.domain.models import RUB, Account, Currency
+from personal_finance.domain.models import RUB, Account, Currency, Money
 from personal_finance.domain.recurring_payments import (
     ForecastEvent,
     PaymentSchedule,
@@ -132,3 +132,33 @@ def match_payments(forecast: BalanceForecast, matches: Sequence[PaymentMatch]) -
     return replace(
         forecast, days=days, matches=tuple(sorted(matches, key=lambda v: v.expected_index))
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ReserveCheck:
+    reserve: Money
+    minimum_minor: int
+    minimum_on: date
+    first_below: date | None
+
+    @property
+    def shortfall_minor(self) -> int:
+        return max(0, self.reserve.minor - self.minimum_minor)
+
+
+def check_reserve(forecast: BalanceForecast, reserve: Money) -> ReserveCheck:
+    if not isinstance(reserve, Money) or reserve.currency != forecast.currency or reserve.minor < 0:
+        raise ValidationError("Укажите неотрицательный резерв в валюте счёта.")
+    start = forecast.period.start
+    first = forecast.days[0] if forecast.days else None
+    opening_close = (
+        first.closing_minor if first is not None and first.day == start else forecast.opening_minor
+    )
+    minimum, minimum_on = opening_close, start
+    first_below = start if opening_close < reserve.minor else None
+    for row in forecast.days:
+        if row.closing_minor < minimum:
+            minimum, minimum_on = row.closing_minor, row.day
+        if first_below is None and row.closing_minor < reserve.minor:
+            first_below = row.day
+    return ReserveCheck(reserve, minimum, minimum_on, first_below)

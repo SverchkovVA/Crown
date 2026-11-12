@@ -106,6 +106,13 @@ def test_matching_requires_explicit_confirmation_and_changes_only_the_projection
         qtbot.waitUntil(lambda: not window._busy, timeout=15000)
         result = current(window, BalanceForecastDialog)
         assert result.forecast.closing_minor == 4000
+        result.reserve.amount.setText("-1,00")
+        result.reserve.check.click()
+        assert result.reserve.error.isVisible()
+        result.reserve.amount.setText("50,00")
+        result.reserve.check.click()
+        assert "Первый день ниже резерва" in result.reserve.result.text()
+        assert "10,00 RUB" in result.reserve.result.text()
         matching = result.matching
         assert matching is not None and not matching.confirm.isEnabled()
         matching.table.selectRow(0)
@@ -117,10 +124,12 @@ def test_matching_requires_explicit_confirmation_and_changes_only_the_projection
         assert result.forecast.closing_minor == 4000
         matching.confirm.click()
         assert result.forecast.closing_minor == 6000
+        assert result.reserve.result.text().startswith("Резерв выдержан.")
         assert result.days.model().index(0, 2).data() == "0,00"
         assert matching.table.model().index(0, 3).data() == "Учтён в журнале"
         matching.undo.click()
         assert result.forecast.closing_minor == 4000 and not result.forecast.matches
+        assert "10,00 RUB" in result.reserve.result.text()
         assert fingerprints(session) == before
     finally:
         window._report_forms.clear()

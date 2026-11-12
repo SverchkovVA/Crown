@@ -6,6 +6,7 @@ from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.balance_forecast import (
     ForecastDay,
     PaymentMatch,
+    check_reserve,
     forecast_balance,
     match_payments,
 )
@@ -141,3 +142,35 @@ def test_payment_match_requires_same_date_amount_and_direction(minor, actual_on)
     forecast = forecast_balance((operation,), ACCOUNT, ReportPeriod(START, END), (wrong_sign,))
     with pytest.raises(ValidationError, match="датой и суммой"):
         match_payments(forecast, (PaymentMatch(0, operation.revision_id),))
+
+
+@pytest.mark.parametrize(
+    "plan_on, direction, amount, reserve, first_below, low_day, low_value",
+    (
+        (START, PaymentDirection.INCOME, 100, 100, None, START, 100),
+        (FEBRUARY, PaymentDirection.INCOME, 100, 100, START, START, 0),
+        (FEBRUARY, PaymentDirection.EXPENSE, 100, 0, FEBRUARY, FEBRUARY, -100),
+        (END, PaymentDirection.EXPENSE, 0, 5, START, START, 0),
+    ),
+)
+def test_reserve_uses_end_of_day_and_includes_days_without_movements(
+    plan_on, direction, amount, reserve, first_below, low_day, low_value
+):
+    plans = (
+        (PaymentSchedule("Учебное событие", Money(amount), direction, plan_on),) if amount else ()
+    )
+    forecast = forecast_balance((), ACCOUNT, ReportPeriod(START, END), plans)
+    result = check_reserve(forecast, Money(reserve))
+    assert (result.first_below, result.minimum_on, result.minimum_minor) == (
+        first_below,
+        low_day,
+        low_value,
+    )
+    assert result.shortfall_minor == max(0, reserve - low_value)
+
+
+def test_reserve_rejects_negative_threshold_or_another_currency():
+    forecast = forecast_balance((), ACCOUNT, ReportPeriod(START, END), ())
+    for value in (Money(-1), Money(0, Currency("JPY", 0))):
+        with pytest.raises(ValidationError, match="резерв"):
+            check_reserve(forecast, value)

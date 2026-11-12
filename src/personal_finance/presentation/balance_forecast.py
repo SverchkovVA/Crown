@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QDialog, QHeaderView, QTabWidget, QVBoxLayout, QWi
 from personal_finance.domain.balance_forecast import BalanceForecast
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.deposit_scenarios import date_text
+from personal_finance.presentation.forecast_reserve import ForecastReserve
 from personal_finance.presentation.payment_matching import PaymentMatching
 from personal_finance.presentation.recurring_payments import _table
 from personal_finance.presentation.tables import replace_table
@@ -26,6 +27,8 @@ class BalanceForecastDialog(QDialog):
         )
         self.summary = _label("")
         layout.addWidget(self.summary)
+        self.reserve = ForecastReserve(forecast)
+        layout.addWidget(self.reserve)
         if not forecast.days:
             layout.addWidget(_label("В выбранном периоде движений нет."))
         tabs = QTabWidget(self)
@@ -45,6 +48,7 @@ class BalanceForecastDialog(QDialog):
 
     def _apply_forecast(self, forecast: BalanceForecast) -> None:
         self.forecast = forecast
+        self.reserve.update_forecast(forecast)
         currency = forecast.currency
 
         def amount(minor: int) -> str:
