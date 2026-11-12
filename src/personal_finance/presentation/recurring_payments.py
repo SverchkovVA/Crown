@@ -175,6 +175,9 @@ class ScheduleEditor(QDialog):
         self.accept()
 
 
+ALL_RUB_ACCOUNTS = "all-rub-accounts"
+
+
 class PaymentCalendarOptions(QDialog):
     calculationRequested = Signal()
 
@@ -190,7 +193,9 @@ class PaymentCalendarOptions(QDialog):
         self.setWindowTitle("Календарь платежей · Условия")
         self.schedules = list(schedules)
         self.storage = storage
-        self.request: tuple[tuple[PaymentSchedule, ...], ReportPeriod, Account | None] | None = None
+        self.request: (
+            tuple[tuple[PaymentSchedule, ...], ReportPeriod, tuple[Account, ...]] | None
+        ) = None
         layout = QVBoxLayout(self)
         dates = QHBoxLayout()
         dates.setSpacing(8)
@@ -208,6 +213,8 @@ class PaymentCalendarOptions(QDialog):
         self.account = QComboBox()
         self.account.setAccessibleName("Счёт для прогноза остатка")
         self.account.addItem("Только календарь платежей", None)
+        if len(self.accounts) > 1:
+            self.account.addItem("Все доступные счета RUB", ALL_RUB_ACCOUNTS)
         for account in sorted(self.accounts.values(), key=lambda row: row.name.casefold()):
             self.account.addItem(account.name, account.id)
         if self.accounts:
@@ -215,10 +222,7 @@ class PaymentCalendarOptions(QDialog):
             account_row.setHorizontalSpacing(8)
             account_row.addRow("Счёт", self.account)
             layout.addLayout(account_row)
-        self.balance_hint = _label(
-            "Прогноз включает проводки счёта и ожидаемые платежи. "
-            "Совпадающие платежи можно сопоставить после расчёта."
-        )
+        self.balance_hint = _label("")
         self.balance_hint.hide()
         layout.addWidget(self.balance_hint)
         self.storage_title = _label("Черновик календаря")
@@ -296,8 +300,14 @@ class PaymentCalendarOptions(QDialog):
         self.save_calendar.setText("Сохранить изменения…")
 
     def _update_calculate(self) -> None:
-        has_account = self.account.currentData() is not None
+        selected = self.account.currentData()
+        has_account = selected is not None
         self.balance_hint.setVisible(has_account)
+        self.balance_hint.setText(
+            "Каждый ожидаемый платёж учитывается один раз в общем остатке."
+            if selected == ALL_RUB_ACCOUNTS
+            else "Совпадающие платежи можно сопоставить после расчёта."
+        )
         self.calculate.setEnabled(bool(self.schedules) or has_account)
 
     def _selection_changed(self) -> None:
@@ -336,7 +346,13 @@ class PaymentCalendarOptions(QDialog):
             self.feedback.show()
             return
         self.feedback.hide()
-        self.request = tuple(self.schedules), period, self.accounts.get(self.account.currentData())
+        selected = self.account.currentData()
+        if selected == ALL_RUB_ACCOUNTS:
+            accounts = tuple(self.accounts.values())
+        else:
+            account = self.accounts.get(selected)
+            accounts = (account,) if account is not None else ()
+        self.request = tuple(self.schedules), period, accounts
         self.calculationRequested.emit()
 
 

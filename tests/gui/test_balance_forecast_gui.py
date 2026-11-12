@@ -6,7 +6,11 @@ from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import AccountKind, CategoryKind, Money
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.main_window import MainWindow
-from personal_finance.presentation.recurring_payments import PaymentCalendarOptions, ScheduleEditor
+from personal_finance.presentation.recurring_payments import (
+    ALL_RUB_ACCOUNTS,
+    PaymentCalendarOptions,
+    ScheduleEditor,
+)
 from tests.gui.test_analytics_gui import fingerprints
 from tests.gui.test_planning_scenarios_workflow import current
 
@@ -130,6 +134,64 @@ def test_matching_requires_explicit_confirmation_and_changes_only_the_projection
         matching.undo.click()
         assert result.forecast.closing_minor == 4000 and not result.forecast.matches
         assert "10,00 RUB" in result.reserve.result.text()
+        assert fingerprints(session) == before
+    finally:
+        window._report_forms.clear()
+        window.session = None
+
+
+def test_combined_forecast_lists_accounts_and_preserves_the_book(session, qtbot):
+    day = date(2026, 1, 31)
+    account = session.catalog.add_account("Первый счёт", AccountKind.CASH)
+    other = session.catalog.add_account("Второй счёт", AccountKind.CASH)
+    category = session.catalog.add_category("Комиссия", CategoryKind.EXPENSE)
+    session.ledger.add(
+        OperationDraft(OperationKind.OPENING, date(2026, 1, 30), account.id, Money(10000))
+    )
+    session.ledger.add(
+        OperationDraft(OperationKind.OPENING, date(2026, 1, 30), other.id, Money(5000))
+    )
+    session.ledger.add(
+        OperationDraft(
+            OperationKind.TRANSFER,
+            day,
+            account.id,
+            Money(2000),
+            destination_account_id=other.id,
+            fee=Money(50),
+            fee_category_id=category.id,
+        )
+    )
+    before = fingerprints(session)
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show()
+    window.activate_session(session)
+    window.navigation.setCurrentRow(2)
+    try:
+        window.payment_calendar_action.trigger()
+        options = current(window, PaymentCalendarOptions)
+        options.start.setDate(QDate(2026, 1, 31))
+        options.end.setDate(QDate(2026, 1, 31))
+        options.account.setCurrentIndex(options.account.findData(ALL_RUB_ACCOUNTS))
+        options.add.click()
+        editor = current(window, ScheduleEditor)
+        editor.name.setText("Учебная покупка")
+        editor.amount.setText("1,00")
+        editor.apply.click()
+        options.calculate.click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+        result = current(window, BalanceForecastDialog)
+        assert result.forecast.opening_minor == 15000
+        assert result.forecast.closing_minor == 14850
+        assert result.matching is None
+        movements = result.movements.model()
+        assert movements.columnCount() == 5
+        assert {movements.index(row, 2).data() for row in range(movements.rowCount())} == {
+            account.name,
+            other.name,
+            "—",
+        }
         assert fingerprints(session) == before
     finally:
         window._report_forms.clear()

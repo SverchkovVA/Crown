@@ -14,7 +14,7 @@ from personal_finance.domain.analytics import (
 )
 from personal_finance.domain.analytics_cashflow import CashFlowReport, cash_flow_report
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison, compare_periods
-from personal_finance.domain.balance_forecast import BalanceForecast, forecast_balance
+from personal_finance.domain.balance_forecast import BalanceForecast, forecast_balances
 from personal_finance.domain.budget import BudgetExecution, budget_execution, monthly_budget
 from personal_finance.domain.deposit_plan_fact import DepositPlanFact, deposit_plan_fact
 from personal_finance.domain.deposits import DepositScenario
@@ -50,7 +50,15 @@ class Analytics:
     def balance_forecast(
         self, account: Account, period: ReportPeriod, schedules: tuple[PaymentSchedule, ...]
     ) -> BalanceForecast:
-        return forecast_balance(self._snapshot(), account, period, schedules)
+        return self.combined_balance_forecast((account,), period, schedules)
+
+    def combined_balance_forecast(
+        self,
+        accounts: tuple[Account, ...],
+        period: ReportPeriod,
+        schedules: tuple[PaymentSchedule, ...],
+    ) -> BalanceForecast:
+        return forecast_balances(self._snapshot(), accounts, period, schedules)
 
     def budget(
         self, period: ReportPeriod, limit: Money, scope: ReportScope | None = None

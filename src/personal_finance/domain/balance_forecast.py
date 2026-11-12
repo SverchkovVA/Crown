@@ -1,4 +1,4 @@
-"""Прогноз средств на одном счёте из журнала и ожидаемых платежей."""
+"""Прогноз средств на выбранных счетах по журналу и ожидаемым платежам."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -32,7 +32,7 @@ class PaymentMatch:
 
 @dataclass(frozen=True, slots=True)
 class BalanceForecast:
-    account: Account
+    accounts: tuple[Account, ...]
     currency: Currency
     period: ReportPeriod
     opening_minor: int
@@ -40,6 +40,10 @@ class BalanceForecast:
     booked: tuple[CashMovement, ...]
     planned: tuple[ForecastEvent, ...]
     matches: tuple[PaymentMatch, ...] = ()
+
+    @property
+    def account(self) -> Account | None:
+        return self.accounts[0] if len(self.accounts) == 1 else None
 
     @property
     def closing_minor(self) -> int:
@@ -54,30 +58,49 @@ def forecast_balance(
     *,
     currency: Currency = RUB,
 ) -> BalanceForecast:
+    return forecast_balances(operations, (account,), period, schedules, currency=currency)
+
+
+def forecast_balances(
+    operations: Sequence[Operation],
+    accounts: Sequence[Account],
+    period: ReportPeriod,
+    schedules: Sequence[PaymentSchedule],
+    *,
+    currency: Currency = RUB,
+) -> BalanceForecast:
+    selected = tuple(accounts)
     if (
-        not isinstance(account, Account)
-        or not isinstance(currency, Currency)
-        or account.currency != currency.code
+        not isinstance(currency, Currency)
+        or not selected
+        or any(
+            not isinstance(account, Account) or account.currency != currency.code
+            for account in selected
+        )
     ):
-        raise ValidationError("Укажите счёт и его валюту для прогноза остатка.")
-    require_identifier(account.id)
+        raise ValidationError("Укажите счета одной валюты для прогноза остатка.")
+    for account in selected:
+        require_identifier(account.id)
+    identifiers = frozenset(account.id for account in selected)
+    if len(identifiers) != len(selected):
+        raise ValidationError("Каждый счёт можно включить в прогноз один раз.")
     if any(
         not isinstance(schedule, PaymentSchedule) or schedule.amount.currency != currency
         for schedule in schedules
     ):
         raise ValidationError("Валюта каждого ожидаемого платежа должна совпадать с валютой счёта.")
     calendar = forecast_payments(schedules, period)
-    ledger = cash_flow_report(operations, period, ReportScope(account_ids=frozenset({account.id})))
-    if ledger.accounts and ledger.accounts[0].totals.currency != currency:
+    ledger = cash_flow_report(operations, period, ReportScope(account_ids=identifiers))
+    if any(total.currency != currency for total in ledger.totals):
         raise ValidationError("Точность валюты счёта отличается от проводок журнала.")
-    opening = ledger.accounts[0].totals.opening_minor if ledger.accounts else 0
+    opening = sum(total.opening_minor for total in ledger.totals)
     booked = tuple(
         movement
         for movement in ledger.movements
         if movement.operation.draft.occurred_on >= period.start
     )
     days = _project_days(opening, booked, calendar.events, set())
-    return BalanceForecast(account, currency, period, opening, days, booked, calendar.events)
+    return BalanceForecast(selected, currency, period, opening, days, booked, calendar.events)
 
 
 def _project_days(
@@ -103,6 +126,11 @@ def _project_days(
 
 
 def match_payments(forecast: BalanceForecast, matches: Sequence[PaymentMatch]) -> BalanceForecast:
+    account = forecast.account
+    if account is None:
+        if matches:
+            raise ValidationError("Для сопоставления выберите прогноз одного счёта.")
+        return forecast
     booked = {movement.operation.revision_id: movement for movement in forecast.booked}
     used_expected: set[int] = set()
     used_revisions: set[str] = set()
@@ -120,7 +148,7 @@ def match_payments(forecast: BalanceForecast, matches: Sequence[PaymentMatch]) -
         actual = booked.get(match.revision_id)
         if (
             actual is None
-            or actual.account_id != forecast.account.id
+            or actual.account_id != account.id
             or actual.currency != expected.schedule.amount.currency
             or actual.operation.draft.occurred_on != expected.occurs_on
             or actual.minor != expected.signed_minor

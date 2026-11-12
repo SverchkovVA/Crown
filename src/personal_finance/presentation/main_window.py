@@ -72,6 +72,7 @@ from personal_finance.domain.imports import ImportPreview, ImportResult
 from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
 from personal_finance.domain.models import (
     ACCOUNT_LABELS,
+    RUB,
     Account,
     AccountKind,
     Category,
@@ -522,22 +523,30 @@ class MainWindow(QMainWindow):
             request = dialog.request
             if self._busy or self.session is not session or request is None:
                 return
-            schedules, period, account = request
+            schedules, period, accounts = request
 
             def build() -> PaymentForecast | BalanceForecast:
-                if account is None:
+                if not accounts:
                     return forecast_payments(schedules, period)
                 with session.mutex:
                     session.ensure_open()
-                    current = next(
-                        (item for item in session.catalog.accounts() if item.id == account.id),
-                        None,
-                    )
-                    if current is None:
-                        raise ValidationError(
-                            "Выбранный счёт недоступен. Откройте календарь заново."
+                    current = {
+                        item.id: item
+                        for item in session.catalog.accounts()
+                        if item.currency == RUB.code
+                    }
+                    selected = {account.id for account in accounts}
+                    if not selected <= current.keys() or (
+                        len(accounts) > 1 and selected != current.keys()
+                    ):
+                        raise ValidationError("Список счетов изменился. Откройте календарь заново.")
+                    if len(accounts) == 1:
+                        return analytics.balance_forecast(
+                            current[accounts[0].id], period, schedules
                         )
-                    return analytics.balance_forecast(current, period, schedules)
+                    return analytics.combined_balance_forecast(
+                        tuple(current[account.id] for account in accounts), period, schedules
+                    )
 
             self._panel_job(panel, build, show, "Расчёт календаря платежей…")
 

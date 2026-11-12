@@ -8,6 +8,7 @@ from personal_finance.domain.balance_forecast import (
     PaymentMatch,
     check_reserve,
     forecast_balance,
+    forecast_balances,
     match_payments,
 )
 from personal_finance.domain.errors import ValidationError
@@ -80,6 +81,44 @@ def test_balance_forecast_uses_accepted_asset_postings_and_keeps_plans_separate(
     assert result.closing_minor == 8600
     assert tuple(v.operation for v in result.booked) == (transfer, income)
     assert [v.occurs_on for v in result.planned] == [START, FEBRUARY, FEBRUARY, END]
+
+
+def test_combined_forecast_counts_only_fee_of_internal_transfer_and_one_plan():
+    second = Account(OTHER, "Второй счёт", AccountKind.CASH, None)
+    operations = (
+        record(11, OperationDraft(OperationKind.OPENING, BEFORE, ACCOUNT.id, Money(10000))),
+        record(12, OperationDraft(OperationKind.OPENING, BEFORE, OTHER, Money(5000))),
+        record(
+            13,
+            OperationDraft(
+                OperationKind.TRANSFER,
+                START,
+                ACCOUNT.id,
+                Money(2000),
+                destination_account_id=OTHER,
+                fee=Money(50),
+                fee_category_id=CATEGORY,
+            ),
+        ),
+    )
+    plan = PaymentSchedule("Покупка", Money(100), PaymentDirection.EXPENSE, START)
+    period = ReportPeriod(START, START)
+    result = forecast_balances(operations, (ACCOUNT, second), period, (plan,))
+    assert result.accounts == (ACCOUNT, second) and result.account is None
+    assert result.opening_minor == 15000
+    assert result.days == (ForecastDay(START, -50, -100, 14850),)
+    assert {move.account_id: move.minor for move in result.booked} == {
+        ACCOUNT.id: -2050,
+        second.id: 2000,
+    }
+    with pytest.raises(ValidationError, match="одного счёта"):
+        match_payments(result, (PaymentMatch(0, operations[-1].revision_id),))
+    with pytest.raises(ValidationError, match="один раз"):
+        forecast_balances(operations, (ACCOUNT, ACCOUNT), period, ())
+    with pytest.raises(ValidationError, match="валюты"):
+        forecast_balances(
+            operations, (ACCOUNT, Account(OTHER, "Иена", AccountKind.CASH, None, "JPY")), period, ()
+        )
 
 
 def test_balance_forecast_counts_first_day_opening_and_keeps_empty_period_constant():

@@ -19,9 +19,11 @@ class BalanceForecastDialog(QDialog):
         layout = QVBoxLayout(self)
         currency = forecast.currency
 
+        account = forecast.account
+        scope = account.name if account else f"Счетов в прогнозе: {len(forecast.accounts)}"
         layout.addWidget(
             _label(
-                f"{forecast.account.name} · {date_text(forecast.period.start)} — "
+                f"{scope} · {date_text(forecast.period.start)} — "
                 f"{date_text(forecast.period.end)} · {currency.code}"
             )
         )
@@ -37,7 +39,12 @@ class BalanceForecastDialog(QDialog):
         tabs.addTab(self.days, "По дням")
         tabs.addTab(self.movements, "Движения")
         self.matching = None
-        if forecast.planned and forecast.booked:
+        if account is None:
+            accounts = _table("Счета в прогнозе")
+            replace_table(accounts, ["Счёт"], [[row.name] for row in forecast.accounts])
+            accounts.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            tabs.addTab(accounts, "Счета")
+        if account is not None and forecast.planned and forecast.booked:
             matching = PaymentMatching(forecast)
             if matching.indices:
                 self.matching = matching
@@ -74,10 +81,13 @@ class BalanceForecastDialog(QDialog):
         )
         self.days.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         linked = {item.expected_index for item in forecast.matches}
+        accounts = {account.id: account.name for account in forecast.accounts}
+        multiple = len(accounts) > 1
         rows = [
             (
                 item.operation.draft.occurred_on,
                 "Журнал",
+                accounts[item.account_id],
                 item.operation.draft.note or "Операция",
                 item.minor,
             )
@@ -86,19 +96,25 @@ class BalanceForecastDialog(QDialog):
             (
                 item.occurs_on,
                 "Учтён в журнале" if index in linked else "Ожидается",
+                "—",
                 item.schedule.name,
                 None if index in linked else item.signed_minor,
             )
             for index, item in enumerate(forecast.planned)
         ]
         rows.sort(key=lambda row: row[0])
+        columns = ["Дата", "Источник"] + (["Счёт"] if multiple else []) + ["Описание", "Движение"]
         replace_table(
             self.movements,
-            ["Дата", "Источник", "Описание", "Движение"],
+            columns,
             [
-                [date_text(day), source, note, "—" if minor is None else amount(minor)]
-                for day, source, note, minor in rows
+                [date_text(day), source]
+                + ([account] if multiple else [])
+                + [note, "—" if minor is None else amount(minor)]
+                for day, source, account, note, minor in rows
             ],
-            right_columns=(3,),
+            right_columns=(len(columns) - 1,),
         )
-        self.movements.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.movements.horizontalHeader().setSectionResizeMode(
+            len(columns) - 2, QHeaderView.ResizeMode.Stretch
+        )
