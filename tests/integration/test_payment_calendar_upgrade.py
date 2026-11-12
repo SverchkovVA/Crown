@@ -28,15 +28,13 @@ from tests.unit.test_planning_scenarios import goal
 NEW_PASSWORD = "Новая вымышленная парольная фраза проверки календарей"
 
 
-def restore16(monkeypatch, archive, target):
-    with monkeypatch.context() as patch:
-        patch.setattr(migrations, "SCHEMA_HEAD", "0016")
-        return container.restore_backup(archive, target, BACKUP_PASSWORD, NEW_PASSWORD)
+def restore16(archive, target):
+    return container.restore_backup(archive, target, BACKUP_PASSWORD, NEW_PASSWORD)
 
 
-def test_calendar_saves_versions_and_survives_explicit_backup_restore(tmp_path, monkeypatch):
+def test_default16_saves_versions_and_survives_backup_restore(tmp_path):
     source = tmp_path / "calendar.pfvault"
-    session, old_pf = create_at(monkeypatch, source, "0016")
+    session, old_pf = vault.create_vault(source, "Синтетическая книга 0016", PASSWORD)
     try:
         account = session.catalog.add_account("Проверочный счёт", AccountKind.CASH)
         session.ledger.add(
@@ -67,7 +65,7 @@ def test_calendar_saves_versions_and_survives_explicit_backup_restore(tmp_path, 
         session.close()
     before = hashes(source)
     target = tmp_path / "restored.pfvault"
-    restored, new_pf = restore16(monkeypatch, archive, target)
+    restored, new_pf = restore16(archive, target)
     try:
         assert restored.schema_revision == "0016" and restored.replica_id != replica
         assert new_pf != old_pf
@@ -86,7 +84,7 @@ def test_calendar_saves_versions_and_survives_explicit_backup_restore(tmp_path, 
 
 
 @pytest.mark.parametrize("version", tuple(f"{n:04d}" for n in range(2, 16)))
-def test_each_previous_schema_restores_to_explicit16_and_keeps_source(
+def test_each_previous_schema_restores_to_default16_and_keeps_source(
     tmp_path, monkeypatch, version
 ):
     source = tmp_path / "original.pfvault"
@@ -109,7 +107,7 @@ def test_each_previous_schema_restores_to_explicit16_and_keeps_source(
     finally:
         session.close()
     before = hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest()
-    restored, _ = restore16(monkeypatch, archive, tmp_path / "new.pfvault")
+    restored, _ = restore16(archive, tmp_path / "new.pfvault")
     try:
         assert restored.schema_revision == "0016"
         actual = state(restored)
@@ -165,7 +163,7 @@ def test_migration_failure_never_publishes_a_book(tmp_path, monkeypatch, prefix)
     with monkeypatch.context() as patch:
         patch.setattr(op, "execute", fail)
         with pytest.raises(OSError, match="Вымышленный отказ"):
-            restore16(patch, archive, target)
+            restore16(archive, target)
     assert not target.exists()
     assert not list(tmp_path.glob(".pf-restore-*"))
     assert before == (hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest())

@@ -59,6 +59,12 @@ from personal_finance.domain.ocr_profiles import UNIVERSAL_PROFILE
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.planning_scenarios import BudgetScenario
 from personal_finance.domain.query import OperationQuery
+from personal_finance.domain.recurring_payments import (
+    PaymentCalendarScenario,
+    PaymentDirection,
+    PaymentSchedule,
+    RepeatUnit,
+)
 from personal_finance.domain.savings_goals import SavingsGoalScenario
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
@@ -900,7 +906,7 @@ def self_test(
                 with _step(report, "persist_planning_scenarios"):
                     planning = source.planning_scenarios
                     if planning is None:
-                        raise RuntimeError("Хранилище бюджетов и целей недоступно в новой книге.")
+                        raise RuntimeError("Хранилище планирования недоступно в новой книге.")
                     before_planning = ledger.operations(include_deleted=True)
                     budget = planning.save(
                         "Синтетический бюджет",
@@ -912,13 +918,29 @@ def self_test(
                     goal_command = str(uuid4())
                     goal = planning.save("Синтетическая цель", goal_draft, command_id=goal_command)
                     archived_goal = planning.archive(goal.id, goal.revision_id)
+                    calendar_draft = PaymentCalendarScenario(
+                        (
+                            PaymentSchedule(
+                                "Синтетическая подписка",
+                                Money(1234),
+                                PaymentDirection.EXPENSE,
+                                date(2026, 1, 31),
+                                RepeatUnit.MONTHS,
+                            ),
+                        )
+                    )
+                    calendar_command = str(uuid4())
+                    calendar = planning.save(
+                        "Синтетический календарь", calendar_draft, command_id=calendar_command
+                    )
                     if (
                         planning.get(budget.id) != budget
+                        or planning.get(calendar.id) != calendar
                         or planning.history(goal.id) != [goal, archived_goal]
                         or ledger.operations(include_deleted=True) != before_planning
                         or _balances(source) != expected_balances
                     ):
-                        raise RuntimeError("Сохранение бюджета и цели не прошло проверку.")
+                        raise RuntimeError("Условия планирования не прошли проверку.")
                 with _step(report, "reopen_with_recovery_code"):
                     source.close()
                     source = open_vault(root / "Исходная книга.pfvault", recovery, recovery=True)
@@ -953,13 +975,20 @@ def self_test(
                         if (
                             restored_planning is None
                             or restored_planning.get(budget.id) != budget
+                            or restored_planning.get(calendar.id) != calendar
+                            or restored_planning.save(
+                                "Синтетический календарь",
+                                calendar_draft,
+                                command_id=calendar_command,
+                            )
+                            != calendar
                             or restored_planning.history(goal.id) != [goal, archived_goal]
                             or restored_planning.save(
                                 "Синтетическая цель", goal_draft, command_id=goal_command
                             )
                             != goal
                         ):
-                            raise RuntimeError("Бюджет, цель или история не восстановлены.")
+                            raise RuntimeError("Условия планирования или история не восстановлены.")
                         restored_bonuses = restored.bonuses
                         if (
                             restored_bonuses is None

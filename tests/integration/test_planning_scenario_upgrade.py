@@ -15,6 +15,7 @@ from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import AccountKind, Money
 from personal_finance.domain.planning_scenarios import BudgetScenario
 from personal_finance.infrastructure.backup import container
+from personal_finance.infrastructure.persistence import migration_runner
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 from tests.integration.test_deposit_scenario_upgrade import create_at
 from tests.integration.test_generic_ocr_migration import populate
@@ -35,8 +36,10 @@ def hashes(root):
     )
 
 
-def restore15(backup, target):
-    return container.restore_backup(backup, target, BACKUP_PASSWORD, NEW_PASSWORD)
+def restore15(monkeypatch, backup, target):
+    with monkeypatch.context() as patch:
+        patch.setattr(migration_runner, "SCHEMA_HEAD", "0015")
+        return container.restore_backup(backup, target, BACKUP_PASSWORD, NEW_PASSWORD)
 
 
 def state(session):
@@ -63,9 +66,9 @@ def budget():
     return BudgetScenario(ReportPeriod(date(2026, 1, 1), date(2026, 1, 31)), Money(12345))
 
 
-def test_default15_roundtrip_retains_versions_commands_keys_and_money(tmp_path):
+def test_explicit15_roundtrip_retains_versions_commands_keys_and_money(tmp_path, monkeypatch):
     source = tmp_path / "default15.pfvault"
-    session, old_pf = vault.create_vault(source, "Синтетическая книга по умолчанию", PASSWORD)
+    session, old_pf = create_at(monkeypatch, source, "0015")
     try:
         assert session.schema_revision == "0015"
         assert all(
@@ -98,7 +101,7 @@ def test_default15_roundtrip_retains_versions_commands_keys_and_money(tmp_path):
     finally:
         session.close()
     source_hash, backup_hash = hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest()
-    restored, pf = restore15(archive, tmp_path / "restored15.pfvault")
+    restored, pf = restore15(monkeypatch, archive, tmp_path / "restored15.pfvault")
     try:
         assert (
             restored.replica_id != replica
@@ -166,7 +169,7 @@ def test_each_old_schema_opens_unchanged_and_restores_only_into_new15(
     finally:
         old.close()
     assert hashes(source) == source_hash
-    restored, pf = restore15(archive, tmp_path / "new15.pfvault")
+    restored, pf = restore15(monkeypatch, archive, tmp_path / "new15.pfvault")
     try:
         assert restored.schema_revision == "0015" and restored.planning_scenarios is not None
         assert restored.replica_id != replica and restored.backup_key() == database_key
@@ -214,7 +217,7 @@ def test_restore14_preserves_every_legacy_row_and_guard_before_saving_conditions
     finally:
         session.close()
     source_hash = hashes(source)
-    restored, _ = restore15(archive, tmp_path / "rich15.pfvault")
+    restored, _ = restore15(monkeypatch, archive, tmp_path / "rich15.pfvault")
     try:
         after = snapshot(restored.engine)
         for table, rows in before[1].items():
@@ -266,7 +269,7 @@ def test_restore_failure_never_publishes_or_changes_source(tmp_path, monkeypatch
     with monkeypatch.context() as patch:
         patch.setattr(op, "execute", fail)
         with pytest.raises(OSError, match="Синтетический сбой"):
-            restore15(archive, tmp_path / "failed.pfvault")
+            restore15(monkeypatch, archive, tmp_path / "failed.pfvault")
     assert not (tmp_path / "failed.pfvault").exists()
     assert not list(tmp_path.glob(".pf-restore-*"))
     assert (

@@ -15,7 +15,6 @@ from personal_finance.domain.models import AccountKind
 from personal_finance.infrastructure.persistence import migration_runner
 from personal_finance.infrastructure.persistence.database import make_engine
 from personal_finance.infrastructure.persistence.migration_runner import (
-    SCHEMA_HEAD,
     SUPPORTED_SCHEMAS,
     upgrade_restored_schema,
 )
@@ -72,7 +71,7 @@ def test_candidate_preserves_rows_of_staging_copy_from_each_supported_schema(
     assert hashes(root) == source_hash
 
 
-def test_default15_is_registered():
-    assert SCHEMA_HEAD == "0015" and SCHEMA_HEAD in SUPPORTED_SCHEMAS
+def test_planning_schema_0015_is_registered():
+    assert "0015" in SUPPORTED_SCHEMAS
     versions = Path(vault.__file__).parents[1] / "infrastructure/persistence/migrations/versions"
     assert len(list(versions.glob("*0015*"))) == 1

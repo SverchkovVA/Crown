@@ -91,7 +91,8 @@ def test_save_open_and_update_calendar_via_embedded_forms(tmp_path, monkeypatch,
         session.close()
 
 
-def test_calendar_in_default_0015_keeps_existing_draft_workflow(qtbot, session):
+def test_calendar_in_existing_0015_keeps_existing_draft_workflow(qtbot, tmp_path, monkeypatch):
+    session, _ = create_at(monkeypatch, tmp_path / "book15.pfvault", "0015")
     window = MainWindow()
     qtbot.addWidget(window)
     window.show()
@@ -105,3 +106,4 @@ def test_calendar_in_default_0015_keeps_existing_draft_workflow(qtbot, session):
     finally:
         window._report_forms.clear()
         window.session = None
+        session.close()
