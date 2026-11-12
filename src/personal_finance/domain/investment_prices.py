@@ -61,13 +61,11 @@ class ManualPrice:
             raise ValidationError("Укажите непогашенный номинал и НКД за бумагу в валюте цены.")
 
 
-def market_value_minor(security: Security, price: ManualPrice, quantity: int) -> int:
+def validate_price_for_security(security: Security, price: ManualPrice) -> None:
     if not isinstance(security, Security) or not isinstance(price, ManualPrice):
         raise ValidationError("Укажите инструмент и его датированную цену.")
     if price.security_id != security.id or price.currency != security.currency:
         raise ValidationError("Цена относится к другому инструменту или валюте.")
-    if type(quantity) is not int or quantity < 0:
-        raise ValidationError("Для оценки укажите целое неотрицательное количество бумаг.")
     expected = (
         PriceUnit.PERCENT_OF_FACE
         if security.kind is SecurityKind.BOND
@@ -77,6 +75,12 @@ def market_value_minor(security: Security, price: ManualPrice, quantity: int) ->
         raise ValidationError(
             "Для облигации укажите процент от номинала, для акции и фонда — денежную цену."
         )
+
+
+def market_value_minor(security: Security, price: ManualPrice, quantity: int) -> int:
+    validate_price_for_security(security, price)
+    if type(quantity) is not int or quantity < 0:
+        raise ValidationError("Для оценки укажите целое неотрицательное количество бумаг.")
     numerator, denominator = price.value.as_integer_ratio()
     if price.unit is PriceUnit.PERCENT_OF_FACE:
         assert price.unpaid_face is not None and price.accrued_per_security is not None
