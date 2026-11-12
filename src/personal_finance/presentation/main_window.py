@@ -69,6 +69,8 @@ from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
+from personal_finance.domain.investment_prices import InvestmentValuation, value_investments
+from personal_finance.domain.investments import project_investments
 from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
 from personal_finance.domain.models import (
     ACCOUNT_LABELS,
@@ -147,6 +149,10 @@ from personal_finance.presentation.inline_forms import (
     confirm_form,
     form_warning,
     present_form,
+)
+from personal_finance.presentation.investment_preview import (
+    InvestmentPreviewDialog,
+    InvestmentPreviewOptions,
 )
 from personal_finance.presentation.jobs import Job, JobSignals
 from personal_finance.presentation.ledger_dialogs import (
@@ -315,6 +321,9 @@ class MainWindow(QMainWindow):
             "Сохранённые бюджеты и цели…", self.request_saved_planning
         )
         self.payment_calendar_action = command("Календарь платежей…", self.request_payment_calendar)
+        self.investment_preview_action = command(
+            "Расчёт инвестиционной позиции…", self.request_investment_preview
+        )
         self.deposit_action = command(
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
         )
@@ -331,6 +340,7 @@ class MainWindow(QMainWindow):
             self.savings_goal_action,
             self.saved_planning_action,
             self.payment_calendar_action,
+            self.investment_preview_action,
             self.saved_deposits_action,
         ):
             action.setEnabled(False)
@@ -357,6 +367,7 @@ class MainWindow(QMainWindow):
         self.budget_action.setEnabled(enabled)
         self.savings_goal_action.setEnabled(enabled)
         self.payment_calendar_action.setEnabled(enabled)
+        self.investment_preview_action.setEnabled(enabled)
         planning_enabled = (
             not self._busy
             and self.session is not None
@@ -571,6 +582,53 @@ class MainWindow(QMainWindow):
                 lambda selected: self.request_payment_calendar(record=selected),
             )
         present_form(dialog, panel)
+
+    def request_investment_preview(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        panel = self._report_forms
+        accounts = [
+            account
+            for account in session.catalog.accounts()
+            if account.kind is AccountKind.INVESTMENT and account.currency == RUB.code
+        ]
+        if not accounts:
+            panel.message("Добавьте инвестиционный счёт RUB в разделе «Счета».")
+            return
+        options = InvestmentPreviewOptions(self, accounts)
+
+        def calculate() -> None:
+            request = options.request
+            if self._busy or self.session is not session or request is None:
+                return
+
+            def build() -> InvestmentValuation:
+                with session.mutex:
+                    session.ensure_open()
+                    account = next(
+                        (
+                            item
+                            for item in session.catalog.accounts()
+                            if item.id == request.account.id
+                        ),
+                        None,
+                    )
+                if account is None:
+                    raise ValidationError("Инвестиционный счёт больше недоступен.")
+                portfolio = project_investments(
+                    (account,), (request.security,), request.events, request.as_of
+                )
+                return value_investments(portfolio, request.prices)
+
+            def show(result: InvestmentValuation) -> None:
+                if self.session is session:
+                    present_form(InvestmentPreviewDialog(request, result, self), panel)
+
+            self._panel_job(panel, build, show, "Расчёт инвестиционной позиции…")
+
+        options.calculationRequested.connect(calculate)
+        present_form(options, panel)
 
     def request_budget(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
@@ -1337,6 +1395,7 @@ class MainWindow(QMainWindow):
                     self.savings_goal_action,
                     self.saved_planning_action,
                     self.payment_calendar_action,
+                    self.investment_preview_action,
                     self.deposit_action,
                     self.saved_deposits_action,
                 ),

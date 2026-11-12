@@ -2,6 +2,8 @@
 
 import hashlib
 from datetime import date
+from decimal import Decimal
+from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication, QEvent
 
@@ -9,7 +11,15 @@ from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.balance_forecast import PaymentMatch, check_reserve, match_payments
-from personal_finance.domain.models import Money
+from personal_finance.domain.investment_prices import ManualPrice, PriceUnit, value_investments
+from personal_finance.domain.investments import (
+    Security,
+    SecurityKind,
+    SecurityTrade,
+    TradeKind,
+    project_investments,
+)
+from personal_finance.domain.models import RUB, Account, AccountKind, Money
 from personal_finance.domain.recurring_payments import (
     PaymentDirection,
     PaymentSchedule,
@@ -20,6 +30,10 @@ from personal_finance.domain.savings_goals import SavingsGoalScenario, project_s
 from personal_finance.presentation.account_position import AccountPositionDialog
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.budget import BudgetDialog
+from personal_finance.presentation.investment_preview import (
+    InvestmentPreviewDialog,
+    InvestmentPreviewRequest,
+)
 from personal_finance.presentation.recurring_payments import PaymentCalendarDialog
 from personal_finance.presentation.savings_goals import SavingsGoalDialog
 
@@ -111,7 +125,15 @@ def check_planning_reports(
     goal_dialog = SavingsGoalDialog(goal)
     calendar_dialog = PaymentCalendarDialog(forecast)
     forecast_dialog = BalanceForecastDialog(balance)
-    dialogs = (budget_dialog, position_dialog, goal_dialog, calendar_dialog, forecast_dialog)
+    investment = _investment_preview(day)
+    dialogs = (
+        budget_dialog,
+        position_dialog,
+        goal_dialog,
+        calendar_dialog,
+        forecast_dialog,
+        investment,
+    )
     try:
         if (
             budget_dialog.sources.model().rowCount() != len(budget.sources)
@@ -130,3 +152,44 @@ def check_planning_reports(
         or [hashlib.sha256(path.read_bytes()).digest() for path in paths] != hashes
     ):
         raise RuntimeError("Проверка отчётов планирования изменила книгу.")
+
+
+def _investment_preview(day: date) -> InvestmentPreviewDialog:
+    account = Account(
+        str(uuid4()), "Синтетический инвестиционный счёт", AccountKind.INVESTMENT, None
+    )
+    security = Security(str(uuid4()), "TEST", "Синтетическая акция", SecurityKind.STOCK)
+    events = tuple(
+        SecurityTrade(
+            str(uuid4()),
+            account.id,
+            security.id,
+            day,
+            order,
+            kind,
+            quantity,
+            Money(amount),
+            Money(fee),
+        )
+        for order, kind, quantity, amount, fee in (
+            (1, TradeKind.BUY, 3, 1000, 1),
+            (2, TradeKind.BUY, 2, 800, 2),
+            (3, TradeKind.SELL, 4, 1600, 10),
+        )
+    )
+    quote = ManualPrice(security.id, day, PriceUnit.CASH_PER_SECURITY, Decimal("5.55"), RUB)
+    request = InvestmentPreviewRequest(account, security, events, day, (quote,))
+    portfolio = project_investments((account,), (security,), events, day)
+    result = value_investments(portfolio, request.prices)
+    (row,) = result.positions
+    if (
+        row.market_minor != 555
+        or row.position.quantity != 1
+        or row.position.cost_minor != 401
+        or row.position.realized_minor != 188
+    ):
+        raise RuntimeError("Инвестиционная позиция не совпала с проверочными партиями FIFO.")
+    dialog = InvestmentPreviewDialog(request, result)
+    if dialog.lots.model().rowCount() != 1 or dialog.allocations.model().rowCount() != 2:
+        raise RuntimeError("Партии FIFO недоступны в интерфейсе инвестиционной позиции.")
+    return dialog
