@@ -166,6 +166,7 @@ class SecurityPosition:
     lots: tuple[OpenLot, ...]
     realized_minor: int
     distributions_minor: int
+    purchases_minor: int
 
     @property
     def quantity(self) -> int:
@@ -213,6 +214,7 @@ class _Position:
     quantity: int = 0
     realized_minor: int = 0
     distributions_minor: int = 0
+    purchases_minor: int = 0
 
     def dispose(self, trade: SecurityTrade) -> Disposal:
         if trade.quantity > self.quantity:
@@ -311,6 +313,7 @@ def project_investments(
         elif event.kind is TradeKind.BUY:
             position.lots.append(_Lot(event))
             position.quantity += event.quantity
+            position.purchases_minor -= event.cash_delta_minor
         else:
             disposals.append(position.dispose(event))
 
@@ -323,6 +326,7 @@ def project_investments(
                 tuple(lot.open_lot() for lot in position.lots),
                 position.realized_minor,
                 position.distributions_minor,
+                position.purchases_minor,
             )
             for (account_id, security_id), position in sorted(positions.items())
         ),

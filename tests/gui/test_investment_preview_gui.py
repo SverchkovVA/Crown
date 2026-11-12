@@ -64,6 +64,7 @@ def test_investment_preview_calculates_fifo_and_keeps_draft_after_back(session, 
         assert position.position.cost_minor == 401 and position.position.realized_minor == 188
         assert position.position.distributions_minor == 42
         assert position.market_minor == 555 and position.unrealized_minor == 154
+        assert result.performance_label.text() == "Общий результат 3,84 ₽ · 21,30% от суммы покупок"
         assert result.allocations.model().rowCount() == 2
         assert result.distributions.model().rowCount() == 1
         window._report_forms.back.click()

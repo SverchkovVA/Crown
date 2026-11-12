@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QLineEdit,
     QPushButton,
     QTableView,
@@ -22,7 +23,12 @@ from PySide6.QtWidgets import (
 
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.investment_positions import InvestmentPositionInputs
-from personal_finance.domain.investment_prices import InvestmentValuation, ManualPrice, PriceUnit
+from personal_finance.domain.investment_prices import (
+    InvestmentValuation,
+    ManualPrice,
+    PriceUnit,
+    position_result,
+)
 from personal_finance.domain.investments import (
     PortfolioEvent,
     Security,
@@ -302,6 +308,7 @@ class InvestmentPreviewDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Инвестиционная позиция")
         self.valuation = valuation
+        self.performance_label: QLabel | None = None
         layout = QVBoxLayout(self)
         heading = _label(
             f"{request.security.code} · {request.account.name} · {date_text(request.as_of)}"
@@ -321,6 +328,7 @@ class InvestmentPreviewDialog(QDialog):
             f"Результат продаж и погашений {self._rub(position.realized_minor)} · "
             f"Выплаты {self._rub(position.distributions_minor)}"
         )
+        market_minor = None
         if valuation.positions:
             (valued,) = valuation.positions
             if valued.price is None or valued.market_minor is None:
@@ -335,7 +343,8 @@ class InvestmentPreviewDialog(QDialog):
                         f"{price_text}% · номинал {self._rub(price.unpaid_face.minor)} · "
                         f"НКД за бумагу {self._rub(price.accrued_per_security.minor)}"
                     )
-                unrealized = valued.market_minor - position.cost_minor
+                market_minor = valued.market_minor
+                unrealized = market_minor - position.cost_minor
                 layout.addWidget(
                     _label(
                         f"Оценка {self._rub(valued.market_minor)} · "
@@ -343,6 +352,19 @@ class InvestmentPreviewDialog(QDialog):
                     )
                 )
                 layout.addWidget(_label(f"Ручная цена от {date_text(price.quoted_on)} · {source}"))
+        performance = position_result(position, market_minor)
+        if performance is not None:
+            caption = f"Общий результат {self._rub(performance.total_minor)}"
+            if performance.purchase_ratio_basis_points is not None:
+                percent = format_report_amount(performance.purchase_ratio_basis_points, RUB)
+                caption += f" · {percent}% от суммы покупок"
+            self.performance_label = _label(caption)
+            self.performance_label.setToolTip(
+                "Общий результат включает результат продаж и погашений, "
+                "выплаты и изменение стоимости. "
+                "В сумму покупок входят комиссии и уплаченный НКД."
+            )
+            layout.addWidget(self.performance_label)
         sources = {event.id: event for event in request.events}
         tabs = QTabWidget()
         self.lots = self._section(

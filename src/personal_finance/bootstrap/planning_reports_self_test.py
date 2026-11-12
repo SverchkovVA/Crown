@@ -190,6 +190,11 @@ def _investment_preview(day: date) -> InvestmentPreviewDialog:
     ):
         raise RuntimeError("Инвестиционная позиция не совпала с проверочными партиями FIFO.")
     dialog = InvestmentPreviewDialog(request, result)
-    if dialog.lots.model().rowCount() != 1 or dialog.allocations.model().rowCount() != 2:
+    if (
+        dialog.lots.model().rowCount() != 1
+        or dialog.allocations.model().rowCount() != 2
+        or dialog.performance_label is None
+        or "18,97%" not in dialog.performance_label.text()
+    ):
         raise RuntimeError("Партии FIFO недоступны в интерфейсе инвестиционной позиции.")
     return dialog

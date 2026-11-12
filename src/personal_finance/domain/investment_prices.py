@@ -94,6 +94,29 @@ def market_value_minor(security: Security, price: ManualPrice, quantity: int) ->
 
 
 @dataclass(frozen=True, slots=True)
+class PositionResult:
+    total_minor: int
+    purchase_ratio_basis_points: int | None
+
+
+def position_result(position: SecurityPosition, market_minor: int | None) -> PositionResult | None:
+    if position.quantity and market_minor is None:
+        return None
+    if market_minor is not None and (type(market_minor) is not int or market_minor < 0):
+        raise ValidationError("Рыночная стоимость должна быть неотрицательной целой суммой.")
+    change = (
+        market_minor - position.cost_minor if position.quantity and market_minor is not None else 0
+    )
+    total = position.realized_minor + position.distributions_minor + change
+    ratio = None
+    if position.purchases_minor:
+        whole, remainder = divmod(abs(total) * 10000, position.purchases_minor)
+        rounded = whole + int(2 * remainder >= position.purchases_minor)
+        ratio = -rounded if total < 0 else rounded
+    return PositionResult(total, ratio)
+
+
+@dataclass(frozen=True, slots=True)
 class ValuedPosition:
     position: SecurityPosition
     price: ManualPrice | None
