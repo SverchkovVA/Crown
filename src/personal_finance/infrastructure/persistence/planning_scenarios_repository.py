@@ -338,7 +338,7 @@ class SqlPlanningScenariosRepository:
             if identifier is not None:
                 current = self._current(connection, identifier)
                 if current.kind != kind:
-                    raise ValidationError("Вид сохранённых условий нельзя изменить.")
+                    raise ValidationError("Вид сохранённых условий нельзя заменить.")
                 if current.revision_id != expected_revision_id:
                     raise ValidationError(
                         "Условия планирования изменены. Обновите список и повторите действие."

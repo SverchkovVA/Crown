@@ -68,7 +68,7 @@ class PlanningScenarios:
             else None
         )
         if current is not None and current.kind != planning_kind(scenario):
-            raise ValidationError("Вид сохранённых условий нельзя изменить.")
+            raise ValidationError("Вид сохранённых условий нельзя заменить.")
         return self._repository.save(
             name,
             scenario,
