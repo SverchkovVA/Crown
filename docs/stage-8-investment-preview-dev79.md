@@ -30,8 +30,8 @@
   bba77ee91a9cf44b11d5055a8081793947d44d4ddfae1f800746c19c0c5aafc1.
 - Тот же EXE прошёл 33 шага и открыл окно в изолированном сеансе
   Windows Sandbox без установленного Python, uv и сетевых маршрутов.
-- Полный локальный набор и [CI](https://github.com/SverchkovVA/Crown/actions/runs/43295988738)
-  выполняются. Запуск кандидата — artifacts/start-candidate-dev79.cmd.
+- Полный локальный набор прошёл, 2665 тестов. [CI](https://github.com/SverchkovVA/Crown/actions/runs/43295988738)
+  выполняется. Запуск кандидата — artifacts/start-candidate-dev79.cmd.
 
 ## Пример для ручной проверки
 
