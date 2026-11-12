@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.domain.errors import ValidationError
+from personal_finance.domain.investment_positions import InvestmentPositionInputs
 from personal_finance.domain.investment_prices import InvestmentValuation, ManualPrice, PriceUnit
 from personal_finance.domain.investments import (
     PortfolioEvent,
@@ -56,16 +57,27 @@ class InvestmentPreviewRequest:
 class InvestmentPreviewOptions(QDialog):
     calculationRequested = Signal()
 
-    def __init__(self, parent: QWidget, accounts: Sequence[Account]) -> None:
+    def __init__(
+        self,
+        parent: QWidget,
+        accounts: Sequence[Account],
+        *,
+        storage: bool = False,
+        inputs: InvestmentPositionInputs | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Расчёт инвестиционной позиции")
         self.accounts = {value.id: value for value in accounts}
-        self.security_id = str(uuid4())
-        self.events: list[PortfolioEvent] = []
-        self.price: ManualPrice | None = None
+        self.security_id = inputs.security.id if inputs else str(uuid4())
+        self.saved_security = inputs.security if inputs else None
+        self.events: list[PortfolioEvent] = list(inputs.events) if inputs else []
+        self.prices = {price.quoted_on: price for price in inputs.prices} if inputs else {}
+        self.storage = storage
         self.request: InvestmentPreviewRequest | None = None
         layout = QVBoxLayout(self)
         fields = QFormLayout()
+        fields.setHorizontalSpacing(12)
+        fields.setVerticalSpacing(5)
         layout.addLayout(fields)
         self.account = QComboBox()
         self.account.setAccessibleName("Инвестиционный счёт")
@@ -83,6 +95,25 @@ class InvestmentPreviewOptions(QDialog):
         fields.addRow("Код инструмента", self.code)
         self.as_of = _date_input(QDate.currentDate(), "Дата расчёта")
         fields.addRow("Дата расчёта", self.as_of)
+        self.saved_status = _label("Черновик позиции")
+        self.open_saved = QPushButton("Сохранённые позиции…", self)
+        self.save_position = QPushButton("Сохранить позицию", self)
+        if storage:
+            saved_row = QHBoxLayout()
+            saved_row.setSpacing(8)
+            saved_row.addWidget(self.saved_status, 1)
+            saved_row.addWidget(self.open_saved)
+            saved_row.addWidget(self.save_position)
+            layout.addLayout(saved_row)
+        else:
+            self.saved_status.hide()
+            self.open_saved.hide()
+            self.save_position.hide()
+        if inputs is not None:
+            self.account.setCurrentIndex(self.account.findData(inputs.account_id))
+            self.kind.setCurrentIndex(self.kind.findData(inputs.security.kind.value))
+            self.code.setText(inputs.security.code)
+            self.mark_saved(inputs.security)
         self.table = _table("Сделки и выплаты позиции")
         layout.addWidget(self.table, 1)
         actions = QHBoxLayout()
@@ -104,11 +135,12 @@ class InvestmentPreviewOptions(QDialog):
         self.set_price = QPushButton("Ручная цена…")
         self.set_price.clicked.connect(self._edit_price)
         prices.addWidget(self.set_price)
-        self.remove_price = QPushButton("Убрать цену")
+        self.remove_price = QPushButton("Убрать последнюю цену")
         self.remove_price.clicked.connect(self._remove_price)
         prices.addWidget(self.remove_price)
         layout.addLayout(prices)
-        layout.addWidget(_label("Введённые данные хранятся в этой форме."))
+        if not storage:
+            layout.addWidget(_label("Введённые данные хранятся в этой форме."))
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
         self.feedback.hide()
@@ -118,6 +150,14 @@ class InvestmentPreviewOptions(QDialog):
         self.calculate.clicked.connect(self._calculate)
         layout.addWidget(self.calculate)
         self._refresh()
+
+    def mark_saved(self, security: Security) -> None:
+        self.saved_security = security
+        self.saved_status.setText("Сохранённая позиция")
+        self.account.setEnabled(False)
+
+    def _latest_price(self) -> ManualPrice | None:
+        return self.prices[max(self.prices)] if self.prices else None
 
     def _selected_row(self) -> int | None:
         selected = self.table.selectionModel().selectedRows()
@@ -157,14 +197,16 @@ class InvestmentPreviewOptions(QDialog):
         )
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._selection_changed()
-        self.kind.setEnabled(not self.events and self.price is None)
+        self.kind.setEnabled(not self.events and not self.prices and self.saved_security is None)
         self.calculate.setEnabled(bool(self.events))
+        self.save_position.setEnabled(self.storage and bool(self.events))
+        latest = self._latest_price()
         self.price_status.setText(
             "Ручная цена не указана"
-            if self.price is None
-            else f"Ручная цена от {date_text(self.price.quoted_on)}"
+            if latest is None
+            else f"Ручных цен: {len(self.prices)} · последняя от {date_text(latest.quoted_on)}"
         )
-        self.remove_price.setVisible(self.price is not None)
+        self.remove_price.setVisible(latest is not None)
         self.feedback.hide()
 
     def _edit_event(self, row: int | None) -> None:
@@ -207,41 +249,47 @@ class InvestmentPreviewOptions(QDialog):
             self.security_id,
             SecurityKind(self.kind.currentData()),
             self.as_of.date(),
-            self.price,
+            self._latest_price(),
         )
 
         def accepted(code: int) -> None:
             if code == QDialog.DialogCode.Accepted and dialog.price is not None:
-                self.price = dialog.price
+                self.prices[dialog.price.quoted_on] = dialog.price
                 self._refresh()
 
         present_form(dialog, None, accepted)
 
     def _remove_price(self) -> None:
-        self.price = None
-        self._refresh()
+        if self.prices:
+            del self.prices[max(self.prices)]
+            self._refresh()
 
-    def _calculate(self) -> None:
-        self.request = None
+    def prepare_request(self) -> InvestmentPreviewRequest | None:
         account = self.accounts.get(self.account.currentData())
         if account is None or not self.events:
-            return
+            return None
         try:
             code = self.code.text()
-            security = Security(self.security_id, code, code, SecurityKind(self.kind.currentData()))
+            prior = self.saved_security
+            name = prior.name if prior is not None and prior.name != prior.code else code
+            security = Security(self.security_id, code, name, SecurityKind(self.kind.currentData()))
         except ValidationError as error:
             self.feedback.setText(str(error))
             self.feedback.show()
-            return
+            return None
         self.feedback.hide()
-        self.request = InvestmentPreviewRequest(
+        return InvestmentPreviewRequest(
             account,
             security,
             tuple(replace(value, account_id=account.id) for value in self.events),
             _date(self.as_of),
-            () if self.price is None else (self.price,),
+            tuple(self.prices.values()),
         )
-        self.calculationRequested.emit()
+
+    def _calculate(self) -> None:
+        self.request = self.prepare_request()
+        if self.request is not None:
+            self.calculationRequested.emit()
 
 
 class InvestmentPreviewDialog(QDialog):

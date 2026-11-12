@@ -71,6 +71,8 @@ class InvestmentEventEditor(QDialog):
         self.entry: PortfolioEvent | None = None
         layout = QVBoxLayout(self)
         form = self.form = QFormLayout()
+        form.setHorizontalSpacing(12)
+        form.setVerticalSpacing(5)
         layout.addLayout(form)
         self.kind = QComboBox()
         self.kind.setAccessibleName("Вид операции")
@@ -175,6 +177,8 @@ class ManualPriceEditor(QDialog):
         self.price: ManualPrice | None = None
         layout = QVBoxLayout(self)
         fields = QFormLayout()
+        fields.setHorizontalSpacing(12)
+        fields.setVerticalSpacing(5)
         layout.addLayout(fields)
         self.day = _date_input(QDate(price.quoted_on) if price else day, "Дата цены")
         fields.addRow("Дата цены", self.day)

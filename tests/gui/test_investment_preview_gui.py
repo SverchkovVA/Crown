@@ -45,6 +45,7 @@ def test_investment_preview_calculates_fifo_and_keeps_draft_after_back(session, 
     before = fingerprints(session)
     window = MainWindow()
     options = show_position(window, session, qtbot)
+    assert options.open_saved.isHidden() and options.save_position.isHidden()
     try:
         add(window, options, TradeKind.BUY, "10,00", quantity=3, fee="0,01")
         add(window, options, TradeKind.BUY, "8,00", quantity=2, fee="0,02")
@@ -88,6 +89,7 @@ def test_bond_preview_uses_percent_of_face_and_excludes_future_price(session, qt
     before = fingerprints(session)
     window = MainWindow()
     options = show_position(window, session, qtbot)
+    assert options.open_saved.isHidden() and options.save_position.isHidden()
     try:
         options.kind.setCurrentIndex(options.kind.findData(SecurityKind.BOND.value))
         add(window, options, TradeKind.BUY, "1940,00", quantity=2, fee="0,40", accrued="3,30")

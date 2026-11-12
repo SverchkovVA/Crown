@@ -69,7 +69,7 @@ class CalendarReminders(QObject):
     @Slot()
     def refresh(self) -> None:
         session = self.window.session
-        if session is None or getattr(session, "schema_revision", None) != "0016":
+        if session is None or not getattr(session, "supports_payment_calendars", False):
             self.clear()
             return
         service = session.planning_scenarios

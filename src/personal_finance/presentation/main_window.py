@@ -69,6 +69,7 @@ from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
+from personal_finance.domain.investment_positions import SavedInvestmentPosition
 from personal_finance.domain.investment_prices import InvestmentValuation, value_investments
 from personal_finance.domain.investments import project_investments
 from personal_finance.domain.ledger import OPERATION_LABELS, Operation, OperationKind
@@ -154,6 +155,7 @@ from personal_finance.presentation.investment_preview import (
     InvestmentPreviewDialog,
     InvestmentPreviewOptions,
 )
+from personal_finance.presentation.investment_storage import InvestmentStorage
 from personal_finance.presentation.jobs import Job, JobSignals
 from personal_finance.presentation.ledger_dialogs import (
     OperationDialog,
@@ -513,7 +515,7 @@ class MainWindow(QMainWindow):
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
-        service = session.planning_scenarios if session.schema_revision == "0016" else None
+        service = session.planning_scenarios if session.supports_payment_calendars else None
         scenario = None if record is None else record.scenario
         if record is not None and (
             service is None or not isinstance(scenario, PaymentCalendarScenario)
@@ -583,7 +585,7 @@ class MainWindow(QMainWindow):
             )
         present_form(dialog, panel)
 
-    def request_investment_preview(self) -> None:
+    def request_investment_preview(self, *, record: SavedInvestmentPosition | None = None) -> None:
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
@@ -596,7 +598,28 @@ class MainWindow(QMainWindow):
         if not accounts:
             panel.message("Добавьте инвестиционный счёт RUB в разделе «Счета».")
             return
-        options = InvestmentPreviewOptions(self, accounts)
+        storage = session.investment_positions
+        if record is not None and (
+            storage is None
+            or record.is_deleted
+            or record.inputs.account_id not in {account.id for account in accounts}
+            or record.inputs.security.currency != RUB
+        ):
+            panel.message("Сохранённая позиция недоступна для выбранной книги.")
+            return
+        options = InvestmentPreviewOptions(
+            self, accounts, storage=storage is not None, inputs=record.inputs if record else None
+        )
+        if storage is not None:
+            InvestmentStorage(
+                self,
+                session,
+                panel,
+                options,
+                storage,
+                record,
+                lambda selected: self.request_investment_preview(record=selected),
+            )
 
         def calculate() -> None:
             request = options.request
