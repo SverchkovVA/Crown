@@ -3,7 +3,12 @@ from datetime import date
 import pytest
 
 from personal_finance.domain.analytics import ReportPeriod
-from personal_finance.domain.balance_forecast import ForecastDay, forecast_balance
+from personal_finance.domain.balance_forecast import (
+    ForecastDay,
+    PaymentMatch,
+    forecast_balance,
+    match_payments,
+)
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import Operation, OperationDraft, OperationKind
 from personal_finance.domain.models import MAX_MINOR, Account, AccountKind, Currency, Money
@@ -102,3 +107,37 @@ def test_balance_forecast_rejects_currency_mismatch():
         forecast_balance((), ACCOUNT, ReportPeriod(START, END), (plan,))
     with pytest.raises(ValidationError, match="валют"):
         forecast_balance((), ACCOUNT, ReportPeriod(START, END), (), currency=Currency("JPY", 0))
+
+
+def test_payment_match_keeps_one_booked_movement_and_can_be_undone():
+    operation = record(
+        12, OperationDraft(OperationKind.EXPENSE, START, ACCOUNT.id, Money(1500), CATEGORY)
+    )
+    plan = PaymentSchedule("Подписка", Money(1500), PaymentDirection.EXPENSE, START)
+    forecast = forecast_balance((operation,), ACCOUNT, ReportPeriod(START, END), (plan, plan))
+    assert forecast.closing_minor == -4500
+    link = PaymentMatch(0, operation.revision_id)
+    changed = match_payments(forecast, (link,))
+    assert changed.matches == (link,)
+    assert changed.days == (ForecastDay(START, -1500, -1500, -3000),)
+    assert changed.booked == forecast.booked and changed.planned == forecast.planned
+    assert match_payments(changed, ()) == forecast
+    with pytest.raises(ValidationError, match="один раз"):
+        match_payments(changed, (link, PaymentMatch(1, operation.revision_id)))
+
+
+@pytest.mark.parametrize("minor, actual_on", ((1400, START), (1500, FEBRUARY)))
+def test_payment_match_requires_same_date_amount_and_direction(minor, actual_on):
+    operation = record(
+        12, OperationDraft(OperationKind.EXPENSE, actual_on, ACCOUNT.id, Money(minor), CATEGORY)
+    )
+    plan = PaymentSchedule("Подписка", Money(1500), PaymentDirection.EXPENSE, START)
+    forecast = forecast_balance((operation,), ACCOUNT, ReportPeriod(START, END), (plan,))
+    with pytest.raises(ValidationError, match="датой и суммой"):
+        match_payments(forecast, (PaymentMatch(0, operation.revision_id),))
+    wrong_sign = PaymentSchedule(
+        "Ожидаемый доход", Money(minor), PaymentDirection.INCOME, actual_on
+    )
+    forecast = forecast_balance((operation,), ACCOUNT, ReportPeriod(START, END), (wrong_sign,))
+    with pytest.raises(ValidationError, match="датой и суммой"):
+        match_payments(forecast, (PaymentMatch(0, operation.revision_id),))

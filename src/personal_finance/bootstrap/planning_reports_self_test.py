@@ -8,6 +8,7 @@ from PySide6.QtCore import QCoreApplication, QEvent
 from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.analytics import ReportPeriod
+from personal_finance.domain.balance_forecast import PaymentMatch, match_payments
 from personal_finance.domain.models import Money
 from personal_finance.domain.recurring_payments import (
     PaymentDirection,
@@ -90,6 +91,18 @@ def check_planning_reports(
         or balance.booked
     ):
         raise RuntimeError("Прогноз остатка не совпал с журналом и ожидаемым платежом.")
+    payment_day = ReportPeriod(day, day)
+    booked = analytics.balance_forecast(account, payment_day, ())
+    actual = next(row for row in booked.booked if row.minor)
+    direction = PaymentDirection.INCOME if actual.minor > 0 else PaymentDirection.EXPENSE
+    with_plan = analytics.balance_forecast(
+        account,
+        payment_day,
+        (PaymentSchedule("Синтетическое совпадение", Money(abs(actual.minor)), direction, day),),
+    )
+    matched = match_payments(with_plan, (PaymentMatch(0, actual.operation.revision_id),))
+    if matched.closing_minor != booked.closing_minor or match_payments(matched, ()) != with_plan:
+        raise RuntimeError("Явное сопоставление не сняло двойной учёт в прогнозе.")
     budget_dialog = BudgetDialog(budget, accounts, categories)
     position_dialog = AccountPositionDialog(position, categories)
     goal_dialog = SavingsGoalDialog(goal)

@@ -217,7 +217,7 @@ class PaymentCalendarOptions(QDialog):
             layout.addLayout(account_row)
         self.balance_hint = _label(
             "Прогноз включает проводки счёта и ожидаемые платежи. "
-            "Если платёж уже внесён в журнал, уберите его из ожидаемых."
+            "Совпадающие платежи можно сопоставить после расчёта."
         )
         self.balance_hint.hide()
         layout.addWidget(self.balance_hint)
