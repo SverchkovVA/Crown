@@ -68,6 +68,7 @@ from personal_finance.domain.recurring_payments import (
 from personal_finance.domain.savings_goals import SavingsGoalScenario
 from personal_finance.infrastructure.backup.container import create_backup, restore_backup
 from personal_finance.infrastructure.importing.statements import CsvMapping
+from personal_finance.infrastructure.payment_reminder_preferences import PaymentReminderPreferences
 from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.analytics import IncomeExpenseDialog, format_report_amount
@@ -76,7 +77,9 @@ from personal_finance.presentation.analytics_comparison import IncomeExpenseComp
 from personal_finance.presentation.bonuses import BonusEntryForm
 from personal_finance.presentation.deposit_scenarios import SavedScenariosDialog, ScenarioAction
 from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
+from personal_finance.presentation.inline_forms import FormHost
 from personal_finance.presentation.main_window import MainWindow
+from personal_finance.presentation.recurring_payments import PaymentCalendarDialog
 
 
 @contextmanager
@@ -927,6 +930,13 @@ def self_test(
                                 date(2026, 1, 31),
                                 RepeatUnit.MONTHS,
                             ),
+                            PaymentSchedule(
+                                "Синтетическое напоминание",
+                                Money(10),
+                                PaymentDirection.EXPENSE,
+                                date.today(),
+                                RepeatUnit.DAYS,
+                            ),
                         )
                     )
                     calendar_command = str(uuid4())
@@ -1141,8 +1151,15 @@ def self_test(
                                 restored_recovery,
                                 recovery=True,
                             ).result(timeout=15)
+                            reminder_preferences = PaymentReminderPreferences(
+                                QSettings(
+                                    str(root / "payment-reminders.ini"), QSettings.Format.IniFormat
+                                )
+                            )
+                            reminder_preferences.select(background.replica_id, calendar.id)
                             window = MainWindow(
                                 ocr_recognitions=ocr_recognitions,
+                                payment_reminders=reminder_preferences,
                                 recent_books=LocalRecentBooks(
                                     QSettings(
                                         str(root / "recent-books.ini"), QSettings.Format.IniFormat
@@ -1152,6 +1169,30 @@ def self_test(
                             window.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
                             try:
                                 window.activate_session(background)
+                                window.show()
+                                if not window._pool.waitForDone(15000):
+                                    raise RuntimeError(
+                                        "Проверка напоминаний превысила время ожидания."
+                                    )
+                                app.processEvents()
+                                reminder = window._calendar_reminders
+                                if not reminder.button.isVisible() or window._busy:
+                                    raise RuntimeError(
+                                        "Напоминание по выбранному календарю не показано."
+                                    )
+                                reminder.button.click()
+                                surface = window._journal_forms.stack.currentWidget()
+                                reminder_view = (
+                                    surface.widget() if isinstance(surface, FormHost) else None
+                                )
+                                if not isinstance(reminder_view, PaymentCalendarDialog) or not any(
+                                    event.schedule.name == "Синтетическое напоминание"
+                                    for event in reminder_view.forecast.events
+                                ):
+                                    raise RuntimeError(
+                                        "Не открылось расписание синтетического платежа."
+                                    )
+                                window._journal_forms.back.click()
                                 if len(window._recent_books.items()) != 1:
                                     raise RuntimeError(
                                         "Недавняя книга не сохранена в тестовом профиле."
@@ -1164,7 +1205,6 @@ def self_test(
                                     raise RuntimeError("Не удалось вернуть книгу в недавние.")
                                 if window.ocr_button.isEnabled() != bool(ocr_recognitions):
                                     raise RuntimeError("Неверная доступность распознавания.")
-                                window.show()
                                 app.processEvents()
                                 if ocr_recognitions:
                                     window.ocr_button.click()
@@ -1178,6 +1218,7 @@ def self_test(
                                 window.lock_book()
                                 if (
                                     window.session is not None
+                                    or not reminder.button.isHidden()
                                     or window.account_model.rowCount() != 0
                                     or window.operation_model.rowCount() != 0
                                 ):

@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from datetime import date, timedelta
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QHeaderView, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QCheckBox, QDialog, QHBoxLayout, QHeaderView, QPushButton, QVBoxLayout
 
 from personal_finance.application.planning_scenarios import PlanningScenarios
 from personal_finance.application.vault import VaultSession
@@ -37,7 +37,14 @@ UPCOMING_DAYS = 14
 
 
 class SavedCalendarsDialog(QDialog):
-    def __init__(self, records: Sequence[SavedPlanningScenario], parent: MainWindow) -> None:
+    def __init__(
+        self,
+        records: Sequence[SavedPlanningScenario],
+        parent: MainWindow,
+        *,
+        reminder_selection: str | None = None,
+        select_reminder: Callable[[str | None], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Сохранённые календари платежей")
         self.records = tuple(
@@ -45,6 +52,8 @@ class SavedCalendarsDialog(QDialog):
         )
         self.selected: SavedPlanningScenario | None = None
         self.show_upcoming = False
+        self.reminder_selection = reminder_selection
+        self.select_reminder = select_reminder
         layout = QVBoxLayout(self)
         self.table = _table("Сохранённые календари платежей")
         replace_table(
@@ -64,25 +73,58 @@ class SavedCalendarsDialog(QDialog):
         self.open_button = QPushButton("Открыть календарь")
         self.open_button.setObjectName("primary")
         self.upcoming_button = QPushButton(f"Ближайшие {UPCOMING_DAYS} дней")
+        self.reminders = QCheckBox("Напоминать об ожидаемых расходах")
+        self.reminders.setToolTip(
+            "Один календарь на книгу, ближайшие семь дней. Напоминания видны в открытой книге."
+        )
+        self.reminders.setVisible(select_reminder is not None)
+        self.reminders.clicked.connect(self._set_reminder)
+        layout.addWidget(self.reminders)
+        self.feedback = _label("")
+        self.feedback.setObjectName("feedbackError")
+        self.feedback.hide()
+        layout.addWidget(self.feedback)
         self.table.selectionModel().selectionChanged.connect(self._update_actions)
         self.open_button.clicked.connect(lambda: self._select(upcoming=False))
         self.upcoming_button.clicked.connect(lambda: self._select(upcoming=True))
         self._update_actions()
         actions = QHBoxLayout()
+        actions.setSpacing(8)
         actions.addStretch()
         actions.addWidget(self.upcoming_button)
         actions.addWidget(self.open_button)
         layout.addLayout(actions)
 
     def _update_actions(self) -> None:
-        selected = bool(self.table.selectionModel().selectedRows())
-        self.open_button.setEnabled(selected)
-        self.upcoming_button.setEnabled(selected)
+        record = self._selected_record()
+        self.open_button.setEnabled(record is not None)
+        self.upcoming_button.setEnabled(record is not None)
+        self.reminders.setEnabled(record is not None)
+        self.reminders.setChecked(record is not None and record.id == self.reminder_selection)
+
+    def _selected_record(self) -> SavedPlanningScenario | None:
+        rows = self.table.selectionModel().selectedRows()
+        return self.records[rows[0].row()] if rows else None
+
+    def _set_reminder(self, enabled: bool) -> None:
+        record = self._selected_record()
+        if record is None or self.select_reminder is None:
+            return
+        selection = record.id if enabled else None
+        try:
+            self.select_reminder(selection)
+        except ValidationError as exc:
+            self.feedback.setText(str(exc))
+            self.feedback.show()
+            self._update_actions()
+            return
+        self.reminder_selection = selection
+        self.feedback.hide()
 
     def _select(self, *, upcoming: bool) -> None:
-        rows = self.table.selectionModel().selectedRows()
-        if rows:
-            self.selected = self.records[rows[0].row()]
+        record = self._selected_record()
+        if record is not None:
+            self.selected = record
             self.show_upcoming = upcoming
             self.accept()
 
@@ -119,7 +161,13 @@ class CalendarStorage:
         def show(records: list[SavedPlanningScenario]) -> None:
             if not self.current():
                 return
-            dialog = SavedCalendarsDialog(records, self.window)
+            reminders = self.window._calendar_reminders
+            dialog = SavedCalendarsDialog(
+                records,
+                self.window,
+                reminder_selection=reminders.selection(self.session),
+                select_reminder=lambda selected: reminders.select(self.session, selected),
+            )
 
             def completed(code: int) -> None:
                 if (
@@ -197,6 +245,7 @@ class CalendarStorage:
                 if self.current():
                     self.record = record
                     self.form.set_saved_name(record.name)
+                    self.window._calendar_reminders.invalidate(self.session, record.id)
                     self.panel.message("Календарь сохранён в книге.")
 
             self.window._panel_job(self.panel, persist, saved, "Сохранение календаря…")

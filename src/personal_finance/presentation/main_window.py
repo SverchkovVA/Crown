@@ -101,6 +101,7 @@ from personal_finance.infrastructure.backup.container import (
 )
 from personal_finance.infrastructure.ocr.images import load_clipboard_image
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
+from personal_finance.infrastructure.payment_reminder_preferences import PaymentReminderPreferences
 from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.account_position import (
     AccountPositionDialog,
@@ -115,6 +116,7 @@ from personal_finance.presentation.analytics_comparison import (
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
+from personal_finance.presentation.calendar_reminders import CalendarReminders
 from personal_finance.presentation.calendar_storage import CalendarStorage
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
@@ -220,6 +222,7 @@ class MainWindow(QMainWindow):
         *,
         ocr_recognitions: tuple[CardRecognition, ...] = (),
         recent_books: LocalRecentBooks | None = None,
+        payment_reminders: PaymentReminderPreferences | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
@@ -259,6 +262,10 @@ class MainWindow(QMainWindow):
         self._pool.setMaxThreadCount(1)
         self._busy = False
         self._action_panels: list[InlineForms] = []
+        self._calendar_reminders = CalendarReminders(
+            self,
+            payment_reminders if payment_reminders is not None else PaymentReminderPreferences(),
+        )
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.root_stack = QStackedWidget()
         self.setCentralWidget(self.root_stack)
@@ -1718,6 +1725,7 @@ class MainWindow(QMainWindow):
         outer.addWidget(self._journal_forms, 1)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
+        layout.addWidget(self._calendar_reminders.button, 0, Qt.AlignmentFlag.AlignLeft)
         self.journal_notice = label(
             "Переводы исключены из доходов и расходов; комиссия — расход. "
             "Возврат уменьшает расходы.",
@@ -2847,8 +2855,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Работает без интернета · {state}")
         if has_result and callback is not None:
             callback(result)
+        self._calendar_reminders.refresh()
 
     def activate_session(self, session: VaultSession, *, show_workspace: bool = True) -> None:
+        self._calendar_reminders.clear()
         self._clear_action_panels()
         self.ocr_input.reset()
         if self.session and self.session is not session:
@@ -2873,6 +2883,7 @@ class MainWindow(QMainWindow):
         self._record_section()
         self._update_navigation()
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
+        self._calendar_reminders.refresh()
 
     def _created(self, result: tuple[VaultSession, str], *, inline: bool = False) -> None:
         session, recovery = result
@@ -3021,6 +3032,7 @@ class MainWindow(QMainWindow):
         present_form(dialog, panel, completed)
 
     def lock_book(self) -> None:
+        self._calendar_reminders.clear()
         self._clear_action_panels()
         self.ocr_input.reset()
         if self.session:
