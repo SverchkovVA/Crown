@@ -1,5 +1,6 @@
 """Сценарный календарь платежей во встроенных формах отчётов."""
 
+from collections.abc import Sequence
 from datetime import date
 
 from PySide6.QtCore import QDate, Signal
@@ -21,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.models import RUB, Money
+from personal_finance.domain.models import RUB, Account, Money
 from personal_finance.domain.recurring_payments import (
     PaymentDirection,
     PaymentForecast,
@@ -175,11 +176,11 @@ class ScheduleEditor(QDialog):
 class PaymentCalendarOptions(QDialog):
     calculationRequested = Signal()
 
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, parent: QWidget, *, accounts: Sequence[Account] = ()) -> None:
         super().__init__(parent)
         self.setWindowTitle("Календарь платежей · Условия")
         self.schedules: list[PaymentSchedule] = []
-        self.request: tuple[tuple[PaymentSchedule, ...], ReportPeriod] | None = None
+        self.request: tuple[tuple[PaymentSchedule, ...], ReportPeriod, Account | None] | None = None
         layout = QVBoxLayout(self)
         dates = QHBoxLayout()
         dates.setSpacing(8)
@@ -191,6 +192,25 @@ class PaymentCalendarOptions(QDialog):
         dates.addWidget(_label("по"))
         dates.addWidget(self.end, 1)
         layout.addLayout(dates)
+        self.accounts = {
+            account.id: account for account in accounts if account.currency == RUB.code
+        }
+        self.account = QComboBox()
+        self.account.setAccessibleName("Счёт для прогноза остатка")
+        self.account.addItem("Только календарь платежей", None)
+        for account in sorted(self.accounts.values(), key=lambda row: row.name.casefold()):
+            self.account.addItem(account.name, account.id)
+        if self.accounts:
+            account_row = QFormLayout()
+            account_row.setHorizontalSpacing(8)
+            account_row.addRow("Счёт", self.account)
+            layout.addLayout(account_row)
+        self.balance_hint = _label(
+            "Прогноз включает проводки счёта и ожидаемые платежи. "
+            "Если платёж уже внесён в журнал, уберите его из ожидаемых."
+        )
+        self.balance_hint.hide()
+        layout.addWidget(self.balance_hint)
         self.table = _table("Условия ожидаемых платежей")
         layout.addWidget(self.table, 1)
         layout.addWidget(_label("Расписание хранится до закрытия календаря."))
@@ -214,6 +234,7 @@ class PaymentCalendarOptions(QDialog):
         self.edit.clicked.connect(lambda: self._edit(self._selected()))
         self.remove.clicked.connect(self._remove)
         self.calculate.clicked.connect(self._calculate)
+        self.account.currentIndexChanged.connect(self._update_calculate)
         self._refresh()
 
     def _selected(self) -> int | None:
@@ -241,8 +262,13 @@ class PaymentCalendarOptions(QDialog):
             selection_changed=self._selection_changed,
         )
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.calculate.setEnabled(bool(self.schedules))
+        self._update_calculate()
         self._selection_changed()
+
+    def _update_calculate(self) -> None:
+        has_account = self.account.currentData() is not None
+        self.balance_hint.setVisible(has_account)
+        self.calculate.setEnabled(bool(self.schedules) or has_account)
 
     def _selection_changed(self) -> None:
         selected = self._selected() is not None
@@ -280,7 +306,7 @@ class PaymentCalendarOptions(QDialog):
             self.feedback.show()
             return
         self.feedback.hide()
-        self.request = tuple(self.schedules), period
+        self.request = tuple(self.schedules), period, self.accounts.get(self.account.currentData())
         self.calculationRequested.emit()
 
 

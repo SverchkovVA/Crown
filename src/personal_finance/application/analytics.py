@@ -14,12 +14,14 @@ from personal_finance.domain.analytics import (
 )
 from personal_finance.domain.analytics_cashflow import CashFlowReport, cash_flow_report
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison, compare_periods
+from personal_finance.domain.balance_forecast import BalanceForecast, forecast_balance
 from personal_finance.domain.budget import BudgetExecution, budget_execution, monthly_budget
 from personal_finance.domain.deposit_plan_fact import DepositPlanFact, deposit_plan_fact
 from personal_finance.domain.deposits import DepositScenario
 from personal_finance.domain.ledger import Operation
 from personal_finance.domain.models import Account, Category, Money
 from personal_finance.domain.periods import AccountingMonth
+from personal_finance.domain.recurring_payments import PaymentSchedule
 
 
 class Analytics:
@@ -44,6 +46,11 @@ class Analytics:
 
     def account_position(self, accounts: list[Account], as_of: date) -> AccountPosition:
         return account_position(self._snapshot(), accounts, as_of)
+
+    def balance_forecast(
+        self, account: Account, period: ReportPeriod, schedules: tuple[PaymentSchedule, ...]
+    ) -> BalanceForecast:
+        return forecast_balance(self._snapshot(), account, period, schedules)
 
     def budget(
         self, period: ReportPeriod, limit: Money, scope: ReportScope | None = None

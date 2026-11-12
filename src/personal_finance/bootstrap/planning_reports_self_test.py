@@ -17,6 +17,7 @@ from personal_finance.domain.recurring_payments import (
 )
 from personal_finance.domain.savings_goals import SavingsGoalScenario, project_savings_goal
 from personal_finance.presentation.account_position import AccountPositionDialog
+from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.budget import BudgetDialog
 from personal_finance.presentation.recurring_payments import PaymentCalendarDialog
 from personal_finance.presentation.savings_goals import SavingsGoalDialog
@@ -77,16 +78,30 @@ def check_planning_reports(
         or forecast.totals[0].net_minor != -37035
     ):
         raise RuntimeError("Календарь платежей не совпал с проверочными датами и суммами.")
+    account = next(value for value in accounts if expected_balances[value.id] > 0)
+    balance = analytics.balance_forecast(
+        account,
+        ReportPeriod(date.max, date.max),
+        (PaymentSchedule("Синтетический расход", Money(900), PaymentDirection.EXPENSE, date.max),),
+    )
+    if (
+        balance.opening_minor != expected_balances[account.id]
+        or balance.closing_minor != expected_balances[account.id] - 900
+        or balance.booked
+    ):
+        raise RuntimeError("Прогноз остатка не совпал с журналом и ожидаемым платежом.")
     budget_dialog = BudgetDialog(budget, accounts, categories)
     position_dialog = AccountPositionDialog(position, categories)
     goal_dialog = SavingsGoalDialog(goal)
     calendar_dialog = PaymentCalendarDialog(forecast)
-    dialogs = (budget_dialog, position_dialog, goal_dialog, calendar_dialog)
+    forecast_dialog = BalanceForecastDialog(balance)
+    dialogs = (budget_dialog, position_dialog, goal_dialog, calendar_dialog, forecast_dialog)
     try:
         if (
             budget_dialog.sources.model().rowCount() != len(budget.sources)
             or position_dialog.accounts.model().rowCount() != len(accounts)
             or calendar_dialog.table.model().rowCount() != len(payment_dates)
+            or forecast_dialog.days.model().rowCount() != 1
         ):
             raise RuntimeError("Учтённые строки недоступны в интерфейсе отчётов.")
     finally:

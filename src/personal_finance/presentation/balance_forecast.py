@@ -1,0 +1,82 @@
+"""Результат прогноза остатка в рабочей области отчётов."""
+
+from PySide6.QtWidgets import QDialog, QHeaderView, QTabWidget, QVBoxLayout, QWidget
+
+from personal_finance.domain.balance_forecast import BalanceForecast
+from personal_finance.presentation.analytics import _label, format_report_amount
+from personal_finance.presentation.deposit_scenarios import date_text
+from personal_finance.presentation.recurring_payments import _table
+from personal_finance.presentation.tables import replace_table
+
+
+class BalanceForecastDialog(QDialog):
+    def __init__(self, forecast: BalanceForecast, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.forecast = forecast
+        self.setWindowTitle("Прогноз остатка")
+        layout = QVBoxLayout(self)
+        currency = forecast.currency
+
+        def amount(minor: int) -> str:
+            return format_report_amount(minor, currency)
+
+        layout.addWidget(
+            _label(
+                f"{forecast.account.name} · {date_text(forecast.period.start)} — "
+                f"{date_text(forecast.period.end)} · {currency.code}"
+            )
+        )
+        layout.addWidget(
+            _label(
+                f"Остаток на начало {amount(forecast.opening_minor)} · "
+                f"Прогноз на конец {amount(forecast.closing_minor)}"
+            )
+        )
+        if not forecast.days:
+            layout.addWidget(_label("В выбранном периоде движений нет."))
+        tabs = QTabWidget(self)
+        self.days = _table("Прогноз остатка по дням")
+        replace_table(
+            self.days,
+            ["Дата", "По журналу", "Ожидается", "Остаток к концу дня"],
+            [
+                [
+                    date_text(row.day),
+                    amount(row.booked_minor),
+                    amount(row.planned_minor),
+                    amount(row.closing_minor),
+                ]
+                for row in forecast.days
+            ],
+            right_columns=(1, 2, 3),
+        )
+        self.days.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        tabs.addTab(self.days, "По дням")
+        self.movements = _table("Журнал и ожидаемые платежи")
+        rows = [
+            (
+                item.operation.draft.occurred_on,
+                "Журнал",
+                item.operation.draft.note or "Операция",
+                item.minor,
+            )
+            for item in forecast.booked
+        ] + [
+            (
+                item.occurs_on,
+                "Ожидается",
+                item.schedule.name,
+                item.signed_minor,
+            )
+            for item in forecast.planned
+        ]
+        rows.sort(key=lambda row: row[0])
+        replace_table(
+            self.movements,
+            ["Дата", "Источник", "Описание", "Движение"],
+            [[date_text(day), source, note, amount(minor)] for day, source, note, minor in rows],
+            right_columns=(3,),
+        )
+        self.movements.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        tabs.addTab(self.movements, "Движения")
+        layout.addWidget(tabs, 1)

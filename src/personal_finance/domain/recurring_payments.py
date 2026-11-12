@@ -61,6 +61,11 @@ class ForecastEvent:
     occurs_on: date
     schedule: PaymentSchedule
 
+    @property
+    def signed_minor(self) -> int:
+        amount = self.schedule.amount.minor
+        return amount if self.schedule.direction is PaymentDirection.INCOME else -amount
+
 
 @dataclass(frozen=True, slots=True)
 class PaymentTotals:

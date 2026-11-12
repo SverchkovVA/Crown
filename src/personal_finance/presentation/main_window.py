@@ -62,6 +62,7 @@ from personal_finance.domain.account_position import AccountPosition
 from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
+from personal_finance.domain.balance_forecast import BalanceForecast
 from personal_finance.domain.budget import BudgetExecution
 from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
@@ -105,6 +106,7 @@ from personal_finance.presentation.analytics_comparison import (
     ComparisonPeriodDialog,
     IncomeExpenseComparisonDialog,
 )
+from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
 from personal_finance.presentation.classification import (
@@ -486,23 +488,41 @@ class MainWindow(QMainWindow):
         session = self.session
         if self._busy or session is None or session.ledger is None:
             return
-        dialog = PaymentCalendarOptions(self)
+        dialog = PaymentCalendarOptions(self, accounts=session.catalog.accounts())
+        analytics = Analytics(session.ledger, session.mutex, session.ensure_open)
         panel = self._report_forms
 
-        def show(result: PaymentForecast) -> None:
+        def show(result: PaymentForecast | BalanceForecast) -> None:
             if self.session is session:
-                present_form(PaymentCalendarDialog(result, self), panel)
+                view = (
+                    BalanceForecastDialog(result, self)
+                    if isinstance(result, BalanceForecast)
+                    else PaymentCalendarDialog(result, self)
+                )
+                present_form(view, panel)
 
         def calculate() -> None:
             request = dialog.request
             if self._busy or self.session is not session or request is None:
                 return
-            self._panel_job(
-                panel,
-                lambda: forecast_payments(*request),
-                show,
-                "Расчёт календаря платежей…",
-            )
+            schedules, period, account = request
+
+            def build() -> PaymentForecast | BalanceForecast:
+                if account is None:
+                    return forecast_payments(schedules, period)
+                with session.mutex:
+                    session.ensure_open()
+                    current = next(
+                        (item for item in session.catalog.accounts() if item.id == account.id),
+                        None,
+                    )
+                    if current is None:
+                        raise ValidationError(
+                            "Выбранный счёт недоступен. Откройте календарь заново."
+                        )
+                    return analytics.balance_forecast(current, period, schedules)
+
+            self._panel_job(panel, build, show, "Расчёт календаря платежей…")
 
         dialog.calculationRequested.connect(calculate)
         present_form(dialog, panel)
