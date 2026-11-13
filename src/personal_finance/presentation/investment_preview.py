@@ -317,6 +317,12 @@ class InvestmentPreviewDialog(QDialog):
         layout.addWidget(heading)
         self.summary = _label("")
         layout.addWidget(self.summary)
+        currency = request.security.currency
+        unit = "₽" if currency == RUB else currency.code
+
+        def amount(minor: int) -> str:
+            return f"{format_report_amount(minor, currency)} {unit}"
+
         portfolio = valuation.portfolio
         if not portfolio.positions:
             self.summary.setText("На выбранную дату сделок и выплат нет.")
@@ -324,9 +330,9 @@ class InvestmentPreviewDialog(QDialog):
             return
         (position,) = portfolio.positions
         self.summary.setText(
-            f"Бумаг: {position.quantity} · Стоимость партий {self._rub(position.cost_minor)} · "
-            f"Результат продаж и погашений {self._rub(position.realized_minor)} · "
-            f"Выплаты {self._rub(position.distributions_minor)}"
+            f"Бумаг: {position.quantity} · Стоимость партий {amount(position.cost_minor)} · "
+            f"Результат продаж и погашений {amount(position.realized_minor)} · "
+            f"Выплаты {amount(position.distributions_minor)}"
         )
         market_minor = None
         if valuation.positions:
@@ -336,25 +342,25 @@ class InvestmentPreviewDialog(QDialog):
             else:
                 price = valued.price
                 price_text = format(price.value, "f").replace(".", ",")
-                source = f"{price_text} ₽ за бумагу"
+                source = f"{price_text} {unit} за бумагу"
                 if price.unit is PriceUnit.PERCENT_OF_FACE:
                     assert price.unpaid_face is not None and price.accrued_per_security is not None
                     source = (
-                        f"{price_text}% · номинал {self._rub(price.unpaid_face.minor)} · "
-                        f"НКД за бумагу {self._rub(price.accrued_per_security.minor)}"
+                        f"{price_text}% · номинал {amount(price.unpaid_face.minor)} · "
+                        f"НКД за бумагу {amount(price.accrued_per_security.minor)}"
                     )
                 market_minor = valued.market_minor
                 unrealized = market_minor - position.cost_minor
                 layout.addWidget(
                     _label(
-                        f"Оценка {self._rub(valued.market_minor)} · "
-                        f"Изменение стоимости {self._rub(unrealized)}"
+                        f"Оценка {amount(valued.market_minor)} · "
+                        f"Изменение стоимости {amount(unrealized)}"
                     )
                 )
                 layout.addWidget(_label(f"Ручная цена от {date_text(price.quoted_on)} · {source}"))
         performance = position_result(position, market_minor)
         if performance is not None:
-            caption = f"Общий результат {self._rub(performance.total_minor)}"
+            caption = f"Общий результат {amount(performance.total_minor)}"
             if performance.purchase_ratio_basis_points is not None:
                 percent = format_report_amount(performance.purchase_ratio_basis_points, RUB)
                 caption += f" · {percent}% от суммы покупок"
@@ -370,13 +376,13 @@ class InvestmentPreviewDialog(QDialog):
         self.lots = self._section(
             tabs,
             "Открытые партии",
-            ["Дата покупки", "Порядок", "Бумаг", "Стоимость, ₽"],
+            ["Дата покупки", "Порядок", "Бумаг", f"Стоимость, {unit}"],
             [
                 [
                     date_text(lot.acquired_on),
                     str(sources[lot.acquisition_id].sequence),
                     str(lot.quantity),
-                    format_report_amount(lot.cost_minor, RUB),
+                    format_report_amount(lot.cost_minor, currency),
                 ]
                 for lot in position.lots
             ],
@@ -385,15 +391,22 @@ class InvestmentPreviewDialog(QDialog):
         self.disposals = self._section(
             tabs,
             "Продажи и погашения",
-            ["Дата", "Вид", "Бумаг", "Получено, ₽", "Стоимость, ₽", "Результат, ₽"],
+            [
+                "Дата",
+                "Вид",
+                "Бумаг",
+                f"Получено, {unit}",
+                f"Стоимость, {unit}",
+                f"Результат, {unit}",
+            ],
             [
                 [
                     date_text(row.trade.occurred_on),
                     TRADE_LABELS[row.trade.kind],
                     str(row.trade.quantity),
-                    format_report_amount(row.trade.cash_delta_minor, RUB),
-                    format_report_amount(row.cost_minor, RUB),
-                    format_report_amount(row.realized_minor, RUB),
+                    format_report_amount(row.trade.cash_delta_minor, currency),
+                    format_report_amount(row.cost_minor, currency),
+                    format_report_amount(row.realized_minor, currency),
                 ]
                 for row in portfolio.disposals
             ],
@@ -402,14 +415,14 @@ class InvestmentPreviewDialog(QDialog):
         self.allocations = self._section(
             tabs,
             "Списания FIFO",
-            ["Дата продажи", "Дата покупки", "Порядок покупки", "Бумаг", "Стоимость, ₽"],
+            ["Дата продажи", "Дата покупки", "Порядок покупки", "Бумаг", f"Стоимость, {unit}"],
             [
                 [
                     date_text(disposal.trade.occurred_on),
                     date_text(sources[item.acquisition_id].occurred_on),
                     str(sources[item.acquisition_id].sequence),
                     str(item.quantity),
-                    format_report_amount(item.cost_minor, RUB),
+                    format_report_amount(item.cost_minor, currency),
                 ]
                 for disposal in portfolio.disposals
                 for item in disposal.allocations
@@ -419,22 +432,18 @@ class InvestmentPreviewDialog(QDialog):
         self.distributions = self._section(
             tabs,
             "Выплаты",
-            ["Дата", "Вид", "Зачислено, ₽"],
+            ["Дата", "Вид", f"Зачислено, {unit}"],
             [
                 [
                     date_text(item.occurred_on),
                     DISTRIBUTION_LABELS[item.kind],
-                    format_report_amount(item.received.minor, RUB),
+                    format_report_amount(item.received.minor, currency),
                 ]
                 for item in portfolio.distributions
             ],
             (2,),
         )
         layout.addWidget(tabs, 1)
-
-    @staticmethod
-    def _rub(minor: int) -> str:
-        return f"{format_report_amount(minor, RUB)} ₽"
 
     @staticmethod
     def _section(

@@ -69,6 +69,10 @@ from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
+from personal_finance.domain.investment_portfolio import (
+    SavedPortfolioReport,
+    report_saved_portfolio,
+)
 from personal_finance.domain.investment_positions import SavedInvestmentPosition
 from personal_finance.domain.investment_prices import InvestmentValuation, value_investments
 from personal_finance.domain.investments import project_investments
@@ -150,6 +154,10 @@ from personal_finance.presentation.inline_forms import (
     confirm_form,
     form_warning,
     present_form,
+)
+from personal_finance.presentation.investment_portfolio import (
+    InvestmentPortfolioDialog,
+    InvestmentPortfolioOptions,
 )
 from personal_finance.presentation.investment_preview import (
     InvestmentPreviewDialog,
@@ -326,6 +334,9 @@ class MainWindow(QMainWindow):
         self.investment_preview_action = command(
             "Расчёт инвестиционной позиции…", self.request_investment_preview
         )
+        self.investment_portfolio_action = command(
+            "Инвестиционный портфель…", self.request_investment_portfolio
+        )
         self.deposit_action = command(
             "Прогноз вклада…", lambda: self.request_deposit(panel=self._report_forms)
         )
@@ -343,6 +354,7 @@ class MainWindow(QMainWindow):
             self.saved_planning_action,
             self.payment_calendar_action,
             self.investment_preview_action,
+            self.investment_portfolio_action,
             self.saved_deposits_action,
         ):
             action.setEnabled(False)
@@ -370,6 +382,14 @@ class MainWindow(QMainWindow):
         self.savings_goal_action.setEnabled(enabled)
         self.payment_calendar_action.setEnabled(enabled)
         self.investment_preview_action.setEnabled(enabled)
+        self.investment_portfolio_action.setEnabled(
+            enabled and getattr(self.session, "investment_positions", None) is not None
+        )
+        self.investment_portfolio_action.setToolTip(
+            "Сделки, остатки, ручные оценки и выплаты по сохранённым позициям."
+            if self.investment_portfolio_action.isEnabled()
+            else "Портфель доступен в книге с сохранением инвестиционных позиций."
+        )
         planning_enabled = (
             not self._busy
             and self.session is not None
@@ -584,6 +604,35 @@ class MainWindow(QMainWindow):
                 lambda selected: self.request_payment_calendar(record=selected),
             )
         present_form(dialog, panel)
+
+    def request_investment_portfolio(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.investment_positions is None:
+            return
+        panel = self._report_forms
+        storage = session.investment_positions
+        options = InvestmentPortfolioOptions(self)
+
+        def calculate() -> None:
+            if self._busy or self.session is not session:
+                return
+            as_of = options.report_day
+
+            def build() -> SavedPortfolioReport:
+                with session.mutex:
+                    session.ensure_open()
+                    accounts = session.catalog.accounts()
+                    records = storage.items()
+                return report_saved_portfolio(accounts, records, as_of)
+
+            def show(report: SavedPortfolioReport) -> None:
+                if self.session is session:
+                    present_form(InvestmentPortfolioDialog(report, self), panel)
+
+            self._panel_job(panel, build, show, "Расчёт инвестиционного портфеля…")
+
+        options.calculationRequested.connect(calculate)
+        present_form(options, panel)
 
     def request_investment_preview(self, *, record: SavedInvestmentPosition | None = None) -> None:
         session = self.session
@@ -1419,6 +1468,7 @@ class MainWindow(QMainWindow):
                     self.saved_planning_action,
                     self.payment_calendar_action,
                     self.investment_preview_action,
+                    self.investment_portfolio_action,
                     self.deposit_action,
                     self.saved_deposits_action,
                 ),
