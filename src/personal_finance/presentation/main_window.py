@@ -59,7 +59,13 @@ from personal_finance.application.ocr_cards import (
 from personal_finance.application.ocr_review import OcrReviewDefaults, suggest_corrections
 from personal_finance.application.vault import VaultSession, create_vault, open_vault
 from personal_finance.domain.account_position import AccountPosition
-from personal_finance.domain.analytics import IncomeExpenseReport, ReportPeriod, ReportScope
+from personal_finance.domain.analysis_package import AnalysisPackage, serialize_analysis_package
+from personal_finance.domain.analytics import (
+    IncomeExpenseReport,
+    ReportPeriod,
+    ReportScope,
+    income_expense_report,
+)
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
 from personal_finance.domain.balance_forecast import BalanceForecast
@@ -67,7 +73,7 @@ from personal_finance.domain.budget import BudgetExecution
 from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
-from personal_finance.domain.exporting import ExportPreview
+from personal_finance.domain.exporting import ExportFormat, ExportPreview
 from personal_finance.domain.financial_assets import (
     FinancialAssetTotal,
     summarize_financial_assets,
@@ -123,6 +129,10 @@ from personal_finance.infrastructure.recent_books import LocalRecentBooks
 from personal_finance.presentation.account_position import (
     AccountPositionDialog,
     AccountPositionOptions,
+)
+from personal_finance.presentation.analysis_package import (
+    AnalysisPackageOptions,
+    AnalysisPackagePreview,
 )
 from personal_finance.presentation.analytics import IncomeExpenseDialog, ReportPeriodDialog
 from personal_finance.presentation.analytics_cashflow import CashFlowDialog, CashFlowPeriodDialog
@@ -332,6 +342,7 @@ class MainWindow(QMainWindow):
         self.account_position_action = command(
             "Средства на счетах…", lambda: self.request_account_position(panel=self._report_forms)
         )
+        self.analysis_package_action = command("Пакет для ChatGPT…", self.request_analysis_package)
         self.budget_action = command(
             "Бюджет расходов…", lambda: self.request_budget(panel=self._report_forms)
         )
@@ -360,6 +371,7 @@ class MainWindow(QMainWindow):
             self.compare_action,
             self.cash_flow_action,
             self.account_position_action,
+            self.analysis_package_action,
             self.budget_action,
             self.savings_goal_action,
             self.saved_planning_action,
@@ -389,6 +401,7 @@ class MainWindow(QMainWindow):
         self.compare_action.setEnabled(enabled)
         self.cash_flow_action.setEnabled(enabled)
         self.account_position_action.setEnabled(enabled)
+        self.analysis_package_action.setEnabled(enabled)
         self.budget_action.setEnabled(enabled)
         self.savings_goal_action.setEnabled(enabled)
         self.payment_calendar_action.setEnabled(enabled)
@@ -492,6 +505,58 @@ class MainWindow(QMainWindow):
             return
         dialog = IncomeExpenseDialog(result[0], result[1], self, accounts=result[2])
         present_form(dialog, panel, lambda _: dialog.charts.dispose())
+
+    def request_analysis_package(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.ledger is None:
+            return
+        ledger = session.ledger
+        storage = session.investment_positions
+        panel = self._report_forms
+        options = AnalysisPackageOptions(self, has_portfolio=storage is not None)
+
+        def preview() -> None:
+            if self._busy or self.session is not session or (period := options.period()) is None:
+                return
+            categories = options.categories.isChecked()
+            include_portfolio = options.portfolio.isChecked()
+
+            def build() -> AnalysisPackage:
+                with session.mutex:
+                    session.ensure_open()
+                    operations = ledger.operations()
+                    accounts = session.catalog.accounts() if include_portfolio else []
+                    positions = storage.items() if include_portfolio and storage is not None else []
+                portfolio = (
+                    report_saved_portfolio(accounts, positions, period.end)
+                    if include_portfolio and storage is not None
+                    else None
+                )
+                return AnalysisPackage(
+                    income_expense_report(operations, period), categories, portfolio
+                )
+
+            def show(package: AnalysisPackage) -> None:
+                if self.session is not session:
+                    return
+                dialog = AnalysisPackagePreview(package, self)
+
+                def completed(code: int) -> None:
+                    if code == QDialog.DialogCode.Accepted:
+                        self._save_report_file(
+                            session,
+                            "Новый пакет для ChatGPT",
+                            "crown-analysis",
+                            ExportFormat.JSON,
+                            lambda: serialize_analysis_package(package),
+                        )
+
+                present_form(dialog, panel, completed)
+
+            self._panel_job(panel, build, show, "Подготовка пакета для ChatGPT…")
+
+        options.previewRequested.connect(preview)
+        present_form(options, panel)
 
     def request_account_position(self, *, panel: InlineForms | None = None) -> None:
         session = self.session
@@ -697,41 +762,53 @@ class MainWindow(QMainWindow):
             if code != QDialog.DialogCode.Accepted or self.session is not session:
                 return
             preview, format = dialog.selection()
-            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-            name = f"crown-portfolio-{stamp}-{uuid4().hex[:4]}.{format.value}"
-            filename, _ = QFileDialog.getSaveFileName(
-                self,
+            self._save_report_file(
+                session,
                 "Новый файл портфеля",
-                str(session.root.parent / name),
-                f"{format.value.upper()} (*.{format.value})",
-                options=QFileDialog.Option.DontConfirmOverwrite,
-            )
-            if not filename or self.session is not session:
-                return
-            destination = Path(filename)
-            if not destination.suffix:
-                destination = destination.with_suffix("." + format.value)
-
-            def save() -> Path:
-                with session.mutex:
-                    session.ensure_open()
-                    return write_export_contents(
-                        destination,
-                        lambda: serialize_portfolio_export(preview, format),
-                        format,
-                        vault_root=session.root,
-                    )
-
-            self._panel_job(
-                panel,
-                save,
-                lambda path: self._panel_notice(
-                    panel, "Экспорт сохранён", f"Файл сохранён:\n{path}"
-                ),
-                "Сохранение файла портфеля…",
+                "crown-portfolio",
+                format,
+                lambda: serialize_portfolio_export(preview, format),
             )
 
         present_form(dialog, panel, completed)
+
+    def _save_report_file(
+        self,
+        session: VaultSession,
+        title: str,
+        prefix: str,
+        format: ExportFormat,
+        contents: Callable[[], bytes],
+    ) -> None:
+        if self._busy or self.session is not session:
+            return
+        panel = self._report_forms
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+        name = f"{prefix}-{stamp}-{uuid4().hex[:4]}.{format.value}"
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            title,
+            str(session.root.parent / name),
+            f"{format.value.upper()} (*.{format.value})",
+            options=QFileDialog.Option.DontConfirmOverwrite,
+        )
+        if not filename or self.session is not session:
+            return
+        destination = Path(filename)
+        if not destination.suffix:
+            destination = destination.with_suffix("." + format.value)
+
+        def save() -> Path:
+            with session.mutex:
+                session.ensure_open()
+                return write_export_contents(destination, contents, format, vault_root=session.root)
+
+        self._panel_job(
+            panel,
+            save,
+            lambda path: self._panel_notice(panel, "Экспорт сохранён", f"Файл сохранён:\n{path}"),
+            "Сохранение файла отчёта…",
+        )
 
     def request_investment_preview(self, *, record: SavedInvestmentPosition | None = None) -> None:
         session = self.session
@@ -1557,6 +1634,7 @@ class MainWindow(QMainWindow):
                     self.compare_action,
                     self.cash_flow_action,
                     self.account_position_action,
+                    self.analysis_package_action,
                 ),
             ),
             (
