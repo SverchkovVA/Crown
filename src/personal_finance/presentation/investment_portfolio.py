@@ -13,11 +13,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from personal_finance.domain.financial_assets import FinancialAssetTotal
 from personal_finance.domain.investment_cash_reconciliation import InvestmentCashRow
 from personal_finance.domain.investment_portfolio import PortfolioRow, SavedPortfolioReport
 from personal_finance.domain.models import RUB, Currency
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.deposit_scenarios import date_text
+from personal_finance.presentation.financial_assets import FinancialAssetsDialog
 from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.investment_cash_reconciliation import InvestmentCashDialog
 from personal_finance.presentation.investment_editors import SECURITY_LABELS
@@ -73,6 +75,7 @@ class InvestmentPortfolioDialog(QDialog):
         parent: QWidget | None = None,
         *,
         reconciliation: tuple[InvestmentCashRow, ...] = (),
+        assets: tuple[FinancialAssetTotal, ...] = (),
         account_names: dict[str, str] | None = None,
         category_names: dict[str, str] | None = None,
     ) -> None:
@@ -80,12 +83,16 @@ class InvestmentPortfolioDialog(QDialog):
         self.setWindowTitle("Инвестиционный портфель")
         self.report = report
         self.reconciliation = reconciliation
+        self.assets = assets
         self.account_names = account_names or {}
         self.category_names = category_names or {}
         layout = QVBoxLayout(self)
         layout.addWidget(_label(f"На конец {date_text(report.as_of)} · Только ценные бумаги"))
         if report.unavailable_count:
             layout.addWidget(_label(f"Позиций на недоступных счетах: {report.unavailable_count}."))
+        self.show_assets = QPushButton("Деньги и бумаги")
+        self.show_assets.clicked.connect(self._open_assets)
+        self.show_assets.setVisible(bool(assets))
         if not report.rows:
             layout.addWidget(
                 _label(
@@ -93,6 +100,7 @@ class InvestmentPortfolioDialog(QDialog):
                     "Добавьте позицию через «Расчёт инвестиционной позиции…»."
                 )
             )
+            layout.addWidget(self.show_assets)
             layout.addStretch()
             return
 
@@ -188,7 +196,14 @@ class InvestmentPortfolioDialog(QDialog):
         self.check_cash.setVisible(bool(reconciliation))
         self.check_cash.clicked.connect(self._open_reconciliation)
         footer.addWidget(self.check_cash)
+        footer.addWidget(self.show_assets)
         layout.addWidget(actions)
+
+    def _open_assets(self) -> None:
+        dialog = FinancialAssetsDialog(
+            self.report.as_of, self.assets, self.report.unavailable_count, self
+        )
+        present_form(dialog, None)
 
     def _open_reconciliation(self) -> None:
         dialog = InvestmentCashDialog(

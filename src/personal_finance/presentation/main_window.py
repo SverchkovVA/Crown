@@ -68,6 +68,10 @@ from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
+from personal_finance.domain.financial_assets import (
+    FinancialAssetTotal,
+    summarize_financial_assets,
+)
 from personal_finance.domain.imports import ImportPreview, ImportResult
 from personal_finance.domain.investment_cash_reconciliation import (
     InvestmentCashRow,
@@ -628,7 +632,11 @@ class MainWindow(QMainWindow):
             as_of = options.report_day
 
             def build() -> tuple[
-                SavedPortfolioReport, tuple[InvestmentCashRow, ...], list[Account], list[Category]
+                SavedPortfolioReport,
+                tuple[InvestmentCashRow, ...],
+                tuple[FinancialAssetTotal, ...],
+                list[Account],
+                list[Category],
             ]:
                 with session.mutex:
                     session.ensure_open()
@@ -636,24 +644,29 @@ class MainWindow(QMainWindow):
                     categories = session.catalog.categories()
                     records = storage.items()
                     operations = ledger.operations()
+                    balances = ledger.balances(as_of)
                 report = report_saved_portfolio(accounts, records, as_of)
-                return report, reconcile_investment_cash(report, operations), accounts, categories
+                matches = reconcile_investment_cash(report, operations)
+                assets = summarize_financial_assets(accounts, balances, report)
+                return report, matches, assets, accounts, categories
 
             def show(
                 result: tuple[
                     SavedPortfolioReport,
                     tuple[InvestmentCashRow, ...],
+                    tuple[FinancialAssetTotal, ...],
                     list[Account],
                     list[Category],
                 ],
             ) -> None:
                 if self.session is not session:
                     return
-                report, matches, accounts, categories = result
+                report, matches, assets, accounts, categories = result
                 dialog = InvestmentPortfolioDialog(
                     report,
                     self,
                     reconciliation=matches,
+                    assets=assets,
                     account_names={item.id: item.name for item in accounts},
                     category_names={
                         item.id: category_title(item, categories) for item in categories
