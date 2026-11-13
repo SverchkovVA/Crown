@@ -69,6 +69,11 @@ from personal_finance.domain.analytics import (
 from personal_finance.domain.analytics_cashflow import CashFlowReport
 from personal_finance.domain.analytics_comparison import IncomeExpenseComparison
 from personal_finance.domain.balance_forecast import BalanceForecast
+from personal_finance.domain.bonus_export import (
+    BonusExport,
+    prepare_bonus_export,
+    serialize_bonus_export,
+)
 from personal_finance.domain.budget import BudgetExecution
 from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
@@ -142,6 +147,7 @@ from personal_finance.presentation.analytics_comparison import (
 )
 from personal_finance.presentation.backup_contents import BackupContentsDialog
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
+from personal_finance.presentation.bonus_export import BonusExportOptions, BonusExportPreview
 from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
 from personal_finance.presentation.calendar_reminders import CalendarReminders
@@ -332,6 +338,8 @@ class MainWindow(QMainWindow):
             lambda checked=False: self.request_bonuses(panel=self._bonus_forms),
         )
         self.bonuses_action.setEnabled(False)
+        self.bonus_export_action = command("Экспорт бонусного журнала…", self.request_bonus_export)
+        self.bonus_export_action.setEnabled(False)
         self.report_action = command(
             "Доходы и расходы…", lambda: self.request_analytics(panel=self._report_forms)
         )
@@ -393,6 +401,7 @@ class MainWindow(QMainWindow):
             and self.session is not None
             and getattr(self.session, "bonuses", None) is not None
         )
+        self.bonus_export_action.setEnabled(self.bonuses_action.isEnabled())
         self.bonuses_action.setToolTip(
             "Программы лояльности, отдельные остатки и отчёт по категориям"
             if self.bonuses_action.isEnabled()
@@ -781,10 +790,12 @@ class MainWindow(QMainWindow):
         prefix: str,
         format: ExportFormat,
         contents: Callable[[], bytes],
+        *,
+        panel: InlineForms | None = None,
     ) -> None:
         if self._busy or self.session is not session:
             return
-        panel = self._report_forms
+        panel = panel or self._report_forms
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         name = f"{prefix}-{stamp}-{uuid4().hex[:4]}.{format.value}"
         filename, _ = QFileDialog.getSaveFileName(
@@ -1130,6 +1141,54 @@ class MainWindow(QMainWindow):
         except Exception:
             input_dialog.deleteLater()
             raise
+
+    def request_bonus_export(self) -> None:
+        session = self.session
+        if self._busy or session is None or session.bonuses is None:
+            return
+        service = session.bonuses
+        panel = self._bonus_forms
+        options = BonusExportOptions(self)
+
+        def preview() -> None:
+            selection = options.selection()
+            if self._busy or self.session is not session or selection is None:
+                return
+            period, format, names = selection
+
+            def build() -> BonusExport:
+                with session.mutex:
+                    session.ensure_open()
+                    return prepare_bonus_export(
+                        period,
+                        service.entries(),
+                        {value.id: value.name for value in service.programs(include_archived=True)},
+                        {value.id: value.name for value in session.catalog.categories()},
+                        include_names=names,
+                    )
+
+            def show(snapshot: BonusExport) -> None:
+                if self.session is not session or not options.isVisible():
+                    return
+                dialog = BonusExportPreview(snapshot, format, self)
+
+                def completed(code: int) -> None:
+                    if code == QDialog.DialogCode.Accepted:
+                        self._save_report_file(
+                            session,
+                            "Новый файл бонусного журнала",
+                            "crown-bonuses",
+                            format,
+                            lambda: serialize_bonus_export(snapshot, format),
+                            panel=panel,
+                        )
+
+                present_form(dialog, panel, completed)
+
+            self._panel_job(panel, build, show, "Подготовка бонусного журнала…")
+
+        options.previewRequested.connect(preview)
+        present_form(options, panel)
 
     def request_bonuses(
         self,
@@ -1628,6 +1687,7 @@ class MainWindow(QMainWindow):
         )
         self.bonuses_button = self._action_button(self.bonuses_action)
         layout.addWidget(self.bonuses_button)
+        layout.addWidget(self._action_button(self.bonus_export_action))
         layout.addStretch()
         return page
 
