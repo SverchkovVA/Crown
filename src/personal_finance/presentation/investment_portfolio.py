@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.domain.investment_portfolio import PortfolioRow, SavedPortfolioReport
-from personal_finance.domain.models import Currency
+from personal_finance.domain.models import RUB, Currency
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.deposit_scenarios import date_text
 from personal_finance.presentation.inline_forms import present_form
@@ -57,6 +57,13 @@ def _amount(minor: int | None, currency: Currency) -> str:
     return "—" if minor is None else format_report_amount(minor, currency)
 
 
+def _row_amount(minor: int | None, currency: Currency) -> str:
+    if minor is None:
+        return "—"
+    unit = "₽" if currency == RUB else currency.code
+    return f"{format_report_amount(minor, currency)} {unit}"
+
+
 class InvestmentPortfolioDialog(QDialog):
     def __init__(self, report: SavedPortfolioReport, parent: QWidget) -> None:
         super().__init__(parent)
@@ -81,12 +88,12 @@ class InvestmentPortfolioDialog(QDialog):
             self.totals,
             [
                 "Валюта",
-                "Себестоимость",
+                "Себест.",
                 "Оценка",
                 "Без цены",
-                "Реализовано",
+                "Реализация",
                 "Выплаты",
-                "Результат",
+                "Итог",
             ],
             [
                 [
@@ -103,11 +110,15 @@ class InvestmentPortfolioDialog(QDialog):
             right_columns=(1, 2, 3, 4, 5, 6),
         )
         self.totals.setSelectionMode(self.totals.SelectionMode.NoSelection)
-        self.totals.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.totals.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.totals.setMaximumHeight(
             self.totals.horizontalHeader().sizeHint().height()
             + min(3, len(report.totals)) * self.totals.verticalHeader().defaultSectionSize()
             + 20
+        )
+        self.totals.setToolTip(
+            "Себест. — себестоимость оставшихся бумаг. "
+            "Реализация — результат продаж и погашений за вычетом себестоимости и комиссий."
         )
         layout.addWidget(self.totals)
         if any(item.unpriced_count for item in report.totals):
@@ -116,39 +127,39 @@ class InvestmentPortfolioDialog(QDialog):
             )
 
         self.positions = _table("Позиции в инвестиционном портфеле")
-        replace_table(
+        model = replace_table(
             self.positions,
             [
-                "Код",
                 "Инструмент",
                 "Счёт",
-                "Валюта",
                 "Бумаг",
-                "Себестоимость",
+                "Себест.",
                 "Оценка",
-                "Цена от",
-                "Результат",
+                "Итог",
             ],
             [
                 [
                     row.position.security.code,
-                    SECURITY_LABELS[row.position.security.kind],
                     row.position.account.name,
-                    row.position.security.currency.code,
                     str(row.position.quantity),
-                    _amount(row.position.cost_minor, row.position.security.currency),
-                    _amount(row.market_minor, row.position.security.currency),
-                    date_text(row.price_date) if row.price_date else "—",
-                    _amount(
+                    _row_amount(row.position.cost_minor, row.position.security.currency),
+                    _row_amount(row.market_minor, row.position.security.currency),
+                    _row_amount(
                         row.result.total_minor if row.result else None,
                         row.position.security.currency,
                     ),
                 ]
                 for row in report.rows
             ],
-            right_columns=(4, 5, 6, 8),
+            right_columns=(2, 3, 4, 5),
         )
-        self.positions.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        for index, row in enumerate(report.rows):
+            security = row.position.security
+            kind = SECURITY_LABELS[security.kind]
+            model.item(index, 0).setToolTip(f"{kind} · {security.code}")
+        header = self.positions.horizontalHeader()
+        header.setMinimumSectionSize(header.fontMetrics().horizontalAdvance("Инструмент") + 24)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.positions, 1)
         self.details = QPushButton("Открыть расчёт позиции")
         self.details.setProperty("stickyActions", True)
