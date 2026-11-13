@@ -75,6 +75,11 @@ from personal_finance.domain.bonus_export import (
     serialize_bonus_export,
 )
 from personal_finance.domain.budget import BudgetExecution
+from personal_finance.domain.catalog_export import (
+    CatalogExport,
+    prepare_catalog_export,
+    serialize_catalog_export,
+)
 from personal_finance.domain.classification import CategoryRule
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
@@ -152,6 +157,7 @@ from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
 from personal_finance.presentation.calendar_reminders import CalendarReminders
 from personal_finance.presentation.calendar_storage import CalendarStorage
+from personal_finance.presentation.catalog_export import CatalogExportOptions, CatalogExportPreview
 from personal_finance.presentation.classification import (
     CategoryRuleDialog,
     CategoryRuleHistoryDialog,
@@ -353,6 +359,8 @@ class MainWindow(QMainWindow):
             "Средства на счетах…", lambda: self.request_account_position(panel=self._report_forms)
         )
         self.analysis_package_action = command("Пакет для ChatGPT…", self.request_analysis_package)
+        self.catalog_export_action = command("Экспорт справочников…", self.request_catalog_export)
+        self.catalog_export_action.setEnabled(False)
         self.budget_action = command(
             "Бюджет расходов…", lambda: self.request_budget(panel=self._report_forms)
         )
@@ -402,6 +410,7 @@ class MainWindow(QMainWindow):
             and getattr(self.session, "bonuses", None) is not None
         )
         self.bonus_export_action.setEnabled(self.bonuses_action.isEnabled())
+        self.catalog_export_action.setEnabled(not self._busy and self.session is not None)
         self.bonuses_action.setToolTip(
             "Программы лояльности, отдельные остатки и отчёт по категориям"
             if self.bonuses_action.isEnabled()
@@ -1142,6 +1151,53 @@ class MainWindow(QMainWindow):
             input_dialog.deleteLater()
             raise
 
+    def request_catalog_export(self) -> None:
+        session = self.session
+        if self._busy or session is None:
+            return
+        panel = self._report_forms
+        options = CatalogExportOptions(self)
+
+        def preview() -> None:
+            if self._busy or self.session is not session:
+                return
+            sections, format, names = options.selection()
+            if not sections:
+                return
+
+            def build() -> CatalogExport:
+                with session.mutex:
+                    session.ensure_open()
+                    return prepare_catalog_export(
+                        session.catalog.institutions(),
+                        session.catalog.accounts(),
+                        session.catalog.categories(),
+                        sections,
+                        include_names=names,
+                    )
+
+            def show(snapshot: CatalogExport) -> None:
+                if self.session is not session or not options.isVisible():
+                    return
+                dialog = CatalogExportPreview(snapshot, format, self)
+
+                def completed(code: int) -> None:
+                    if code == QDialog.DialogCode.Accepted:
+                        self._save_report_file(
+                            session,
+                            "Новый файл справочников",
+                            "crown-catalogs",
+                            format,
+                            lambda: serialize_catalog_export(snapshot, format),
+                        )
+
+                present_form(dialog, panel, completed)
+
+            self._panel_job(panel, build, show, "Подготовка справочников…")
+
+        options.previewRequested.connect(preview)
+        present_form(options, panel)
+
     def request_bonus_export(self) -> None:
         session = self.session
         if self._busy or session is None or session.bonuses is None:
@@ -1706,6 +1762,7 @@ class MainWindow(QMainWindow):
                     self.cash_flow_action,
                     self.account_position_action,
                     self.analysis_package_action,
+                    self.catalog_export_action,
                 ),
             ),
             (
