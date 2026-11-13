@@ -118,8 +118,8 @@ from personal_finance.domain.refunds import RefundCandidate
 from personal_finance.domain.savings_goals import SavingsGoalProjection, project_savings_goal
 from personal_finance.infrastructure.backup.container import (
     create_backup,
+    inspect_backup,
     restore_backup,
-    verify_backup,
 )
 from personal_finance.infrastructure.exporting.files import write_export_contents
 from personal_finance.infrastructure.ocr.images import load_clipboard_image
@@ -140,6 +140,7 @@ from personal_finance.presentation.analytics_comparison import (
     ComparisonPeriodDialog,
     IncomeExpenseComparisonDialog,
 )
+from personal_finance.presentation.backup_contents import BackupContentsDialog
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.bonuses import BonusesDialog, BonusSeed
 from personal_finance.presentation.budget import BudgetDialog, BudgetOptions
@@ -1551,11 +1552,18 @@ class MainWindow(QMainWindow):
         row.addStretch()
         layout.addLayout(row)
         layout.addSpacing(12)
-        restore = button(
-            "Восстановить из резервной копии", lambda: self.restore_book(panel=self._welcome_forms)
+        backup_actions = QHBoxLayout()
+        backup_actions.addWidget(
+            button("Проверить резервную копию", lambda: self.verify_copy(panel=self._welcome_forms))
         )
-        restore.setMaximumWidth(355)
-        layout.addWidget(restore)
+        backup_actions.addWidget(
+            button(
+                "Восстановить из резервной копии",
+                lambda: self.restore_book(panel=self._welcome_forms),
+            )
+        )
+        backup_actions.addStretch()
+        layout.addLayout(backup_actions)
         layout.addWidget(label("Недавние книги", "brand"))
         self.recent_books_list = QListWidget()
         self.recent_books_list.setAccessibleName("Недавние книги на этом компьютере")
@@ -3749,10 +3757,8 @@ class MainWindow(QMainWindow):
             password = dialog.password.text()
             self._panel_job(
                 panel,
-                lambda: verify_backup(Path(source), password),
-                lambda _: self._panel_notice(
-                    panel, "Проверка завершена", "Все блоки резервной копии прочитаны и проверены."
-                ),
+                lambda: inspect_backup(Path(source), password),
+                lambda contents: present_form(BackupContentsDialog(contents, self), panel),
                 "Проверка резервной копии…",
             )
 

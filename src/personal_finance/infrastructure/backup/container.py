@@ -5,9 +5,11 @@ import json
 import os
 import struct
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, cast
 from uuid import UUID, uuid4
 
 from nacl import bindings
@@ -28,6 +30,7 @@ from personal_finance.domain.errors import (
     VaultError,
 )
 from personal_finance.infrastructure.persistence.migration_runner import (
+    SCHEMA_HEAD,
     SUPPORTED_SCHEMAS,
     upgrade_restored_schema,
 )
@@ -235,6 +238,65 @@ def create_backup(session: VaultSession, destination: Path, password: str) -> Pa
     return destination
 
 
+@dataclass(frozen=True, slots=True)
+class BackupContents:
+    created_at: str
+    source_schema: str
+    restore_schema: str
+    database_size: int
+    accounts: int
+    operations: int
+    investment_positions: int
+
+
+@contextmanager
+def _unpack_database(
+    source: Path, password: str, *, parent: Path | None = None
+) -> Iterator[tuple[Path, dict[str, Any]]]:
+    with tempfile.TemporaryDirectory(prefix=".pf-restore-", dir=parent) as temporary:
+        root = Path(temporary)
+        data = root / "data"
+        data.mkdir(mode=0o700)
+        descriptor = os.open(data / "ledger.sqlite3", os.O_EXCL | os.O_CREAT | os.O_WRONLY, 0o600)
+        with os.fdopen(descriptor, "wb") as output:
+            metadata = _read(source, password, output.write)
+            output.flush()
+            os.fsync(output.fileno())
+        yield root, metadata
+
+
+def inspect_backup(source: Path, password: str) -> BackupContents:
+    """Проверяет копию и показывает состав без публикации восстановленной книги."""
+    with _unpack_database(source, password) as (root, metadata):
+        key = decode(metadata["database_key"], 32)
+        session = VaultSession(root, metadata["book_id"], key)
+        try:
+            session.check_integrity()
+            if session.schema_revision != metadata["schema"]:
+                raise VaultError("Схема базы не соответствует описанию резервной копии.")
+            with session.engine.connect() as connection:
+                rows = connection.execute(
+                    text("""SELECT e.kind, count(*) FROM entities e
+                        JOIN entity_revisions r ON r.id=e.accepted_revision_id
+                        WHERE r.is_deleted=0 AND e.kind IN (
+                            'account','operation','investment_position'
+                        )
+                        GROUP BY e.kind""")
+                )
+                counts = {str(kind): cast(int, total) for kind, total in rows}
+            return BackupContents(
+                metadata["created_at"],
+                session.schema_revision,
+                SCHEMA_HEAD,
+                metadata["database_size"],
+                counts.get("account", 0),
+                counts.get("operation", 0),
+                counts.get("investment_position", 0),
+            )
+        finally:
+            session.close()
+
+
 def restore_backup(
     source: Path, destination: Path, backup_password: str, new_password: str
 ) -> tuple[VaultSession, str]:
@@ -245,16 +307,11 @@ def restore_backup(
     destination = destination.absolute()
     if destination.exists() or not destination.parent.is_dir():
         raise VaultError("Выберите несуществующую папку внутри доступного каталога.")
-    with tempfile.TemporaryDirectory(prefix=".pf-restore-", dir=destination.parent) as temporary:
-        staged_root = Path(temporary)
+    with _unpack_database(source, backup_password, parent=destination.parent) as (
+        staged_root,
+        metadata,
+    ):
         staged_data = staged_root / "data"
-        staged_data.mkdir(mode=0o700)
-        database = staged_data / "ledger.sqlite3"
-        descriptor = os.open(database, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        with os.fdopen(descriptor, "wb") as output:
-            metadata = _read(source, backup_password, output.write)
-            output.flush()
-            os.fsync(output.fileno())
         key = decode(metadata["database_key"], 32)
         manifest, recovery = make_manifest(metadata["book_id"], key, new_password)
         session = VaultSession(staged_root, metadata["book_id"], key)
