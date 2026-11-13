@@ -2,7 +2,10 @@ from dataclasses import replace
 from datetime import timedelta
 from decimal import Decimal
 
-from personal_finance.domain.investment_portfolio import report_saved_portfolio
+from personal_finance.domain.investment_portfolio import (
+    portfolio_allocation,
+    report_saved_portfolio,
+)
 from personal_finance.domain.investment_positions import (
     InvestmentPositionInputs,
     SavedInvestmentPosition,
@@ -10,7 +13,7 @@ from personal_finance.domain.investment_positions import (
 from personal_finance.domain.investment_prices import ManualPrice, PriceUnit
 from personal_finance.domain.investments import TradeKind
 from personal_finance.domain.models import Currency
-from tests.unit.test_investments import ACCOUNT, OTHER, SHARE, TODAY, identifier, trade
+from tests.unit.test_investments import ACCOUNT, FUND, OTHER, SHARE, TODAY, identifier, trade
 
 
 def saved(key, account, security, events, prices=(), *, deleted=False):
@@ -110,3 +113,78 @@ def test_valid_zero_price_is_counted_but_all_missing_has_no_valuation():
     assert no_quote.totals[0].priced_market_minor is None
     assert zero.totals[0].priced_market_minor == 0
     assert zero.totals[0].result_minor == -600
+
+
+def test_allocation_uses_open_positions_and_separate_currency_denominators():
+    jpy = Currency("JPY", 0)
+    foreign_account = replace(OTHER, currency=jpy.code)
+    foreign = replace(SHARE, currency=jpy)
+    records = [
+        saved(1000, ACCOUNT, SHARE, [trade(1, TradeKind.BUY, 2, 500)], [quote(SHARE, "5")]),
+        saved(
+            1001,
+            ACCOUNT,
+            FUND,
+            [trade(1, TradeKind.BUY, 1, 550, security=FUND)],
+            [quote(FUND, "20")],
+        ),
+        saved(
+            1002,
+            foreign_account,
+            foreign,
+            [trade(1, TradeKind.BUY, 3, 100, account=foreign_account, security=foreign)],
+            [quote(foreign, "600")],
+        ),
+        saved(
+            1003,
+            ACCOUNT,
+            SHARE,
+            [trade(1, TradeKind.BUY, 1, 500), trade(2, TradeKind.SELL, 1, 600)],
+        ),
+    ]
+    rows = portfolio_allocation(report_saved_portfolio([ACCOUNT, foreign_account], records, TODAY))
+
+    assert [(row.currency.code, row.kind.value, row.open_count) for row in rows] == [
+        ("JPY", "stock", 1),
+        ("RUB", "fund", 1),
+        ("RUB", "stock", 1),
+    ]
+    assert [row.priced_market_minor for row in rows] == [1800, 2000, 1000]
+    assert [row.share_basis_points for row in rows] == [10000, 6667, 3333]
+
+
+def test_allocation_hides_denomination_share_on_partial_prices_or_unavailable_accounts():
+    records = [
+        saved(1000, ACCOUNT, SHARE, [trade(1, TradeKind.BUY, 1, 500)], [quote(SHARE, "5")]),
+        saved(1001, ACCOUNT, FUND, [trade(1, TradeKind.BUY, 1, 600, security=FUND)]),
+        saved(1002, OTHER, SHARE, [trade(1, TradeKind.BUY, 1, 500, account=OTHER)]),
+    ]
+    fund, share = portfolio_allocation(report_saved_portfolio([ACCOUNT], records[:2], TODAY))
+    assert (fund.priced_market_minor, fund.unpriced_count, fund.share_basis_points) == (
+        None,
+        1,
+        None,
+    )
+    assert (share.priced_market_minor, share.unpriced_count, share.share_basis_points) == (
+        500,
+        0,
+        None,
+    )
+
+    (partial,) = portfolio_allocation(
+        report_saved_portfolio([ACCOUNT], [records[0], records[2]], TODAY)
+    )
+    assert (partial.priced_market_minor, partial.share_basis_points) == (500, None)
+
+
+def test_allocation_distinguishes_zero_price_from_a_zero_total():
+    zero = saved(1000, ACCOUNT, SHARE, [trade(1, TradeKind.BUY, 1, 500)], [quote(SHARE, "0")])
+    fund = saved(
+        1001, ACCOUNT, FUND, [trade(1, TradeKind.BUY, 1, 600, security=FUND)], [quote(FUND, "5")]
+    )
+    (no_denominator,) = portfolio_allocation(report_saved_portfolio([ACCOUNT], [zero], TODAY))
+    assert (no_denominator.priced_market_minor, no_denominator.share_basis_points) == (0, None)
+    valued, zero_share = portfolio_allocation(
+        report_saved_portfolio([ACCOUNT], [zero, fund], TODAY)
+    )
+    assert (valued.share_basis_points, zero_share.share_basis_points) == (10000, 0)

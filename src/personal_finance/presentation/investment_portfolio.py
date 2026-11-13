@@ -15,7 +15,11 @@ from PySide6.QtWidgets import (
 
 from personal_finance.domain.financial_assets import FinancialAssetTotal
 from personal_finance.domain.investment_cash_reconciliation import InvestmentCashRow
-from personal_finance.domain.investment_portfolio import PortfolioRow, SavedPortfolioReport
+from personal_finance.domain.investment_portfolio import (
+    PortfolioRow,
+    SavedPortfolioReport,
+    portfolio_allocation,
+)
 from personal_finance.domain.models import RUB, Currency
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.deposit_scenarios import date_text
@@ -89,7 +93,13 @@ class InvestmentPortfolioDialog(QDialog):
         self.account_names = account_names or {}
         self.category_names = category_names or {}
         layout = QVBoxLayout(self)
-        layout.addWidget(_label(f"На конец {date_text(report.as_of)} · Только ценные бумаги"))
+        title_row = QHBoxLayout()
+        title_row.addWidget(_label(f"На конец {date_text(report.as_of)} · Только ценные бумаги"), 1)
+        self.show_allocation = QPushButton("Структура портфеля")
+        self.show_allocation.clicked.connect(self._open_allocation)
+        self.show_allocation.setVisible(any(row.position.quantity for row in report.rows))
+        title_row.addWidget(self.show_allocation)
+        layout.addLayout(title_row)
         if report.unavailable_count:
             layout.addWidget(_label(f"Позиций на недоступных счетах: {report.unavailable_count}."))
         self.show_assets = QPushButton("Деньги и бумаги")
@@ -204,6 +214,9 @@ class InvestmentPortfolioDialog(QDialog):
         footer.addWidget(self.export)
         layout.addWidget(actions)
 
+    def _open_allocation(self) -> None:
+        present_form(PortfolioAllocationDialog(self.report, self), None)
+
     def _open_assets(self) -> None:
         dialog = FinancialAssetsDialog(
             self.report.as_of, self.assets, self.report.unavailable_count, self
@@ -233,3 +246,52 @@ class InvestmentPortfolioDialog(QDialog):
             row.position.account, inputs.security, inputs.events, self.report.as_of, inputs.prices
         )
         present_form(InvestmentPreviewDialog(request, row.valuation, self), None)
+
+
+class PortfolioAllocationDialog(QDialog):
+    def __init__(self, report: SavedPortfolioReport, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Структура портфеля")
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            _label(
+                f"Открытые позиции на конец {date_text(report.as_of)}. "
+                "Доли рассчитаны отдельно для каждой валюты."
+            )
+        )
+        rows = portfolio_allocation(report)
+        if report.unavailable_count or any(row.unpriced_count for row in rows):
+            layout.addWidget(
+                _label(
+                    "Для расчёта долей нужны все позиции и цены. "
+                    "В оценку вошли только бумаги с ценой."
+                )
+            )
+        if any(
+            item.open_count and not item.unpriced_count and item.priced_market_minor == 0
+            for item in report.totals
+        ):
+            layout.addWidget(_label("При нулевой оценке всей валюты доли не рассчитываются."))
+        self.table = _table("Структура портфеля по видам ценных бумаг")
+        replace_table(
+            self.table,
+            ["Вид бумаг", "Валюта", "Позиций", "Оценка", "Без цены", "Доля"],
+            [
+                [
+                    SECURITY_LABELS[row.kind],
+                    row.currency.code,
+                    str(row.open_count),
+                    _amount(row.priced_market_minor, row.currency),
+                    str(row.unpriced_count),
+                    (
+                        "—"
+                        if row.share_basis_points is None
+                        else f"{format_report_amount(row.share_basis_points, RUB)} %"
+                    ),
+                ]
+                for row in rows
+            ],
+            right_columns=(2, 3, 4, 5),
+        )
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table, 1)

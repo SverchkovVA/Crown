@@ -12,7 +12,7 @@ from personal_finance.domain.investment_prices import (
     position_result,
     value_investments,
 )
-from personal_finance.domain.investments import SecurityPosition, project_investments
+from personal_finance.domain.investments import SecurityKind, SecurityPosition, project_investments
 from personal_finance.domain.models import Account, Currency
 
 
@@ -44,6 +44,44 @@ class SavedPortfolioReport:
     rows: tuple[PortfolioRow, ...]
     totals: tuple[PortfolioCurrencyTotal, ...]
     unavailable_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioAllocation:
+    currency: Currency
+    kind: SecurityKind
+    open_count: int
+    unpriced_count: int
+    priced_market_minor: int | None
+    share_basis_points: int | None
+
+
+def portfolio_allocation(report: SavedPortfolioReport) -> tuple[PortfolioAllocation, ...]:
+    totals = {total.currency: total for total in report.totals}
+    groups: dict[tuple[Currency, SecurityKind], list[PortfolioRow]] = {}
+    for row in report.rows:
+        if row.position.quantity:
+            security = row.position.security
+            groups.setdefault((security.currency, security.kind), []).append(row)
+    result = []
+    for currency, kind in sorted(groups, key=lambda key: (key[0].code, key[1].value)):
+        rows = groups[(currency, kind)]
+        known = [row.market_minor for row in rows if row.market_minor is not None]
+        subtotal = sum(known) if known else None
+        total = totals[currency]
+        share = None
+        if (
+            subtotal is not None
+            and total.priced_market_minor
+            and not total.unpriced_count
+            and not report.unavailable_count
+        ):
+            whole, remainder = divmod(subtotal * 10000, total.priced_market_minor)
+            share = whole + int(2 * remainder >= total.priced_market_minor)
+        result.append(
+            PortfolioAllocation(currency, kind, len(rows), len(rows) - len(known), subtotal, share)
+        )
+    return tuple(result)
 
 
 def _currency_total(currency: Currency, rows: list[PortfolioRow]) -> PortfolioCurrencyTotal:

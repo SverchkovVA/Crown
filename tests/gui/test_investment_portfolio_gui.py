@@ -9,6 +9,7 @@ from personal_finance.domain.models import RUB, AccountKind
 from personal_finance.presentation.investment_portfolio import (
     InvestmentPortfolioDialog,
     InvestmentPortfolioOptions,
+    PortfolioAllocationDialog,
 )
 from personal_finance.presentation.investment_preview import InvestmentPreviewDialog
 from personal_finance.presentation.main_window import MainWindow
@@ -44,6 +45,18 @@ def test_saved_portfolio_uses_book_snapshot_and_opens_fifo_details(tmp_path, qtb
         assert report.totals.model().item(0, 3).text() == "1"
         assert report.totals.model().item(0, 6).text() == "—"
         assert not report.details.isEnabled()
+        report.show_allocation.click()
+        allocation = current(window, PortfolioAllocationDialog)
+        assert [allocation.table.model().item(0, i).text() for i in range(6)] == [
+            "Акция",
+            "RUB",
+            "2",
+            "10,00",
+            "1",
+            "—",
+        ]
+        window._report_forms.back.click()
+        assert current(window, InvestmentPortfolioDialog) is report
         row_index = next(
             i
             for i, row in enumerate(report.report.rows)
