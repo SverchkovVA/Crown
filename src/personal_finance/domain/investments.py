@@ -131,6 +131,16 @@ PortfolioEvent = SecurityTrade | SecurityDistribution
 
 
 @dataclass(frozen=True, slots=True)
+class StockSplit(InvestmentEvent):
+    multiplier: int
+
+    def __post_init__(self) -> None:
+        InvestmentEvent.__post_init__(self)
+        if type(self.multiplier) is not int or not 2 <= self.multiplier <= MAX_MINOR:
+            raise ValidationError("Коэффициент дробления должен быть целым числом от двух.")
+
+
+@dataclass(frozen=True, slots=True)
 class OpenLot:
     acquisition_id: str
     acquired_on: date
@@ -183,29 +193,41 @@ class InvestmentPortfolio:
     positions: tuple[SecurityPosition, ...]
     disposals: tuple[Disposal, ...]
     distributions: tuple[SecurityDistribution, ...]
+    splits: tuple[StockSplit, ...] = ()
 
 
 @dataclass(slots=True)
 class _Lot:
-    trade: SecurityTrade
+    acquisition_id: str
+    acquired_on: date
+    quantity: int
+    cost_minor: int
     sold: int = 0
 
     def _cumulative_cost(self, quantity: int) -> int:
-        whole, rest = divmod(-self.trade.cash_delta_minor * quantity, self.trade.quantity)
-        return whole + int(2 * rest >= self.trade.quantity)
+        whole, rest = divmod(self.cost_minor * quantity, self.quantity)
+        return whole + int(2 * rest >= self.quantity)
 
     def allocate(self, quantity: int) -> FifoAllocation:
         before = self._cumulative_cost(self.sold)
         self.sold += quantity
-        return FifoAllocation(self.trade.id, quantity, self._cumulative_cost(self.sold) - before)
+        return FifoAllocation(
+            self.acquisition_id, quantity, self._cumulative_cost(self.sold) - before
+        )
 
     def open_lot(self) -> OpenLot:
         return OpenLot(
-            self.trade.id,
-            self.trade.occurred_on,
-            self.trade.quantity - self.sold,
-            -self.trade.cash_delta_minor - self._cumulative_cost(self.sold),
+            self.acquisition_id,
+            self.acquired_on,
+            self.quantity - self.sold,
+            self.cost_minor - self._cumulative_cost(self.sold),
         )
+
+    def split(self, multiplier: int) -> None:
+        remaining = self.open_lot()
+        self.quantity = remaining.quantity * multiplier
+        self.cost_minor = remaining.cost_minor
+        self.sold = 0
 
 
 @dataclass(slots=True)
@@ -223,15 +245,23 @@ class _Position:
         allocations = []
         while remaining:
             lot = self.lots[0]
-            taken = min(remaining, lot.trade.quantity - lot.sold)
+            taken = min(remaining, lot.quantity - lot.sold)
             allocations.append(lot.allocate(taken))
             remaining -= taken
-            if lot.sold == lot.trade.quantity:
+            if lot.sold == lot.quantity:
                 self.lots.popleft()
         self.quantity -= trade.quantity
         disposal = Disposal(trade, tuple(allocations))
         self.realized_minor += disposal.realized_minor
         return disposal
+
+    def split(self, event: StockSplit) -> None:
+        quantity = self.quantity * event.multiplier
+        if not 1 <= quantity <= MAX_MINOR:
+            raise ValidationError("Дробление требует открытых акций в допустимом количестве.")
+        for lot in self.lots:
+            lot.split(event.multiplier)
+        self.quantity = quantity
 
 
 def _check_security(event: PortfolioEvent, account: Account, security: Security) -> None:
@@ -257,6 +287,8 @@ def project_investments(
     securities: Sequence[Security],
     events: Sequence[PortfolioEvent],
     as_of: date,
+    *,
+    splits: Sequence[StockSplit] = (),
 ) -> InvestmentPortfolio:
     if type(as_of) is not date:
         raise ValidationError("Укажите календарную дату инвестиционного отчёта.")
@@ -282,15 +314,23 @@ def project_investments(
 
     event_ids: set[str] = set()
     orders: set[tuple[str, date, int]] = set()
-    current = []
-    for event in events:
-        if not isinstance(event, (SecurityTrade, SecurityDistribution)):
-            raise ValidationError("Укажите сделку или денежную выплату.")
+    current: list[PortfolioEvent | StockSplit] = []
+    if any(not isinstance(event, (SecurityTrade, SecurityDistribution)) for event in events):
+        raise ValidationError("Укажите сделку или денежную выплату.")
+    if any(not isinstance(split, StockSplit) for split in splits):
+        raise ValidationError("Укажите событие дробления акций.")
+    for event in (*events, *splits):
         matched_account = account_by_id.get(event.account_id)
         matched_security = security_by_id.get(event.security_id)
         if matched_account is None or matched_security is None:
             raise ValidationError("Для операции отсутствует счёт или инструмент.")
-        _check_security(event, matched_account, matched_security)
+        if isinstance(event, StockSplit):
+            if matched_security.kind is not SecurityKind.STOCK:
+                raise ValidationError("Дробление предусмотрено для акций.")
+            if matched_account.currency != matched_security.currency.code:
+                raise ValidationError("Валюты акции и счёта должны совпадать.")
+        else:
+            _check_security(event, matched_account, matched_security)
         order = event.account_id, event.occurred_on, event.sequence
         if event.id in event_ids or order in orders:
             raise ValidationError("Операция или её порядковый номер за день повторяется.")
@@ -302,16 +342,22 @@ def project_investments(
     positions: dict[tuple[str, str], _Position] = {}
     disposals = []
     distributions = []
+    applied_splits = []
     for event in sorted(current, key=lambda row: (row.occurred_on, row.account_id, row.sequence)):
         key = event.account_id, event.security_id
         position = positions.get(key)
         if position is None:
             position = positions[key] = _Position()
-        if isinstance(event, SecurityDistribution):
+        if isinstance(event, StockSplit):
+            position.split(event)
+            applied_splits.append(event)
+        elif isinstance(event, SecurityDistribution):
             position.distributions_minor += event.received.minor
             distributions.append(event)
         elif event.kind is TradeKind.BUY:
-            position.lots.append(_Lot(event))
+            position.lots.append(
+                _Lot(event.id, event.occurred_on, event.quantity, -event.cash_delta_minor)
+            )
             position.quantity += event.quantity
             position.purchases_minor -= event.cash_delta_minor
         else:
@@ -332,4 +378,5 @@ def project_investments(
         ),
         tuple(disposals),
         tuple(distributions),
+        tuple(applied_splits),
     )

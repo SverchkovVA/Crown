@@ -173,6 +173,12 @@ def value_investments(
         if current is None or current.quoted_on < price.quoted_on:
             eligible[price.security_id] = price
 
+    latest_split: dict[tuple[str, str], date] = {}
+    for event in portfolio.splits:
+        position_key = event.account_id, event.security_id
+        latest_split[position_key] = max(
+            latest_split.get(position_key, date.min), event.occurred_on
+        )
     values = []
     by_currency: dict[Currency, list[ValuedPosition]] = {}
     for position in portfolio.positions:
@@ -181,6 +187,10 @@ def value_investments(
             continue
         security = position.security
         quote = eligible.get(security.id)
+        if quote and quote.quoted_on < latest_split.get(
+            (position.account.id, security.id), date.min
+        ):
+            quote = None
         value = None if quote is None else market_value_minor(security, quote, quantity)
         row = ValuedPosition(position, quote, value)
         values.append(row)
