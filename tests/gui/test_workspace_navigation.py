@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.domain.models import AccountKind
+from personal_finance.presentation.backup_contents import BackupContentsDialog
 from personal_finance.presentation.dialogs import PasswordDialog
 from personal_finance.presentation.ledger_dialogs import OperationDialog
 from personal_finance.presentation.main_window import MainWindow
@@ -180,7 +181,11 @@ def test_backup_and_integrity_run_from_settings_without_action_windows(
     assert backup.is_file() and "Создана и проверена" in panel.page_notice.text()
     click("Проверить резервную копию")
     submit()
-    assert "прочитаны и проверены" in panel.page_notice.text()
+    contents = panel.stack.currentWidget().widget()
+    assert isinstance(contents, BackupContentsDialog) and not contents.isWindow()
+    assert contents.windowTitle() == "Состав резервной копии"
+    panel.back.click()
+    assert page.isVisible()
     click("Проверить целостность книги")
     qtbot.waitUntil(lambda: not window._busy, timeout=15000)
     assert "Целостность базы" in panel.page_notice.text()
