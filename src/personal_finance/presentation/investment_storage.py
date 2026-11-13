@@ -5,7 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QDialog, QHeaderView, QPushButton, QVBoxLayout
+from PySide6.QtCore import QDate, Signal
+from PySide6.QtWidgets import (
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.errors import ValidationError
@@ -18,8 +27,12 @@ from personal_finance.infrastructure.persistence.investment_position_repository 
 )
 from personal_finance.presentation.analytics import _label
 from personal_finance.presentation.inline_forms import InlineForms, present_form
-from personal_finance.presentation.investment_preview import InvestmentPreviewOptions
-from personal_finance.presentation.recurring_payments import _table
+from personal_finance.presentation.investment_preview import (
+    InvestmentPreviewOptions,
+    InvestmentPreviewRequest,
+)
+from personal_finance.presentation.periods import local_time
+from personal_finance.presentation.recurring_payments import _date, _date_input, _table
 from personal_finance.presentation.tables import replace_table
 
 if TYPE_CHECKING:
@@ -27,6 +40,8 @@ if TYPE_CHECKING:
 
 
 class SavedInvestmentPositionsDialog(QDialog):
+    historyRequested = Signal()
+
     def __init__(
         self,
         records: Sequence[SavedInvestmentPosition],
@@ -61,19 +76,87 @@ class SavedInvestmentPositionsDialog(QDialog):
         layout.addWidget(self.table, 1)
         self.open_button = QPushButton("Открыть позицию")
         self.open_button.setObjectName("primary")
-        self.open_button.setEnabled(False)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
         self.open_button.clicked.connect(self._open)
-        layout.addWidget(self.open_button)
+        self.history_button = QPushButton("История версий")
+        self.history_button.clicked.connect(self.historyRequested)
+        actions = QHBoxLayout()
+        actions.addWidget(self.open_button)
+        actions.addWidget(self.history_button)
+        actions.addStretch()
+        layout.addLayout(actions)
+        self._selection_changed()
+
+    def selection(self) -> SavedInvestmentPosition | None:
+        rows = self.table.selectionModel().selectedRows()
+        return self.records[rows[0].row()] if rows else None
 
     def _selection_changed(self) -> None:
-        self.open_button.setEnabled(bool(self.table.selectionModel().selectedRows()))
+        selected = self.selection() is not None
+        self.open_button.setEnabled(selected)
+        self.history_button.setEnabled(selected)
 
     def _open(self) -> None:
-        rows = self.table.selectionModel().selectedRows()
-        if rows:
-            self.selected = self.records[rows[0].row()]
+        if (record := self.selection()) is not None:
+            self.selected = record
             self.accept()
+
+
+class InvestmentVersionHistoryDialog(QDialog):
+    calculationRequested = Signal()
+
+    def __init__(
+        self,
+        versions: Sequence[SavedInvestmentPosition],
+        day: QDate,
+        parent: QWidget,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("История инвестиционной позиции")
+        self.versions = tuple(reversed(versions))
+        layout = QVBoxLayout(self)
+        layout.addWidget(_label("Выберите сохранённую версию для просмотра её расчёта."))
+        self.table = _table("Неизменяемые версии позиции")
+        replace_table(
+            self.table,
+            ["Версия", "Сохранена", "Инструмент", "Состояние", "Операций", "Ручных цен"],
+            [
+                [
+                    str(len(self.versions) - index),
+                    local_time(record.created_at),
+                    record.inputs.security.code,
+                    "Архивная" if record.is_deleted else "Действующая" if index == 0 else "Прежняя",
+                    str(len(record.inputs.events)),
+                    str(len(record.inputs.prices)),
+                ]
+                for index, record in enumerate(self.versions)
+            ],
+            right_columns=(4, 5),
+        )
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table, 1)
+        actions = QHBoxLayout()
+        date_form = QFormLayout()
+        self.as_of = _date_input(day, "Дата расчёта версии позиции")
+        date_form.addRow("На дату", self.as_of)
+        actions.addLayout(date_form)
+        self.calculate = QPushButton("Посмотреть расчёт")
+        self.calculate.setObjectName("primary")
+        self.calculate.clicked.connect(self.calculationRequested)
+        actions.addWidget(self.calculate)
+        actions.addStretch()
+        layout.addLayout(actions)
+        self.table.selectionModel().selectionChanged.connect(self._selection_changed)
+        self._selection_changed()
+
+    def selection(self) -> SavedInvestmentPosition | None:
+        rows = self.table.selectionModel().selectedRows()
+        return self.versions[rows[0].row()] if rows else None
+
+    def _selection_changed(self) -> None:
+        self.calculate.setEnabled(self.selection() is not None)
 
 
 class InvestmentStorage:
@@ -118,9 +201,40 @@ class InvestmentStorage:
                 ):
                     self.open_record(dialog.selected)
 
+            dialog.historyRequested.connect(lambda: self._show_history(dialog))
             present_form(dialog, self.panel, completed)
 
         self.window._panel_job(self.panel, load, show, "Загрузка инвестиционных позиций…")
+
+    def _show_history(self, picker: SavedInvestmentPositionsDialog) -> None:
+        record = picker.selection()
+        if record is None or not self._current() or self.window._busy:
+            return
+
+        def load() -> list[SavedInvestmentPosition]:
+            with self.session.mutex:
+                self.session.ensure_open()
+                return self.service.history(record.id)
+
+        def show(versions: list[SavedInvestmentPosition]) -> None:
+            if not self._current() or not picker.isVisible():
+                return
+            dialog = InvestmentVersionHistoryDialog(versions, self.options.as_of.date(), picker)
+
+            def calculate() -> None:
+                if (selected := dialog.selection()) is None or not self._current():
+                    return
+                inputs = selected.inputs
+                account = self.options.accounts[inputs.account_id]
+                request = InvestmentPreviewRequest(
+                    account, inputs.security, inputs.events, _date(dialog.as_of), inputs.prices
+                )
+                self.window._show_investment_calculation(self.session, request)
+
+            dialog.calculationRequested.connect(calculate)
+            present_form(dialog, self.panel)
+
+        self.window._panel_job(self.panel, load, show, "Загрузка истории позиции…")
 
     def save(self) -> None:
         if not self._current() or self.window._busy:

@@ -184,6 +184,7 @@ from personal_finance.presentation.investment_portfolio import (
 from personal_finance.presentation.investment_preview import (
     InvestmentPreviewDialog,
     InvestmentPreviewOptions,
+    InvestmentPreviewRequest,
 )
 from personal_finance.presentation.investment_storage import InvestmentStorage
 from personal_finance.presentation.jobs import Job, JobSignals
@@ -848,36 +849,38 @@ class MainWindow(QMainWindow):
             )
 
         def calculate() -> None:
-            request = options.request
-            if self._busy or self.session is not session or request is None:
-                return
-
-            def build() -> InvestmentValuation:
-                with session.mutex:
-                    session.ensure_open()
-                    account = next(
-                        (
-                            item
-                            for item in session.catalog.accounts()
-                            if item.id == request.account.id
-                        ),
-                        None,
-                    )
-                if account is None:
-                    raise ValidationError("Инвестиционный счёт больше недоступен.")
-                portfolio = project_investments(
-                    (account,), (request.security,), request.events, request.as_of
-                )
-                return value_investments(portfolio, request.prices)
-
-            def show(result: InvestmentValuation) -> None:
-                if self.session is session:
-                    present_form(InvestmentPreviewDialog(request, result, self), panel)
-
-            self._panel_job(panel, build, show, "Расчёт инвестиционной позиции…")
+            if options.request is not None:
+                self._show_investment_calculation(session, options.request)
 
         options.calculationRequested.connect(calculate)
         present_form(options, panel)
+
+    def _show_investment_calculation(
+        self, session: VaultSession, request: InvestmentPreviewRequest
+    ) -> None:
+        if self._busy or self.session is not session:
+            return
+        panel = self._report_forms
+
+        def build() -> InvestmentValuation:
+            with session.mutex:
+                session.ensure_open()
+                account = next(
+                    (item for item in session.catalog.accounts() if item.id == request.account.id),
+                    None,
+                )
+            if account is None:
+                raise ValidationError("Инвестиционный счёт больше недоступен.")
+            portfolio = project_investments(
+                (account,), (request.security,), request.events, request.as_of
+            )
+            return value_investments(portfolio, request.prices)
+
+        def show(result: InvestmentValuation) -> None:
+            if self.session is session:
+                present_form(InvestmentPreviewDialog(request, result, self), panel)
+
+        self._panel_job(panel, build, show, "Расчёт инвестиционной позиции…")
 
     def request_budget(self, *, panel: InlineForms | None = None) -> None:
         session = self.session

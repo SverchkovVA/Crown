@@ -15,7 +15,10 @@ from personal_finance.presentation.investment_preview import (
     InvestmentPreviewOptions,
 )
 from personal_finance.presentation.investment_price_history import ManualPriceHistory
-from personal_finance.presentation.investment_storage import SavedInvestmentPositionsDialog
+from personal_finance.presentation.investment_storage import (
+    InvestmentVersionHistoryDialog,
+    SavedInvestmentPositionsDialog,
+)
 from personal_finance.presentation.main_window import MainWindow
 from tests.conftest import PASSWORD
 from tests.gui.test_investment_preview_gui import add, show_position
@@ -64,6 +67,27 @@ def test_save_open_and_revise_investment_position_in_embedded_workflow(tmp_path,
         (second,) = session.investment_positions.items()
         assert second.id == first.id and second.revision_id != first.revision_id
         assert second.inputs.events[0].quantity == 4 and second.inputs.prices == first.inputs.prices
+        loaded.open_saved.click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+        picker = current(window, SavedInvestmentPositionsDialog)
+        assert not picker.history_button.isEnabled()
+        picker.table.selectRow(0)
+        picker.history_button.click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+        history = current(window, InvestmentVersionHistoryDialog)
+        assert history.versions == (second, first)
+        assert not history.calculate.isEnabled()
+        assert history.table.model().item(1, 3).text() == "Прежняя"
+        history.table.selectRow(1)
+        history.as_of.setDate(QDate(2026, 11, 12))
+        history.calculate.click()
+        qtbot.waitUntil(lambda: not window._busy, timeout=15000)
+        calculation = current(window, InvestmentPreviewDialog)
+        assert calculation.valuation.positions[0].position.quantity == 3
+        assert calculation.valuation.positions[0].market_minor == 3600
+        window._report_forms.back.click()
+        assert current(window, InvestmentVersionHistoryDialog) is history
+        assert session.investment_positions.history(first.id) == [first, second]
         assert (session.ledger.operations(), session.ledger.balances()) == before
         window.lock_book()
         reopened = open_vault(path, PASSWORD)
