@@ -11,6 +11,11 @@ from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
 from personal_finance.domain.analytics import ReportPeriod
 from personal_finance.domain.balance_forecast import PaymentMatch, check_reserve, match_payments
+from personal_finance.domain.investment_portfolio import report_saved_portfolio
+from personal_finance.domain.investment_positions import (
+    InvestmentPositionInputs,
+    SavedInvestmentPosition,
+)
 from personal_finance.domain.investment_prices import ManualPrice, PriceUnit, value_investments
 from personal_finance.domain.investments import (
     Security,
@@ -30,6 +35,7 @@ from personal_finance.domain.savings_goals import SavingsGoalScenario, project_s
 from personal_finance.presentation.account_position import AccountPositionDialog
 from personal_finance.presentation.balance_forecast import BalanceForecastDialog
 from personal_finance.presentation.budget import BudgetDialog
+from personal_finance.presentation.investment_portfolio import InvestmentPortfolioDialog
 from personal_finance.presentation.investment_preview import (
     InvestmentPreviewDialog,
     InvestmentPreviewRequest,
@@ -154,10 +160,7 @@ def check_planning_reports(
         raise RuntimeError("Проверка отчётов планирования изменила книгу.")
 
 
-def _investment_preview(day: date) -> InvestmentPreviewDialog:
-    account = Account(
-        str(uuid4()), "Синтетический инвестиционный счёт", AccountKind.INVESTMENT, None
-    )
+def _investment_inputs(account: Account, day: date) -> InvestmentPositionInputs:
     security = Security(str(uuid4()), "TEST", "Синтетическая акция", SecurityKind.STOCK)
     events = tuple(
         SecurityTrade(
@@ -178,7 +181,16 @@ def _investment_preview(day: date) -> InvestmentPreviewDialog:
         )
     )
     quote = ManualPrice(security.id, day, PriceUnit.CASH_PER_SECURITY, Decimal("5.55"), RUB)
-    request = InvestmentPreviewRequest(account, security, events, day, (quote,))
+    return InvestmentPositionInputs(account.id, security, events, (quote,))
+
+
+def _investment_preview(day: date) -> InvestmentPreviewDialog:
+    account = Account(
+        str(uuid4()), "Синтетический инвестиционный счёт", AccountKind.INVESTMENT, None
+    )
+    inputs = _investment_inputs(account, day)
+    security, events = inputs.security, inputs.events
+    request = InvestmentPreviewRequest(account, security, events, day, inputs.prices)
     portfolio = project_investments((account,), (security,), events, day)
     result = value_investments(portfolio, request.prices)
     (row,) = result.positions
@@ -198,3 +210,47 @@ def _investment_preview(day: date) -> InvestmentPreviewDialog:
     ):
         raise RuntimeError("Партии FIFO недоступны в интерфейсе инвестиционной позиции.")
     return dialog
+
+
+def store_investment_example(
+    session: VaultSession, day: date
+) -> tuple[SavedInvestmentPosition, SavedInvestmentPosition, str]:
+    storage = session.investment_positions
+    if storage is None:
+        raise RuntimeError("Сохранение инвестиционных позиций недоступно в новой книге.")
+    account = session.catalog.add_account("Синтетический инвестсчёт", AccountKind.INVESTMENT)
+    inputs = _investment_inputs(account, day)
+    command = str(uuid4())
+    first = storage.save(inputs, command_id=command)
+    second = storage.save(inputs, identifier=first.id, expected_revision_id=first.revision_id)
+    check_investment_example(session, day, first, second, command)
+    return first, second, command
+
+
+def check_investment_example(
+    session: VaultSession,
+    day: date,
+    first: SavedInvestmentPosition,
+    second: SavedInvestmentPosition,
+    command: str,
+) -> None:
+    storage = session.investment_positions
+    if (
+        storage is None
+        or storage.items() != [second]
+        or storage.history(first.id) != [first, second]
+        or storage.save(first.inputs, command_id=command) != first
+    ):
+        raise RuntimeError("Версии инвестиционной позиции или квитанция не сохранились.")
+    report = report_saved_portfolio(session.catalog.accounts(), storage.items(), day)
+    (total,) = report.totals
+    if total.priced_market_minor != 555 or total.result_minor != 342 or total.unpriced_count:
+        raise RuntimeError("Итог портфеля не совпал с сохранённой позицией.")
+    dialog = InvestmentPortfolioDialog(report)
+    try:
+        if dialog.positions.model().rowCount() != 1:
+            raise RuntimeError("Сохранённая позиция недоступна в интерфейсе портфеля.")
+    finally:
+        dialog.reject()
+        dialog.deleteLater()
+        QCoreApplication.sendPostedEvents(dialog, QEvent.Type.DeferredDelete)

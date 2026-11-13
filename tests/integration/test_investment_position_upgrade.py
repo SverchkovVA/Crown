@@ -1,9 +1,7 @@
-"""Сквозная проверка 0017 только во временной цепочке Alembic."""
+"""Сквозная проверка 0017 на временных книгах штатным путём."""
 
 import hashlib
-import shutil
 from contextlib import closing
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -15,9 +13,6 @@ from personal_finance.domain.ledger import OperationDraft, OperationKind
 from personal_finance.domain.models import AccountKind, Money
 from personal_finance.infrastructure.backup import container
 from personal_finance.infrastructure.persistence import migration_runner as migrations
-from personal_finance.infrastructure.persistence.migrations.candidates import (
-    v0017_investment_positions,
-)
 from tests.conftest import BACKUP_PASSWORD, PASSWORD
 from tests.integration.test_deposit_scenario_upgrade import create_at
 from tests.integration.test_planning_scenario_upgrade import hashes, state
@@ -26,35 +21,7 @@ from tests.unit.test_investments import TODAY
 from tests.unit.test_payment_calendar_codec import calendar
 
 NEW_PASSWORD = "Вымышленный пароль восстановления инвестиционных позиций"
-BASE_SCHEMAS = migrations.SUPPORTED_SCHEMAS
-
-
-@pytest.fixture
-def candidate_schema(tmp_path, monkeypatch):
-    assert migrations.SCHEMA_HEAD == "0016" and "0017" not in migrations.SUPPORTED_SCHEMAS
-    runtime = tmp_path / "candidate-migrations"
-    path = Path(migrations.__file__).with_name("migrations")
-    shutil.copytree(path, runtime, ignore=shutil.ignore_patterns("__pycache__"))
-    shutil.copyfile(
-        Path(v0017_investment_positions.__file__),
-        runtime / "versions/v0017_investment_positions.py",
-    )
-    configuration = migrations._configuration
-
-    def test_configuration():
-        config = configuration()
-        config.set_main_option("script_location", str(runtime))
-        return config
-
-    monkeypatch.setattr(migrations, "_configuration", test_configuration)
-    monkeypatch.setattr(migrations, "SCHEMA_HEAD", "0017")
-    monkeypatch.setattr(migrations, "SUPPORTED_SCHEMAS", (*BASE_SCHEMAS, "0017"))
-    monkeypatch.setattr(container, "SUPPORTED_SCHEMAS", (*BASE_SCHEMAS, "0017"))
-    monkeypatch.setattr(
-        vault,
-        "initialize_schema",
-        lambda engine: migrations.initialize_schema(engine, target="0017"),
-    )
+BASE_SCHEMAS = tuple(version for version in migrations.SUPPORTED_SCHEMAS if version < "0017")
 
 
 def restore(archive, target):
@@ -62,9 +29,7 @@ def restore(archive, target):
 
 
 @pytest.mark.parametrize("version", BASE_SCHEMAS)
-def test_old_book_restores_to_candidate_only_in_new_folder(
-    candidate_schema, tmp_path, monkeypatch, version
-):
+def test_old_book_restores_to_0017_only_in_new_folder(tmp_path, monkeypatch, version):
     source = tmp_path / "original.pfvault"
     session, _ = create_at(monkeypatch, source, version)
     try:
@@ -100,9 +65,7 @@ def test_old_book_restores_to_candidate_only_in_new_folder(
         assert reopened.schema_revision == version and reopened.investment_positions is None
 
 
-def test_candidate_preserves_versions_receipts_and_rejects_an_older_reader(
-    candidate_schema, tmp_path, monkeypatch
-):
+def test_0017_preserves_versions_receipts_and_rejects_an_older_reader(tmp_path, monkeypatch):
     path = tmp_path / "positions.pfvault"
     source, old_pf = vault.create_vault(path, "Синтетическая книга 0017", PASSWORD)
     command = str(uuid4())
@@ -155,7 +118,7 @@ def test_candidate_preserves_versions_receipts_and_rejects_an_older_reader(
         "CREATE TRIGGER investment_position_unique_active",
     ],
 )
-def test_candidate_restore_fault_never_publishes(candidate_schema, tmp_path, monkeypatch, prefix):
+def test_0017_restore_fault_never_publishes(tmp_path, monkeypatch, prefix):
     source = tmp_path / "original.pfvault"
     session, _ = create_at(monkeypatch, source, "0016")
     try:

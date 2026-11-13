@@ -28,13 +28,15 @@ from tests.unit.test_planning_scenarios import goal
 NEW_PASSWORD = "Новая вымышленная парольная фраза проверки календарей"
 
 
-def restore16(archive, target):
-    return container.restore_backup(archive, target, BACKUP_PASSWORD, NEW_PASSWORD)
+def restore16(archive, target, monkeypatch):
+    with monkeypatch.context() as patch:
+        patch.setattr(migrations, "SCHEMA_HEAD", "0016")
+        return container.restore_backup(archive, target, BACKUP_PASSWORD, NEW_PASSWORD)
 
 
-def test_default16_saves_versions_and_survives_backup_restore(tmp_path):
+def test_explicit16_saves_versions_and_survives_backup_restore(tmp_path, monkeypatch):
     source = tmp_path / "calendar.pfvault"
-    session, old_pf = vault.create_vault(source, "Синтетическая книга 0016", PASSWORD)
+    session, old_pf = create_at(monkeypatch, source, "0016")
     try:
         account = session.catalog.add_account("Проверочный счёт", AccountKind.CASH)
         session.ledger.add(
@@ -65,7 +67,7 @@ def test_default16_saves_versions_and_survives_backup_restore(tmp_path):
         session.close()
     before = hashes(source)
     target = tmp_path / "restored.pfvault"
-    restored, new_pf = restore16(archive, target)
+    restored, new_pf = restore16(archive, target, monkeypatch)
     try:
         assert restored.schema_revision == "0016" and restored.replica_id != replica
         assert new_pf != old_pf
@@ -107,7 +109,7 @@ def test_each_previous_schema_restores_to_default16_and_keeps_source(
     finally:
         session.close()
     before = hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest()
-    restored, _ = restore16(archive, tmp_path / "new.pfvault")
+    restored, _ = restore16(archive, tmp_path / "new.pfvault", monkeypatch)
     try:
         assert restored.schema_revision == "0016"
         actual = state(restored)
@@ -163,7 +165,7 @@ def test_migration_failure_never_publishes_a_book(tmp_path, monkeypatch, prefix)
     with monkeypatch.context() as patch:
         patch.setattr(op, "execute", fail)
         with pytest.raises(OSError, match="Вымышленный отказ"):
-            restore16(archive, target)
+            restore16(archive, target, monkeypatch)
     assert not target.exists()
     assert not list(tmp_path.glob(".pf-restore-*"))
     assert before == (hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest())
@@ -193,7 +195,8 @@ def test_sql_guards_block_invalid_payload_and_old_reader_leaves_book_intact(tmp_
     finally:
         session.close()
     before = hashes(source)
-    monkeypatch.setattr(migrations, "SUPPORTED_SCHEMAS", migrations.SUPPORTED_SCHEMAS[:-1])
+    older = tuple(version for version in migrations.SUPPORTED_SCHEMAS if version < "0016")
+    monkeypatch.setattr(migrations, "SUPPORTED_SCHEMAS", older)
     with pytest.raises(VaultError):
         vault.open_vault(source, PASSWORD)
     assert hashes(source) == before

@@ -1,6 +1,7 @@
-"""Синтетические проверки подготовленной, неактивной схемы 0017."""
+"""Синтетические проверки хранения и миграции 0017."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from dataclasses import replace
 from uuid import uuid4
 
@@ -20,9 +21,10 @@ from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
     supported_schema,
 )
-from personal_finance.infrastructure.persistence.migrations.candidates import (
+from personal_finance.infrastructure.persistence.migrations.versions import (
     v0017_investment_positions as candidate,
 )
+from tests.integration.test_deposit_scenario_upgrade import create_at
 from tests.integration.test_generic_ocr_migration import staging_connection
 from tests.integration.test_planning_scenario_migration import snapshot
 from tests.unit.test_investment_positions import inputs
@@ -30,24 +32,28 @@ from tests.unit.test_investments import TODAY
 
 
 @pytest.fixture
+def previous_session(tmp_path, monkeypatch):
+    session, _ = create_at(monkeypatch, tmp_path / "old.pfvault", "0016")
+    with closing(session):
+        yield session
+
+
+@pytest.fixture
 def storage(session):
     account = session.catalog.add_account("Синтетический инвестсчёт", AccountKind.INVESTMENT)
     session.ledger.add(OperationDraft(OperationKind.OPENING, TODAY, account.id, Money(10000)))
-    with staging_connection(session.engine):
-        candidate.upgrade()
-    repo = SqlInvestmentPositions(
-        session.engine, session.book_id, session.replica_id, session.mutex
-    )
-    return session, account, repo
+    assert isinstance(session.investment_positions, SqlInvestmentPositions)
+    return session, account, session.investment_positions
 
 
-def test_working_schema_remains_0016_and_candidate_requires_staging(session):
+def test_populated_0016_still_requires_staging_for_upgrade(previous_session):
+    session = previous_session
     account = session.catalog.add_account("Синтетический инвестсчёт", AccountKind.INVESTMENT)
     session.ledger.add(OperationDraft(OperationKind.OPENING, TODAY, account.id, Money(10000)))
     before = snapshot(session.engine)
     assert session.schema_revision == supported_schema(session.engine) == "0016"
     assert "investment_position_revisions" not in before[1]
-    with pytest.raises(UnsupportedFormat):
+    with pytest.raises(UnsupportedFormat, match="пустой"):
         initialize_schema(session.engine, target="0017")
     with (
         pytest.raises(RuntimeError, match="промежуточной"),
@@ -76,7 +82,8 @@ def test_working_schema_remains_0016_and_candidate_requires_staging(session):
         )
 
 
-def test_candidate_migration_rolls_back_after_creating_table(session, monkeypatch):
+def test_migration_rolls_back_after_creating_table(previous_session, monkeypatch):
+    session = previous_session
     session.catalog.add_account("Учебные наличные", AccountKind.CASH)
     before = snapshot(session.engine)
     original = candidate._create_position_table

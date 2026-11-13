@@ -65,7 +65,7 @@ def _row_amount(minor: int | None, currency: Currency) -> str:
 
 
 class InvestmentPortfolioDialog(QDialog):
-    def __init__(self, report: SavedPortfolioReport, parent: QWidget) -> None:
+    def __init__(self, report: SavedPortfolioReport, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Инвестиционный портфель")
         self.report = report

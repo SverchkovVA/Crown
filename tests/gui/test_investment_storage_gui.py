@@ -13,7 +13,6 @@ from personal_finance.presentation.main_window import MainWindow
 from tests.conftest import PASSWORD
 from tests.gui.test_investment_preview_gui import add, show_position
 from tests.gui.test_planning_scenarios_workflow import current
-from tests.integration.test_investment_position_upgrade import candidate_schema as candidate_schema
 
 
 def set_price(window, options, day, value):
@@ -25,9 +24,7 @@ def set_price(window, options, day, value):
     assert current(window, InvestmentPreviewOptions) is options
 
 
-def test_save_open_and_revise_investment_position_in_embedded_workflow(
-    candidate_schema, tmp_path, qtbot
-):
+def test_save_open_and_revise_investment_position_in_embedded_workflow(tmp_path, qtbot):
     path = tmp_path / "positions.pfvault"
     session, _ = create_vault(path, "Синтетическая книга 0017", PASSWORD)
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)

@@ -14,14 +14,12 @@ from personal_finance.presentation.investment_preview import InvestmentPreviewDi
 from personal_finance.presentation.main_window import MainWindow
 from tests.conftest import PASSWORD
 from tests.gui.test_planning_scenarios_workflow import current
-from tests.integration.test_investment_position_upgrade import candidate_schema as candidate_schema
+from tests.integration.test_deposit_scenario_upgrade import create_at
 from tests.unit.test_investment_positions import inputs
 from tests.unit.test_investments import TODAY
 
 
-def test_saved_portfolio_uses_book_snapshot_and_opens_fifo_details(
-    candidate_schema, tmp_path, qtbot
-):
+def test_saved_portfolio_uses_book_snapshot_and_opens_fifo_details(tmp_path, qtbot):
     session, _ = create_vault(tmp_path / "portfolio.pfvault", "Учебный портфель", PASSWORD)
     window = MainWindow()
     qtbot.addWidget(window)
@@ -64,7 +62,8 @@ def test_saved_portfolio_uses_book_snapshot_and_opens_fifo_details(
         window.lock_book()
 
 
-def test_portfolio_unavailable_in_book_without_position_storage(session, qtbot):
+def test_portfolio_unavailable_in_book_without_position_storage(tmp_path, monkeypatch, qtbot):
+    session, _ = create_at(monkeypatch, tmp_path / "old.pfvault", "0016")
     window = MainWindow()
     qtbot.addWidget(window)
     window.activate_session(session)

@@ -1,3 +1,4 @@
+import pytest
 from PySide6.QtCore import QDate
 
 from personal_finance.domain.investments import DistributionKind, SecurityKind, TradeKind
@@ -13,6 +14,16 @@ from personal_finance.presentation.investment_preview import (
 from personal_finance.presentation.main_window import MainWindow
 from tests.gui.test_analytics_gui import fingerprints
 from tests.gui.test_planning_scenarios_workflow import current
+from tests.integration.test_deposit_scenario_upgrade import create_at
+
+
+@pytest.fixture
+def old_book(tmp_path, monkeypatch):
+    session, _ = create_at(monkeypatch, tmp_path / "old.pfvault", "0016")
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def show_position(window, session, qtbot):
@@ -40,7 +51,8 @@ def add(window, options, kind, amount, *, quantity=1, fee="0", accrued=None):
     assert current(window, InvestmentPreviewOptions) is options
 
 
-def test_investment_preview_calculates_fifo_and_keeps_draft_after_back(session, qtbot):
+def test_investment_preview_calculates_fifo_and_keeps_draft_after_back(old_book, qtbot):
+    session = old_book
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     before = fingerprints(session)
     window = MainWindow()
@@ -85,7 +97,8 @@ def test_investment_preview_calculates_fifo_and_keeps_draft_after_back(session, 
         window.session = None
 
 
-def test_bond_preview_uses_percent_of_face_and_excludes_future_price(session, qtbot):
+def test_bond_preview_uses_percent_of_face_and_excludes_future_price(old_book, qtbot):
+    session = old_book
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     before = fingerprints(session)
     window = MainWindow()

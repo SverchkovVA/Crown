@@ -28,7 +28,11 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
     check_ocr_workflow,
 )
 from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recognitions_for_directory
-from personal_finance.bootstrap.planning_reports_self_test import check_planning_reports
+from personal_finance.bootstrap.planning_reports_self_test import (
+    check_investment_example,
+    check_planning_reports,
+    store_investment_example,
+)
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashSourceKind, cash_flow_sources
 from personal_finance.domain.analytics_cashflow_months import cash_month_sources
@@ -968,6 +972,19 @@ def self_test(
                         unexpected.close()
                         raise RuntimeError("Неверный пароль был принят.")
                     source = open_vault(root / "Исходная книга.pfvault", "тестовая фраза сборки")
+                with _step(report, "persist_investment_positions"):
+                    if source.ledger is None:
+                        raise RuntimeError("Журнал недоступен после повторного открытия.")
+                    before_investments = source.ledger.operations(include_deleted=True)
+                    investment = store_investment_example(source, today)
+                    investment_account_id = investment[1].inputs.account_id
+                    expected_balances[investment_account_id] = 0
+                    if (
+                        source.ledger is None
+                        or source.ledger.operations(include_deleted=True) != before_investments
+                        or _balances(source) != expected_balances
+                    ):
+                        raise RuntimeError("Сохранение позиции изменило денежный журнал.")
                 with _step(report, "create_verified_backup"):
                     backup = create_backup(
                         source, root / "Копия книги.pfbackup", "пароль проверочной копии"
@@ -981,6 +998,7 @@ def self_test(
                     )
                 try:
                     with _step(report, "check_restored_data"):
+                        check_investment_example(restored, today, *investment)
                         restored_planning = restored.planning_scenarios
                         if (
                             restored_planning is None
@@ -1029,7 +1047,8 @@ def self_test(
                                 "После восстановления не распознан повтор команды сценария."
                             )
                         if (
-                            {a.id for a in restored.catalog.accounts()} != {account.id, reserve.id}
+                            {a.id for a in restored.catalog.accounts()}
+                            != {account.id, reserve.id, investment_account_id}
                             or restored.replica_id == original_replica
                             or _balances(restored) != expected_balances
                         ):
@@ -1211,7 +1230,7 @@ def self_test(
                                     if not window.ocr_input.isVisible():
                                         raise RuntimeError("Панель распознавания не открылась.")
                                 if (
-                                    window.account_model.rowCount() != 2
+                                    window.account_model.rowCount() != len(expected_balances)
                                     or window.operation_model.rowCount() != 5
                                 ):
                                     raise RuntimeError("Счета или операции не отображаются.")
