@@ -8,7 +8,14 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 
 from personal_finance.domain.exporting import ExportFormat, csv_safe_text
-from personal_finance.domain.models import Account, Category, Institution
+from personal_finance.domain.models import (
+    ACCOUNT_LABELS,
+    Account,
+    AccountKind,
+    Category,
+    CategoryKind,
+    Institution,
+)
 
 
 class CatalogSection(StrEnum):
@@ -92,11 +99,17 @@ def prepare_catalog_export(
 
 
 def catalog_export_cells(row: CatalogExportRow) -> list[str]:
+    kind = ""
+    if row.kind is not None:
+        if row.section is CatalogSection.ACCOUNTS:
+            kind = ACCOUNT_LABELS[AccountKind(row.kind)]
+        elif row.section is CatalogSection.CATEGORIES:
+            kind = "Доход" if CategoryKind(row.kind) is CategoryKind.INCOME else "Расход"
     return [
         SECTION_LABELS[row.section],
         row.number,
         row.name or "",
-        row.kind or "",
+        kind,
         row.currency or "",
         row.related or "",
     ]

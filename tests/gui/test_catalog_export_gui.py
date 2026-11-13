@@ -42,7 +42,7 @@ def test_export_catalog_links_and_names_selection_without_migration(tmp_path, mo
         by_number = {row["number"]: row for row in rows}
         (account_row,) = (row for row in rows if row["section"] == "accounts")
         assert by_number[account_row["related"]]["section"] == "banks"
-        assert account_row["currency"] == "RUB"
+        assert account_row["currency"] == "RUB" and account_row["kind"] == "debit"
         assert any(
             by_number[row["related"]]["section"] == "categories"
             for row in rows
@@ -61,11 +61,13 @@ def test_export_catalog_links_and_names_selection_without_migration(tmp_path, mo
         preview = current(window, CatalogExportPreview)
         assert preview.table.model().rowCount() == 1
         assert preview.table.model().item(0, 2).text() == "Учебный счёт"
+        assert preview.table.model().item(0, 3).text() == "Банковский счёт"
         assert preview.table.model().item(0, 5).text() == ""
         preview.save.click()
         qtbot.waitUntil(lambda: not window._busy, timeout=15000)
         contents = target.read_text(encoding="utf-8-sig")
         assert "Учебный счёт" in contents and "Учебный банк" not in contents
+        assert "Банковский счёт" in contents and "debit" not in contents
         assert session.schema_revision == before == "0002"
         assert session.catalog.accounts() == [account]
     finally:
