@@ -13,11 +13,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from personal_finance.domain.investment_cash_reconciliation import InvestmentCashRow
 from personal_finance.domain.investment_portfolio import PortfolioRow, SavedPortfolioReport
 from personal_finance.domain.models import RUB, Currency
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.deposit_scenarios import date_text
 from personal_finance.presentation.inline_forms import present_form
+from personal_finance.presentation.investment_cash_reconciliation import InvestmentCashDialog
 from personal_finance.presentation.investment_editors import SECURITY_LABELS
 from personal_finance.presentation.investment_preview import (
     InvestmentPreviewDialog,
@@ -65,10 +67,21 @@ def _row_amount(minor: int | None, currency: Currency) -> str:
 
 
 class InvestmentPortfolioDialog(QDialog):
-    def __init__(self, report: SavedPortfolioReport, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        report: SavedPortfolioReport,
+        parent: QWidget | None = None,
+        *,
+        reconciliation: tuple[InvestmentCashRow, ...] = (),
+        account_names: dict[str, str] | None = None,
+        category_names: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Инвестиционный портфель")
         self.report = report
+        self.reconciliation = reconciliation
+        self.account_names = account_names or {}
+        self.category_names = category_names or {}
         layout = QVBoxLayout(self)
         layout.addWidget(_label(f"На конец {date_text(report.as_of)} · Только ценные бумаги"))
         if report.unavailable_count:
@@ -162,12 +175,26 @@ class InvestmentPortfolioDialog(QDialog):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.positions, 1)
         self.details = QPushButton("Открыть расчёт позиции")
-        self.details.setProperty("stickyActions", True)
         self.details.setEnabled(False)
         self.details.clicked.connect(self._open_details)
         self.positions.selectionModel().selectionChanged.connect(self._selection_changed)
         self.positions.doubleClicked.connect(lambda _: self._open_details())
-        layout.addWidget(self.details)
+        actions = QWidget()
+        actions.setProperty("stickyActions", True)
+        footer = QHBoxLayout(actions)
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addWidget(self.details)
+        self.check_cash = QPushButton("Сверить с журналом")
+        self.check_cash.setVisible(bool(reconciliation))
+        self.check_cash.clicked.connect(self._open_reconciliation)
+        footer.addWidget(self.check_cash)
+        layout.addWidget(actions)
+
+    def _open_reconciliation(self) -> None:
+        dialog = InvestmentCashDialog(
+            self.reconciliation, self.account_names, self.category_names, self
+        )
+        present_form(dialog, None)
 
     def _selected(self) -> PortfolioRow | None:
         rows = self.positions.selectionModel().selectedRows()

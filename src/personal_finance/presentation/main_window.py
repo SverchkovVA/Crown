@@ -69,6 +69,10 @@ from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportPreview
 from personal_finance.domain.imports import ImportPreview, ImportResult
+from personal_finance.domain.investment_cash_reconciliation import (
+    InvestmentCashRow,
+    reconcile_investment_cash,
+)
 from personal_finance.domain.investment_portfolio import (
     SavedPortfolioReport,
     report_saved_portfolio,
@@ -607,10 +611,15 @@ class MainWindow(QMainWindow):
 
     def request_investment_portfolio(self) -> None:
         session = self.session
-        if self._busy or session is None or session.investment_positions is None:
+        if (
+            self._busy
+            or session is None
+            or session.ledger is None
+            or session.investment_positions is None
+        ):
             return
         panel = self._report_forms
-        storage = session.investment_positions
+        storage, ledger = session.investment_positions, session.ledger
         options = InvestmentPortfolioOptions(self)
 
         def calculate() -> None:
@@ -618,16 +627,39 @@ class MainWindow(QMainWindow):
                 return
             as_of = options.report_day
 
-            def build() -> SavedPortfolioReport:
+            def build() -> tuple[
+                SavedPortfolioReport, tuple[InvestmentCashRow, ...], list[Account], list[Category]
+            ]:
                 with session.mutex:
                     session.ensure_open()
                     accounts = session.catalog.accounts()
+                    categories = session.catalog.categories()
                     records = storage.items()
-                return report_saved_portfolio(accounts, records, as_of)
+                    operations = ledger.operations()
+                report = report_saved_portfolio(accounts, records, as_of)
+                return report, reconcile_investment_cash(report, operations), accounts, categories
 
-            def show(report: SavedPortfolioReport) -> None:
-                if self.session is session:
-                    present_form(InvestmentPortfolioDialog(report, self), panel)
+            def show(
+                result: tuple[
+                    SavedPortfolioReport,
+                    tuple[InvestmentCashRow, ...],
+                    list[Account],
+                    list[Category],
+                ],
+            ) -> None:
+                if self.session is not session:
+                    return
+                report, matches, accounts, categories = result
+                dialog = InvestmentPortfolioDialog(
+                    report,
+                    self,
+                    reconciliation=matches,
+                    account_names={item.id: item.name for item in accounts},
+                    category_names={
+                        item.id: category_title(item, categories) for item in categories
+                    },
+                )
+                present_form(dialog, panel)
 
             self._panel_job(panel, build, show, "Расчёт инвестиционного портфеля…")
 
