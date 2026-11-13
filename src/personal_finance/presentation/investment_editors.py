@@ -1,5 +1,6 @@
 """Ввод сделок, выплат и ручной цены в черновике позиции."""
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
@@ -169,10 +170,13 @@ class ManualPriceEditor(QDialog):
         security_kind: SecurityKind,
         day: QDate,
         price: ManualPrice | None,
+        *,
+        occupied_dates: frozenset[date] = frozenset(),
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Ручная цена")
         self.security_id = security_id
+        self.occupied_dates = occupied_dates
         self.bond = security_kind is SecurityKind.BOND
         self.price: ManualPrice | None = None
         layout = QVBoxLayout(self)
@@ -210,13 +214,16 @@ class ManualPriceEditor(QDialog):
 
     def _apply(self) -> None:
         try:
+            day = _date(self.day)
+            if day in self.occupied_dates:
+                raise ValidationError("На эту дату уже есть цена. Выберите её в списке для правки.")
             try:
                 number = Decimal(self.value.text().strip().replace(" ", "").replace(",", "."))
             except InvalidOperation as error:
                 raise ValidationError("Введите точное числовое значение цены.") from error
             self.price = ManualPrice(
                 self.security_id,
-                _date(self.day),
+                day,
                 PriceUnit.PERCENT_OF_FACE if self.bond else PriceUnit.CASH_PER_SECURITY,
                 number,
                 RUB,

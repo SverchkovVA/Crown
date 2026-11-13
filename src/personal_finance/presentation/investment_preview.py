@@ -47,6 +47,7 @@ from personal_finance.presentation.investment_editors import (
     InvestmentEventEditor,
     ManualPriceEditor,
 )
+from personal_finance.presentation.investment_price_history import ManualPriceHistory
 from personal_finance.presentation.recurring_payments import _date, _date_input, _table
 from personal_finance.presentation.tables import replace_table
 
@@ -138,12 +139,12 @@ class InvestmentPreviewOptions(QDialog):
         prices.setSpacing(6)
         self.price_status = _label("")
         prices.addWidget(self.price_status, 1)
-        self.set_price = QPushButton("Ручная цена…")
-        self.set_price.clicked.connect(self._edit_price)
+        self.set_price = QPushButton("Добавить цену…")
+        self.set_price.clicked.connect(self._add_price)
         prices.addWidget(self.set_price)
-        self.remove_price = QPushButton("Убрать последнюю цену")
-        self.remove_price.clicked.connect(self._remove_price)
-        prices.addWidget(self.remove_price)
+        self.price_history = QPushButton("Ручные цены…")
+        self.price_history.clicked.connect(self._open_price_history)
+        prices.addWidget(self.price_history)
         layout.addLayout(prices)
         if not storage:
             layout.addWidget(_label("Введённые данные хранятся в этой форме."))
@@ -212,7 +213,7 @@ class InvestmentPreviewOptions(QDialog):
             if latest is None
             else f"Ручных цен: {len(self.prices)} · последняя от {date_text(latest.quoted_on)}"
         )
-        self.remove_price.setVisible(latest is not None)
+        self.price_history.setVisible(latest is not None)
         self.feedback.hide()
 
     def _edit_event(self, row: int | None) -> None:
@@ -249,13 +250,14 @@ class InvestmentPreviewOptions(QDialog):
             del self.events[row]
             self._refresh()
 
-    def _edit_price(self) -> None:
+    def _add_price(self) -> None:
         dialog = ManualPriceEditor(
             self,
             self.security_id,
             SecurityKind(self.kind.currentData()),
             self.as_of.date(),
-            self._latest_price(),
+            None,
+            occupied_dates=frozenset(self.prices),
         )
 
         def accepted(code: int) -> None:
@@ -265,10 +267,9 @@ class InvestmentPreviewOptions(QDialog):
 
         present_form(dialog, None, accepted)
 
-    def _remove_price(self) -> None:
-        if self.prices:
-            del self.prices[max(self.prices)]
-            self._refresh()
+    def _open_price_history(self) -> None:
+        dialog = ManualPriceHistory(self, self.prices, self._refresh)
+        present_form(dialog, None)
 
     def prepare_request(self) -> InvestmentPreviewRequest | None:
         account = self.accounts.get(self.account.currentData())
