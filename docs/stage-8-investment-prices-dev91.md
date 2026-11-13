@@ -23,4 +23,6 @@
 
 Исходник 3a624bb9f8977be3a12beef7f878745237bf97f7. Прошли 32 связанных
 теста, включая сценарий редактирования, расчёт и историю хранения.
-[Полный CI](https://github.com/SverchkovVA/Crown/actions/runs/43435170805).
+Сборка Windows, по 34 шага нативных самопроверок, точный запуск в
+Windows Sandbox и проверка обеих тем при 100%, 125% и 150% прошли.
+[CI](https://github.com/SverchkovVA/Crown/actions/runs/43435170805).

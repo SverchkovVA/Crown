@@ -31,4 +31,7 @@
 проверок, сборка Windows и нативные самопроверки по 34 шага. Windows Sandbox
 без сети, Python и uv подтвердила 34 шага и запуск главного окна.
 В нативном Qt обе темы проверены при 100%, 125% и 150%.
-[Полный CI](https://github.com/SverchkovVA/Crown/actions/runs/43431502017).
+Полный локальный Windows-набор и Windows CI прошли по 2732 теста.
+SHA-256, JUnit и обе самопроверки CI проверены. Группа Linux 0
+прошла, группа 1 превысила лимит тестового шага 50 минут.
+[CI](https://github.com/SverchkovVA/Crown/actions/runs/43431502017).
