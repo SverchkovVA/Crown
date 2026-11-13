@@ -69,6 +69,8 @@ def _row_amount(minor: int | None, currency: Currency) -> str:
 
 
 class InvestmentPortfolioDialog(QDialog):
+    exportRequested = Signal()
+
     def __init__(
         self,
         report: SavedPortfolioReport,
@@ -197,6 +199,9 @@ class InvestmentPortfolioDialog(QDialog):
         self.check_cash.clicked.connect(self._open_reconciliation)
         footer.addWidget(self.check_cash)
         footer.addWidget(self.show_assets)
+        self.export = QPushButton("Экспорт…")
+        self.export.clicked.connect(self.exportRequested)
+        footer.addWidget(self.export)
         layout.addWidget(actions)
 
     def _open_assets(self) -> None:

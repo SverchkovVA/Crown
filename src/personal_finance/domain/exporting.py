@@ -182,7 +182,7 @@ def prepare_journal_export(
     )
 
 
-def _csv_note(value: str) -> str:
+def csv_safe_text(value: str) -> str:
     # Только произвольный текст. Финансовые целые и даты не преобразуются в формулы.
     stripped = value.lstrip(" \t\r\n\ufeff")
     return "'" + value if stripped.startswith(("=", "+", "-", "@")) else value
@@ -257,7 +257,7 @@ def serialize_journal_export(preview: ExportPreview, format: ExportFormat) -> by
             "fee_category_name",
         ):
             if key in row:
-                row[key] = _csv_note(row[key])
+                row[key] = csv_safe_text(row[key])
         for key in ("tag_ids", "tag_names"):
             if key in row:
                 row[key + "_json"] = json.dumps(

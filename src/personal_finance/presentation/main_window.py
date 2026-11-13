@@ -77,6 +77,7 @@ from personal_finance.domain.investment_cash_reconciliation import (
     InvestmentCashRow,
     reconcile_investment_cash,
 )
+from personal_finance.domain.investment_export import serialize_portfolio_export
 from personal_finance.domain.investment_portfolio import (
     SavedPortfolioReport,
     report_saved_portfolio,
@@ -114,6 +115,7 @@ from personal_finance.infrastructure.backup.container import (
     restore_backup,
     verify_backup,
 )
+from personal_finance.infrastructure.exporting.files import write_export_contents
 from personal_finance.infrastructure.ocr.images import load_clipboard_image
 from personal_finance.infrastructure.ocr_preferences import LocalOcrPreferences
 from personal_finance.infrastructure.payment_reminder_preferences import PaymentReminderPreferences
@@ -163,6 +165,7 @@ from personal_finance.presentation.inline_forms import (
     form_warning,
     present_form,
 )
+from personal_finance.presentation.investment_export import InvestmentExportDialog
 from personal_finance.presentation.investment_portfolio import (
     InvestmentPortfolioDialog,
     InvestmentPortfolioOptions,
@@ -672,12 +675,63 @@ class MainWindow(QMainWindow):
                         item.id: category_title(item, categories) for item in categories
                     },
                 )
+                dialog.exportRequested.connect(
+                    lambda: self._request_portfolio_export(session, report)
+                )
                 present_form(dialog, panel)
 
             self._panel_job(panel, build, show, "Расчёт инвестиционного портфеля…")
 
         options.calculationRequested.connect(calculate)
         present_form(options, panel)
+
+    def _request_portfolio_export(
+        self, session: VaultSession, report: SavedPortfolioReport
+    ) -> None:
+        if self._busy or self.session is not session:
+            return
+        panel = self._report_forms
+        dialog = InvestmentExportDialog(report, self)
+
+        def completed(code: int) -> None:
+            if code != QDialog.DialogCode.Accepted or self.session is not session:
+                return
+            preview, format = dialog.selection()
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            name = f"crown-portfolio-{stamp}-{uuid4().hex[:4]}.{format.value}"
+            filename, _ = QFileDialog.getSaveFileName(
+                self,
+                "Новый файл портфеля",
+                str(session.root.parent / name),
+                f"{format.value.upper()} (*.{format.value})",
+                options=QFileDialog.Option.DontConfirmOverwrite,
+            )
+            if not filename or self.session is not session:
+                return
+            destination = Path(filename)
+            if not destination.suffix:
+                destination = destination.with_suffix("." + format.value)
+
+            def save() -> Path:
+                with session.mutex:
+                    session.ensure_open()
+                    return write_export_contents(
+                        destination,
+                        lambda: serialize_portfolio_export(preview, format),
+                        format,
+                        vault_root=session.root,
+                    )
+
+            self._panel_job(
+                panel,
+                save,
+                lambda path: self._panel_notice(
+                    panel, "Экспорт сохранён", f"Файл сохранён:\n{path}"
+                ),
+                "Сохранение файла портфеля…",
+            )
+
+        present_form(dialog, panel, completed)
 
     def request_investment_preview(self, *, record: SavedInvestmentPosition | None = None) -> None:
         session = self.session

@@ -1,6 +1,7 @@
 """Публикация нового экспортного файла без замены существующих данных."""
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,7 +22,19 @@ def _publish(temporary: Path, destination: Path) -> None:
 def write_export_new(
     destination: Path, preview: ExportPreview, format: ExportFormat, *, vault_root: Path
 ) -> Path:
-    """Вызывается только после явного выбора состава/имени; файл открытый, не копия."""
+    """Сохраняет явно выбранный снимок журнала."""
+    return write_export_contents(
+        destination,
+        lambda: serialize_journal_export(preview, format),
+        format,
+        vault_root=vault_root,
+    )
+
+
+def write_export_contents(
+    destination: Path, contents: Callable[[], bytes], format: ExportFormat, *, vault_root: Path
+) -> Path:
+    """Публикует открытый файл после выбора состава и нового имени."""
     if (
         not isinstance(destination, Path)
         or not isinstance(vault_root, Path)
@@ -37,7 +50,7 @@ def write_export_new(
         raise ValidationError("Выберите существующую папку и расширение CSV либо JSON.")
     if destination.exists():
         raise ValidationError("Файл уже существует. Выберите новое имя экспорта.")
-    contents = serialize_journal_export(preview, format)
+    data = contents()
     temporary = destination.with_name(".crown-export-" + uuid4().hex + ".tmp")
     descriptor: int | None = None
     owned = False
@@ -46,7 +59,7 @@ def write_export_new(
         owned = True
         with os.fdopen(descriptor, "wb") as output:
             descriptor = None
-            output.write(contents)
+            output.write(data)
             output.flush()
             os.fsync(output.fileno())
         _publish(temporary, destination)
