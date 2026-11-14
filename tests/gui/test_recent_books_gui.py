@@ -1,8 +1,10 @@
+from pathlib import Path
+
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QMessageBox, QPushButton
 
 from personal_finance.infrastructure.recent_books import LocalRecentBooks
-from personal_finance.presentation.dialogs import OpenDialog
+from personal_finance.presentation.dialogs import CreateDialog, OpenDialog
 from personal_finance.presentation.main_window import MainWindow
 
 
@@ -74,3 +76,49 @@ def test_missing_recent_path_gives_message_and_can_be_forgotten(qtbot, tmp_path,
     assert messages and len(store.items()) == 1
     window.forget_recent_book()
     assert not store.items() and window.recent_books_list.count() == 0
+
+
+def test_selected_book_folder_survives_restart_and_is_used_for_book_dialogs(
+    qtbot, session, tmp_path, monkeypatch
+):
+    target = tmp_path / "Новая папка"
+    target.mkdir()
+    store = recent(tmp_path)
+    window = MainWindow(recent_books=store)
+    qtbot.addWidget(window)
+    window.activate_session(session)
+    window.navigation.setCurrentRow(8)
+    window.settings_tabs.setCurrentIndex(1)
+    window.show()
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a: str(target))
+    change = next(
+        button for button in window.findChildren(QPushButton) if button.text() == "Изменить папку…"
+    )
+    change.click()
+    assert window.book_directory_label.text().endswith(str(target))
+    assert recent(tmp_path).book_directory() == target
+    assert len(store.items()) == 1
+    window.lock_book()
+
+    reopened = MainWindow(recent_books=recent(tmp_path))
+    qtbot.addWidget(reopened)
+    reopened.show()
+    panel = reopened._welcome_forms
+    reopened.create_book(panel=panel)
+    dialog = panel.stack.currentWidget().widget()
+    assert isinstance(dialog, CreateDialog) and Path(dialog.path.text()).parent == target
+    assert Path(dialog.path.text()).suffix == ".pfvault"
+    dialog.reject()
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a: ("example.pfbackup", ""))
+    reopened.restore_book(panel=panel)
+    dialog = panel.stack.currentWidget().widget()
+    assert isinstance(dialog, CreateDialog) and Path(dialog.path.text()).parent == target
+    dialog.reject()
+
+    opened = []
+    monkeypatch.setattr(
+        QFileDialog, "getExistingDirectory", lambda _, title, directory: opened.append(directory)
+    )
+    reopened.open_book(panel=panel)
+    assert opened == [str(target)]

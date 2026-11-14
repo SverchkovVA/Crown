@@ -40,6 +40,22 @@ class LocalRecentBooks:
     def __init__(self, settings: QSettings | None = None) -> None:
         self.settings = settings if settings is not None else default_settings()
 
+    def book_directory(self) -> Path | None:
+        value = self.settings.value("book_directory_v1", "")
+        if isinstance(value, str) and value and "\x00" not in value:
+            directory = Path(value)
+            if directory.is_absolute():
+                return directory
+        return None
+
+    def set_book_directory(self, directory: Path) -> None:
+        if not directory.is_absolute() or not directory.is_dir():
+            raise ValidationError("Выберите существующую папку для книг.")
+        self.settings.setValue("book_directory_v1", str(directory))
+        self.settings.sync()
+        if self.settings.status() is not QSettings.Status.NoError:
+            raise ValidationError("Не удалось сохранить папку для книг.")
+
     def enabled(self, book_id: str) -> bool:
         key = "do_not_remember/" + _identifier(book_id)
         return str(self.settings.value(key, "false")).lower() not in ("true", "1")

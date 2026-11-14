@@ -42,7 +42,13 @@ class NameDialog(QInputDialog):
 
 
 class CreateDialog(QDialog):
-    def __init__(self, parent: QWidget | None = None, *, restoring: bool = False) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        *,
+        restoring: bool = False,
+        directory: Path | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Восстановить книгу" if restoring else "Создать финансовую книгу")
         self._restoring = restoring
@@ -60,7 +66,8 @@ class CreateDialog(QDialog):
         self.name = QLineEdit("Личные финансы")
         if not restoring:
             form.addRow("Название", self.name)
-        self.path = QLineEdit(str(library_directory() / f"book-{uuid4().hex[:8]}.pfvault"))
+        root = directory if directory is not None else library_directory()
+        self.path = QLineEdit(str(root / f"book-{uuid4().hex[:8]}.pfvault"))
         browse = QPushButton("Выбрать…")
         browse.clicked.connect(self._choose_parent)
         row = QHBoxLayout()
@@ -94,7 +101,10 @@ class CreateDialog(QDialog):
         layout.addWidget(buttons)
 
     def _choose_parent(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Папка для новой книги")
+        parent = Path(self.path.text()).parent
+        folder = QFileDialog.getExistingDirectory(
+            self, "Папка для новой книги", str(parent) if parent.is_dir() else ""
+        )
         if folder:
             self.path.setText(str(Path(folder) / f"book-{uuid4().hex[:8]}.pfvault"))
 

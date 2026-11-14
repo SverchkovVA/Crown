@@ -171,6 +171,7 @@ from personal_finance.presentation.dialogs import (
     OpenDialog,
     PasswordDialog,
     RecoveryDialog,
+    library_directory,
 )
 from personal_finance.presentation.export_dialogs import (
     ExportOptions,
@@ -3199,6 +3200,11 @@ class MainWindow(QMainWindow):
         )
         self.remember_book_check.toggled.connect(self._remember_book_changed)
         layout.addWidget(self.remember_book_check)
+        directory_row = QHBoxLayout()
+        self.book_directory_label = label(f"Папка для книг: {self._book_directory()}")
+        directory_row.addWidget(self.book_directory_label, 1)
+        directory_row.addWidget(button("Изменить папку…", self._choose_book_directory))
+        layout.addLayout(directory_row)
         self.backup_status = label(self.last_backup, "muted")
         layout.addWidget(self.backup_status)
         layout.addSpacing(20)
@@ -3336,8 +3342,26 @@ class MainWindow(QMainWindow):
 
         present_form(dialog, self._welcome_forms, completed)
 
+    def _book_directory(self) -> Path:
+        return self._recent_books.book_directory() or library_directory()
+
+    def _choose_book_directory(self) -> None:
+        current = self._book_directory()
+        selected = QFileDialog.getExistingDirectory(
+            self, "Папка для новых и восстановленных книг", str(current) if current.is_dir() else ""
+        )
+        if not selected:
+            return
+        try:
+            self._recent_books.set_book_directory(Path(selected))
+        except ValidationError as error:
+            self._settings_forms.message(str(error))
+            return
+        self.book_directory_label.setText(f"Папка для книг: {self._book_directory()}")
+        self._settings_forms.message("Папка для книг сохранена.")
+
     def create_book(self, *, panel: InlineForms | None = None) -> None:
-        dialog = CreateDialog(self)
+        dialog = CreateDialog(self, directory=self._book_directory())
 
         def completed(code: int) -> None:
             if code != QDialog.DialogCode.Accepted:
@@ -3362,7 +3386,10 @@ class MainWindow(QMainWindow):
         present_form(dialog, panel, completed)
 
     def open_book(self, *, panel: InlineForms | None = None) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Выберите папку книги (.pfvault)")
+        root = self._book_directory()
+        path = QFileDialog.getExistingDirectory(
+            self, "Выберите папку книги (.pfvault)", str(root) if root.is_dir() else ""
+        )
         if path:
             self._open_book_path(Path(path), panel=panel)
 
@@ -3447,7 +3474,7 @@ class MainWindow(QMainWindow):
         if not source:
             return
         session = self.session
-        dialog = CreateDialog(self, restoring=True)
+        dialog = CreateDialog(self, restoring=True, directory=self._book_directory())
 
         def completed(code: int) -> None:
             if code != QDialog.DialogCode.Accepted or self.session is not session:
