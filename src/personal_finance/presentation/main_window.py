@@ -81,6 +81,7 @@ from personal_finance.domain.catalog_export import (
     serialize_catalog_export,
 )
 from personal_finance.domain.classification import CategoryRule
+from personal_finance.domain.deposit_forecast_export import serialize_deposit_forecast
 from personal_finance.domain.deposits import DepositForecast, forecast_deposit
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.exporting import ExportFormat, ExportPreview
@@ -1134,8 +1135,16 @@ class MainWindow(QMainWindow):
             input_dialog.feedback.show()
             self._run_deposit_form(input_dialog, panel=panel)
             return
+        session = self.session
         try:
-            dialog = DepositForecastDialog(result, self, allow_edit=True)
+            dialog = DepositForecastDialog(
+                result,
+                self,
+                allow_edit=True,
+                on_export=self._deposit_export_action(session, result)
+                if session and panel
+                else None,
+            )
         except Exception:
             input_dialog.deleteLater()
             raise
@@ -1151,6 +1160,20 @@ class MainWindow(QMainWindow):
         except Exception:
             input_dialog.deleteLater()
             raise
+
+    def _deposit_export_action(
+        self, session: VaultSession, forecast: DepositForecast
+    ) -> Callable[[ExportFormat], None]:
+        def save(format: ExportFormat) -> None:
+            self._save_report_file(
+                session,
+                "Новый файл прогноза вклада",
+                "crown-deposit-forecast",
+                format,
+                lambda: serialize_deposit_forecast(forecast, format),
+            )
+
+        return save
 
     def request_catalog_export(self) -> None:
         session = self.session

@@ -1,7 +1,7 @@
 """Форма сценарного расчёта; не обращается к книге."""
 
 from calendar import monthrange
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
@@ -38,9 +38,11 @@ from personal_finance.domain.deposits import (
     RoundingStage,
 )
 from personal_finance.domain.errors import ValidationError
+from personal_finance.domain.exporting import ExportFormat
 from personal_finance.domain.models import RUB, Money
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.analytics_cashflow import _size
+from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.tables import replace_table
 
 BOUNDARIES = [
@@ -469,11 +471,13 @@ class DepositForecastDialog(QDialog):
         *,
         allow_edit: bool = False,
         conditions_saved: bool = False,
+        on_export: Callable[[ExportFormat], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.report = report
         self.edit_requested = False
         self.edit_button: QPushButton | None = None
+        self.export_button: QPushButton | None = None
         self.setWindowTitle("Прогноз вклада · График выплат")
         _size(self, 1000, 660)
         layout = QVBoxLayout(self)
@@ -578,7 +582,7 @@ class DepositForecastDialog(QDialog):
             + (
                 "Условия взяты из сохранённой версии. Новый расчёт не записывается в книгу."
                 if conditions_saved
-                else "Условия и расчёт на диске не сохраняются."
+                else "Условия и расчёт автоматически на диске не сохраняются."
             )
         )
         layout.addWidget(self.storage_note)
@@ -593,9 +597,42 @@ class DepositForecastDialog(QDialog):
             )
             self.edit_button.clicked.connect(self._edit)
 
+        if on_export is not None:
+            self.export_button = buttons.addButton(
+                "Экспорт выплат…", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            self.export_button.clicked.connect(lambda: self._choose_export(on_export))
+
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("Закрыть")
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _choose_export(self, on_export: Callable[[ExportFormat], None]) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Экспорт прогнозных выплат")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(
+            _label(f"Дат выплат: {len(self.payouts)}. В файл войдёт график из вкладки «Выплаты».")
+        )
+        form = QFormLayout()
+        choice = QComboBox()
+        choice.setAccessibleName("Формат экспорта прогноза")
+        choice.addItem("CSV — для таблиц", ExportFormat.CSV.value)
+        choice.addItem("JSON — для обработки данных", ExportFormat.JSON.value)
+        form.addRow("Формат", choice)
+        layout.addLayout(form)
+        layout.addWidget(_label("Локальный файл будет доступен для чтения без пароля."))
+        save = QPushButton("Выбрать файл…")
+        save.setObjectName("primary")
+        save.clicked.connect(dialog.accept)
+        layout.addWidget(save)
+        layout.addStretch()
+
+        def completed(code: int) -> None:
+            if code == QDialog.DialogCode.Accepted:
+                on_export(ExportFormat(choice.currentData()))
+
+        present_form(dialog, None, completed)
 
     def _edit(self) -> None:
         self.edit_requested = True

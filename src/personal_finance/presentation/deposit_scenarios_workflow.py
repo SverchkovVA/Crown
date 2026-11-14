@@ -303,7 +303,14 @@ class DepositScenariosController:
         self.open()
 
     def _view(self, report: DepositForecast) -> None:
-        dialog = DepositForecastDialog(report, self.window, conditions_saved=True)
+        dialog = DepositForecastDialog(
+            report,
+            self.window,
+            conditions_saved=True,
+            on_export=self.window._deposit_export_action(self.session, report)
+            if self.panel
+            else None,
+        )
         present_form(dialog, self.panel, lambda _: self.open())
 
     def _plan_fact(self, record: SavedDepositScenario) -> None:

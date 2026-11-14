@@ -85,4 +85,4 @@ GUI показывает общий состав/числа видов и до 2
 Отдельные формы сохраняют [портфель](stage-8-portfolio-export-dev87.md)
 в CSV/JSON и [пакет для ChatGPT](stage-8-analysis-package-dev88.md) в JSON.
 Добавлены отдельные [бонусный журнал](stage-8-bonus-export-dev93.md)
-и [справочники](stage-8-catalog-export-dev95.md) в CSV/JSON. Выгрузка вкладов ещё впереди.
+и [справочники](stage-8-catalog-export-dev95.md) в CSV/JSON. Добавлена выгрузка графика выплат вкладов в CSV и JSON.
