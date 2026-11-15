@@ -30,8 +30,10 @@ from personal_finance.domain.investment_prices import (
     position_result,
 )
 from personal_finance.domain.investments import (
+    BondAmortization,
     PortfolioEvent,
     Security,
+    SecurityDistribution,
     SecurityKind,
     SecurityTrade,
     StockSplit,
@@ -41,11 +43,13 @@ from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.deposit_scenarios import date_text
 from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.investment_editors import (
+    AMORTIZATION_LABEL,
     DISTRIBUTION_LABELS,
     MAX_UI_INTEGER,
     SECURITY_LABELS,
     SPLIT_LABEL,
     TRADE_LABELS,
+    InvestmentDraftEvent,
     InvestmentEventEditor,
     ManualPriceEditor,
 )
@@ -62,6 +66,7 @@ class InvestmentPreviewRequest:
     as_of: date
     prices: tuple[ManualPrice, ...]
     splits: tuple[StockSplit, ...] = ()
+    amortizations: tuple[BondAmortization, ...] = ()
 
 
 class InvestmentPreviewOptions(QDialog):
@@ -81,7 +86,7 @@ class InvestmentPreviewOptions(QDialog):
         self.accounts = {value.id: value for value in accounts}
         self.security_id = inputs.security.id if inputs else str(uuid4())
         self.saved_security = inputs.security if inputs else None
-        self.events: list[PortfolioEvent | StockSplit] = (
+        self.events: list[InvestmentDraftEvent] = (
             list((*inputs.events, *inputs.splits)) if inputs else []
         )
         self.prices = {price.quoted_on: price for price in inputs.prices} if inputs else {}
@@ -159,6 +164,10 @@ class InvestmentPreviewOptions(QDialog):
             "Дробление участвует в расчёте черновика. Сохранение такой позиции пока недоступно."
         )
         layout.addWidget(self.split_notice)
+        self.amortization_notice = _label(
+            "Частичное погашение можно рассчитать в черновике. Сохранение пока недоступно."
+        )
+        layout.addWidget(self.amortization_notice)
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
         self.feedback.hide()
@@ -206,6 +215,12 @@ class InvestmentPreviewOptions(QDialog):
                     str(item.quantity),
                     item.cash_delta_minor,
                 )
+            elif isinstance(item, BondAmortization):
+                name, quantity, amount = (
+                    AMORTIZATION_LABEL,
+                    str(item.quantity),
+                    item.principal_minor,
+                )
             else:
                 name, quantity, amount = DISTRIBUTION_LABELS[item.kind], "—", item.received.minor
             rows.append(
@@ -230,8 +245,12 @@ class InvestmentPreviewOptions(QDialog):
         self.calculate.setEnabled(bool(self.events))
         has_split = any(isinstance(event, StockSplit) for event in self.events)
         split_draft = has_split and not self.supports_stock_splits
-        self.save_position.setEnabled(self.storage and bool(self.events) and not split_draft)
+        has_amortization = any(isinstance(event, BondAmortization) for event in self.events)
+        self.save_position.setEnabled(
+            self.storage and bool(self.events) and not (split_draft or has_amortization)
+        )
         self.split_notice.setVisible(split_draft)
+        self.amortization_notice.setVisible(has_amortization)
         latest = self._latest_price()
         self.price_status.setText(
             "Ручная цена не указана"
@@ -316,7 +335,7 @@ class InvestmentPreviewOptions(QDialog):
             tuple(
                 replace(value, account_id=account.id)
                 for value in self.events
-                if not isinstance(value, StockSplit)
+                if isinstance(value, (SecurityTrade, SecurityDistribution))
             ),
             _date(self.as_of),
             tuple(self.prices.values()),
@@ -324,6 +343,11 @@ class InvestmentPreviewOptions(QDialog):
                 replace(value, account_id=account.id)
                 for value in self.events
                 if isinstance(value, StockSplit)
+            ),
+            tuple(
+                replace(value, account_id=account.id)
+                for value in self.events
+                if isinstance(value, BondAmortization)
             ),
         )
 
@@ -378,6 +402,8 @@ class InvestmentPreviewDialog(QDialog):
                     if portfolio.splits
                     else "Ручной цены на дату расчёта нет."
                 )
+                if portfolio.amortizations:
+                    message = "Укажите цену после частичного погашения с оставшимся номиналом."
                 layout.addWidget(_label(message))
             else:
                 price = valued.price
@@ -493,6 +519,47 @@ class InvestmentPreviewDialog(QDialog):
                     for row in portfolio.splits
                 ],
                 (1, 2),
+            )
+        if portfolio.amortizations:
+            self.amortizations = self._section(
+                tabs,
+                AMORTIZATION_LABEL,
+                [
+                    "Дата",
+                    "Бумаг",
+                    f"Номинал, {unit}",
+                    f"Выплата, {unit}",
+                    f"Списано, {unit}",
+                    f"Результат, {unit}",
+                ],
+                [
+                    [
+                        f"{date_text(row.event.occurred_on)} · №{row.event.sequence}",
+                        str(row.event.quantity),
+                        format_report_amount(row.event.face_after.minor, currency),
+                        format_report_amount(row.event.principal_minor, currency),
+                        format_report_amount(row.cost_minor, currency),
+                        format_report_amount(row.realized_minor, currency),
+                    ]
+                    for row in portfolio.amortizations
+                ],
+                (1, 2, 3, 4, 5),
+            )
+            header = self.amortizations.horizontalHeader()
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            header.setStretchLastSection(True)
+            self.amortizations.setHorizontalScrollMode(QTableView.ScrollMode.ScrollPerPixel)
+            self.amortizations.model().setHeaderData(
+                2,
+                Qt.Orientation.Horizontal,
+                "Остаток номинала одной облигации после выплаты",
+                Qt.ItemDataRole.ToolTipRole,
+            )
+            self.amortizations.model().setHeaderData(
+                4,
+                Qt.Orientation.Horizontal,
+                "Списанная себестоимость партий",
+                Qt.ItemDataRole.ToolTipRole,
             )
         layout.addWidget(tabs, 1)
 

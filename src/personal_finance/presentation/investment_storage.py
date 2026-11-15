@@ -247,6 +247,9 @@ class InvestmentStorage:
         request = self.options.prepare_request()
         if request is None:
             return
+        if request.amortizations:
+            self.panel.message("Позицию с частичным погашением пока можно только рассчитать.")
+            return
         if request.splits and not self.session.supports_stock_splits:
             self.panel.message("Позицию с дроблением пока можно только рассчитать.")
             return

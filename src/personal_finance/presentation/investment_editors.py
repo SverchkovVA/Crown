@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.investment_prices import ManualPrice, PriceUnit
 from personal_finance.domain.investments import (
+    BondAmortization,
     DistributionKind,
     PortfolioEvent,
     SecurityDistribution,
@@ -45,7 +46,12 @@ TRADE_LABELS = {
 DISTRIBUTION_LABELS = {DistributionKind.DIVIDEND: "Дивиденды", DistributionKind.COUPON: "Купон"}
 SPLIT_KIND = "stock_split"
 SPLIT_LABEL = "Дробление акций"
+AMORTIZATION_KIND = "bond_amortization"
+AMORTIZATION_LABEL = "Частичное погашение"
 MAX_UI_INTEGER = 2_147_483_647
+
+
+InvestmentDraftEvent = PortfolioEvent | StockSplit | BondAmortization
 
 
 def _money_input(name: str) -> QLineEdit:
@@ -64,7 +70,7 @@ class InvestmentEventEditor(QDialog):
         security_kind: SecurityKind,
         day: QDate,
         sequence: int,
-        event: PortfolioEvent | StockSplit | None = None,
+        event: InvestmentDraftEvent | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Событие инвестиционной позиции")
@@ -72,7 +78,7 @@ class InvestmentEventEditor(QDialog):
         self.security_id = security_id
         self.bond = security_kind is SecurityKind.BOND
         self.event_id = event.id if event else str(uuid4())
-        self.entry: PortfolioEvent | StockSplit | None = None
+        self.entry: InvestmentDraftEvent | None = None
         layout = QVBoxLayout(self)
         form = self.form = QFormLayout()
         form.setHorizontalSpacing(12)
@@ -87,6 +93,8 @@ class InvestmentEventEditor(QDialog):
         self.kind.addItem(DISTRIBUTION_LABELS[payout], payout.value)
         if security_kind is SecurityKind.STOCK:
             self.kind.addItem(SPLIT_LABEL, SPLIT_KIND)
+        if self.bond:
+            self.kind.addItem(AMORTIZATION_LABEL, AMORTIZATION_KIND)
         form.addRow("Вид", self.kind)
         self.day = _date_input(QDate(event.occurred_on) if event else day, "Дата операции")
         form.addRow("Дата", self.day)
@@ -111,6 +119,10 @@ class InvestmentEventEditor(QDialog):
         self.accrued = _money_input("НКД всей сделки в рублях")
         self.accrued.setPlaceholderText("0,00, если НКД отсутствует")
         form.addRow("НКД всей сделки, ₽", self.accrued)
+        self.face_before = _money_input("Номинал одной облигации до погашения в рублях")
+        form.addRow("Номинал одной бумаги до, ₽", self.face_before)
+        self.face_after = _money_input("Номинал одной облигации после погашения в рублях")
+        form.addRow("Номинал одной бумаги после, ₽", self.face_after)
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
         self.feedback.hide()
@@ -122,6 +134,11 @@ class InvestmentEventEditor(QDialog):
         if isinstance(event, StockSplit):
             self.kind.setCurrentIndex(self.kind.findData(SPLIT_KIND))
             self.multiplier.setValue(event.multiplier)
+        elif isinstance(event, BondAmortization):
+            self.kind.setCurrentIndex(self.kind.findData(AMORTIZATION_KIND))
+            self.quantity.setValue(event.quantity)
+            self.face_before.setText(format_report_amount(event.face_before.minor, RUB))
+            self.face_after.setText(format_report_amount(event.face_after.minor, RUB))
         elif event is not None:
             position = self.kind.findData(event.kind.value)
             if position >= 0:
@@ -141,8 +158,11 @@ class InvestmentEventEditor(QDialog):
         trade = kind in TRADE_LABELS
         split = kind == SPLIT_KIND
         self.form.setRowVisible(self.multiplier, split)
-        self.form.setRowVisible(self.amount, not split)
-        self.form.setRowVisible(self.quantity, trade)
+        amortization = kind == AMORTIZATION_KIND
+        self.form.setRowVisible(self.amount, not (split or amortization))
+        self.form.setRowVisible(self.quantity, trade or amortization)
+        self.form.setRowVisible(self.face_before, amortization)
+        self.form.setRowVisible(self.face_after, amortization)
         self.form.setRowVisible(self.fee, trade)
         self.form.setRowVisible(self.accrued, trade and self.bond)
         label = self.form.labelForField(self.amount)
@@ -161,6 +181,13 @@ class InvestmentEventEditor(QDialog):
             kind = self.kind.currentData()
             if kind == SPLIT_KIND:
                 self.entry = StockSplit(*fields, self.multiplier.value())
+            elif kind == AMORTIZATION_KIND:
+                self.entry = BondAmortization(
+                    *fields,
+                    self.quantity.value(),
+                    Money.parse(self.face_before.text(), RUB),
+                    Money.parse(self.face_after.text(), RUB),
+                )
             elif kind in TRADE_LABELS:
                 self.entry = SecurityTrade(
                     *fields,

@@ -903,6 +903,7 @@ class MainWindow(QMainWindow):
                 request.events,
                 request.as_of,
                 splits=request.splits,
+                amortizations=request.amortizations,
             )
             return value_investments(portfolio, request.prices)
 
