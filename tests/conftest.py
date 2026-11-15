@@ -21,6 +21,17 @@ def session(tmp_path: Path) -> Iterator[VaultSession]:
         opened.close()
 
 
+@pytest.fixture
+def session_0017(tmp_path, monkeypatch) -> Iterator[VaultSession]:
+    from tests.integration.test_deposit_scenario_upgrade import create_at
+
+    opened, _ = create_at(monkeypatch, tmp_path / "previous.pfvault", "0017")
+    try:
+        yield opened
+    finally:
+        opened.close()
+
+
 @pytest.fixture(autouse=True)
 def isolated_recent_books(tmp_path, monkeypatch):
     from PySide6.QtCore import QSettings

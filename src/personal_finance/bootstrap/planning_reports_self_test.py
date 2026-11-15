@@ -1,7 +1,7 @@
 """Синтетическая проверка отчётов и расчётов планирования без записи книги."""
 
 import hashlib
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
@@ -227,21 +227,11 @@ def _investment_preview(day: date) -> InvestmentPreviewDialog:
     return dialog
 
 
-def _corporate_event_previews(day: date) -> tuple[InvestmentPreviewDialog, InvestmentPreviewDialog]:
-    account = Account(str(uuid4()), "Синтетический счёт", AccountKind.INVESTMENT, None)
+def _corporate_examples(account: Account, day: date) -> tuple[InvestmentPositionInputs, ...]:
     base = _investment_inputs(account, day)
     split = StockSplit(str(uuid4()), account.id, base.security.id, day, 4, 3)
     old_price = replace(base.prices[0], quoted_on=day - timedelta(days=1))
-    split_request = InvestmentPreviewRequest(
-        account, base.security, base.events, day, (old_price,), splits=(split,)
-    )
-    split_value = value_investments(
-        project_investments((account,), (base.security,), base.events, day, splits=(split,)),
-        split_request.prices,
-    )
-    (share,) = split_value.positions
-    if (share.position.quantity, share.position.cost_minor, share.price) != (3, 401, None):
-        raise RuntimeError("Дробление не сохранило себестоимость или применило прежнюю цену.")
+    shares = replace(base, prices=(old_price,), splits=(split,))
 
     bond = Security(str(uuid4()), "BOND-TEST", "Синтетическая облигация", SecurityKind.BOND)
     purchase = SecurityTrade(
@@ -262,65 +252,133 @@ def _corporate_event_previews(day: date) -> tuple[InvestmentPreviewDialog, Inves
     obsolete = ManualPrice(
         bond.id, day, PriceUnit.PERCENT_OF_FACE, Decimal("99.2"), RUB, Money(100000), Money(0)
     )
-    repayment_request = InvestmentPreviewRequest(
-        account, bond, (purchase,), day, (obsolete,), amortizations=(amortization,)
+    bonds = InvestmentPositionInputs(
+        account.id, bond, (purchase,), (obsolete,), amortizations=(amortization,)
     )
-    portfolio = project_investments(
-        (account,), (bond,), (purchase,), day, amortizations=(amortization,)
-    )
-    repayment_value = value_investments(portfolio, repayment_request.prices)
-    (holding,) = repayment_value.positions
-    (receipt,) = portfolio.amortizations
-    if (
-        (holding.position.quantity, holding.position.cost_minor, holding.price) != (3, 211507, None)
-        or receipt.realized_minor != 7498
-        or receipt.event.principal_minor != 75000
-    ):
-        raise RuntimeError("Частичное погашение не совпало с проверочной себестоимостью.")
-    return (
-        InvestmentPreviewDialog(split_request, split_value),
-        InvestmentPreviewDialog(repayment_request, repayment_value),
-    )
+    return shares, bonds
 
 
-def store_investment_example(
+def _corporate_event_previews(day: date) -> tuple[InvestmentPreviewDialog, InvestmentPreviewDialog]:
+    account = Account(str(uuid4()), "Синтетический счёт", AccountKind.INVESTMENT, None)
+    dialogs = []
+    for inputs in _corporate_examples(account, day):
+        request = InvestmentPreviewRequest(
+            account,
+            inputs.security,
+            inputs.events,
+            day,
+            inputs.prices,
+            inputs.splits,
+            inputs.amortizations,
+        )
+        portfolio = project_investments(
+            (account,),
+            (inputs.security,),
+            inputs.events,
+            day,
+            splits=inputs.splits,
+            amortizations=inputs.amortizations,
+        )
+        valuation = value_investments(portfolio, inputs.prices)
+        (holding,) = valuation.positions
+        expected_cost = 401 if inputs.splits else 211507
+        if (holding.position.quantity, holding.position.cost_minor, holding.price) != (
+            3,
+            expected_cost,
+            None,
+        ):
+            raise RuntimeError(
+                "Корпоративное событие не прошло расчёт количества, стоимости и цены."
+            )
+        if inputs.amortizations:
+            (payment,) = portfolio.amortizations
+            if (payment.realized_minor, payment.event.principal_minor) != (7498, 75000):
+                raise RuntimeError("Не совпали выплата номинала и результат амортизации.")
+        dialogs.append(InvestmentPreviewDialog(request, valuation))
+    split, amortization = dialogs
+    return split, amortization
+
+
+@dataclass(frozen=True, slots=True)
+class StoredInvestmentExample:
+    initial: SavedInvestmentPosition
+    latest: SavedInvestmentPosition
+    initial_command: str
+    latest_command: str
+
+
+def store_investment_examples(
     session: VaultSession, day: date
-) -> tuple[SavedInvestmentPosition, SavedInvestmentPosition, str]:
+) -> tuple[StoredInvestmentExample, ...]:
     storage = session.investment_positions
-    if storage is None:
-        raise RuntimeError("Сохранение инвестиционных позиций недоступно в новой книге.")
+    if storage is None or not session.supports_corporate_events:
+        raise RuntimeError("Новая книга не поддерживает сохранение корпоративных событий.")
     account = session.catalog.add_account("Синтетический инвестсчёт", AccountKind.INVESTMENT)
-    inputs = _investment_inputs(account, day)
-    command = str(uuid4())
-    first = storage.save(inputs, command_id=command)
-    second = storage.save(inputs, identifier=first.id, expected_revision_id=first.revision_id)
-    check_investment_example(session, day, first, second, command)
-    return first, second, command
+    examples = []
+    for inputs in _corporate_examples(account, day):
+        initial_command, latest_command = str(uuid4()), str(uuid4())
+        initial = storage.save(
+            replace(inputs, splits=(), amortizations=()), command_id=initial_command
+        )
+        latest = storage.save(
+            inputs,
+            identifier=initial.id,
+            expected_revision_id=initial.revision_id,
+            command_id=latest_command,
+        )
+        examples.append(StoredInvestmentExample(initial, latest, initial_command, latest_command))
+    return tuple(examples)
 
 
-def check_investment_example(
-    session: VaultSession,
-    day: date,
-    first: SavedInvestmentPosition,
-    second: SavedInvestmentPosition,
-    command: str,
+def check_investment_examples(
+    session: VaultSession, day: date, examples: tuple[StoredInvestmentExample, ...]
 ) -> None:
     storage = session.investment_positions
-    if (
-        storage is None
-        or storage.items() != [second]
-        or storage.history(first.id) != [first, second]
-        or storage.save(first.inputs, command_id=command) != first
-    ):
-        raise RuntimeError("Версии инвестиционной позиции или квитанция не сохранились.")
-    report = report_saved_portfolio(session.catalog.accounts(), storage.items(), day)
+    if storage is None or not session.supports_corporate_events:
+        raise RuntimeError("В книге недоступны сохранённые корпоративные события.")
+    records = storage.items()
+    if {item.id: item for item in records} != {
+        example.latest.id: example.latest for example in examples
+    }:
+        raise RuntimeError("Не совпали действующие версии позиций.")
+    for example in examples:
+        first, latest = example.initial, example.latest
+        if (
+            storage.history(first.id) != [first, latest]
+            or storage.save(first.inputs, command_id=example.initial_command) != first
+            or storage.save(
+                latest.inputs,
+                identifier=first.id,
+                expected_revision_id=first.revision_id,
+                command_id=example.latest_command,
+            )
+            != latest
+        ):
+            raise RuntimeError("Версии инвестиционной позиции или квитанции не сохранились.")
+    report = report_saved_portfolio(session.catalog.accounts(), records, day)
+    amounts = {
+        row.position.security.kind: (
+            row.position.quantity,
+            row.position.cost_minor,
+            row.position.realized_minor,
+        )
+        for row in report.rows
+    }
     (total,) = report.totals
-    if total.priced_market_minor != 555 or total.result_minor != 342 or total.unpriced_count:
-        raise RuntimeError("Итог портфеля не совпал с сохранённой позицией.")
+    if (
+        amounts
+        != {
+            SecurityKind.STOCK: (3, 401, 188),
+            SecurityKind.BOND: (3, 211507, 7498),
+        }
+        or total.unpriced_count != 2
+        or total.priced_market_minor
+    ):
+        raise RuntimeError("Итог портфеля не совпал с сохранёнными событиями.")
     dialog = InvestmentPortfolioDialog(report)
     try:
-        if dialog.positions.model().rowCount() != 1:
-            raise RuntimeError("Сохранённая позиция недоступна в интерфейсе портфеля.")
+        if dialog.positions.model().rowCount() != 2:
+            raise RuntimeError("Сохранённые позиции недоступны в интерфейсе портфеля.")
     finally:
         dialog.reject()
         dialog.deleteLater()

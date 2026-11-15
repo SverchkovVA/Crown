@@ -36,7 +36,7 @@ def set_price(window, options, day, value):
 
 def test_save_open_and_revise_investment_position_in_embedded_workflow(tmp_path, qtbot):
     path = tmp_path / "positions.pfvault"
-    session, _ = create_vault(path, "Синтетическая книга 0017", PASSWORD)
+    session, _ = create_vault(path, "Синтетическая книга инвестиций", PASSWORD)
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     before = (session.ledger.operations(), session.ledger.balances())
     window = MainWindow()

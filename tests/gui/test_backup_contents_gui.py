@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QDialogButtonBox, QFileDialog, QLabel, QPushButton
 
 from personal_finance.domain.models import AccountKind
 from personal_finance.infrastructure.backup.container import create_backup
+from personal_finance.infrastructure.persistence.migration_runner import SCHEMA_HEAD
 from personal_finance.presentation.backup_contents import BackupContentsDialog
 from personal_finance.presentation.dialogs import PasswordDialog
 from personal_finance.presentation.inline_forms import FormHost
@@ -48,7 +49,7 @@ def test_check_copy_shows_contents_without_changing_current_book(
         result = current(panel)
         assert isinstance(result, BackupContentsDialog)
         values = [label.text() for label in result.findChildren(QLabel)]
-        assert "Схема в копии" in values and "0017" in values and "1" in values
+        assert "Схема в копии" in values and SCHEMA_HEAD in values and "1" in values
         assert all(BACKUP_PASSWORD not in value and "Вымышленное" not in value for value in values)
         assert window.session is (session if book_open else None)
     finally:

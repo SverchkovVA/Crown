@@ -28,7 +28,6 @@ from tests.conftest import BACKUP_PASSWORD
 from tests.integration.test_deposit_scenario_upgrade import create_at
 from tests.integration.test_planning_scenario_upgrade import hashes, state
 from tests.integration.test_stock_split_lifecycle import BASE_SCHEMAS, restore
-from tests.integration.test_stock_split_lifecycle import split_schema as split_schema
 from tests.unit.test_bond_amortization import NEXT, principal
 from tests.unit.test_investment_positions import inputs
 from tests.unit.test_investments import ACCOUNT, BOND, TODAY, identifier, trade
@@ -91,7 +90,7 @@ def test_canonical_format_3_requires_scope_and_exact_integer_minor_units():
 
 
 def test_format_3_cannot_be_added_to_0017_and_survives_a_second_encrypted_copy(
-    tmp_path, monkeypatch, split_schema
+    tmp_path, monkeypatch
 ):
     source = tmp_path / "source.pfvault"
     old, _ = create_at(monkeypatch, source, "0017")

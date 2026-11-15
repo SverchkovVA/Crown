@@ -24,11 +24,10 @@ from personal_finance.presentation.main_window import MainWindow
 from tests.conftest import PASSWORD
 from tests.gui.test_investment_preview_gui import add, show_position
 from tests.gui.test_planning_scenarios_workflow import current
-from tests.integration.test_stock_split_lifecycle import split_schema as split_schema
 from tests.unit.test_bond_amortization import NEXT
 
 
-def test_trial_amortization_is_saved_reopened_and_compared_with_cash(tmp_path, qtbot, split_schema):
+def test_amortization_is_saved_reopened_and_compared_with_cash(tmp_path, qtbot):
     path = tmp_path / "trial.pfvault"
     session, _ = create_vault(path, "Учебная книга 0018", PASSWORD)
     account = session.catalog.add_account("Учебный счёт", AccountKind.INVESTMENT)

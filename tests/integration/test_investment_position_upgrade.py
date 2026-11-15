@@ -24,8 +24,10 @@ NEW_PASSWORD = "Вымышленный пароль восстановления
 BASE_SCHEMAS = tuple(version for version in migrations.SUPPORTED_SCHEMAS if version < "0017")
 
 
-def restore(archive, target):
-    return container.restore_backup(archive, target, BACKUP_PASSWORD, NEW_PASSWORD)
+def restore(archive, target, monkeypatch):
+    with monkeypatch.context() as previous_release:
+        previous_release.setattr(migrations, "SCHEMA_HEAD", "0017")
+        return container.restore_backup(archive, target, BACKUP_PASSWORD, NEW_PASSWORD)
 
 
 @pytest.mark.parametrize("version", BASE_SCHEMAS)
@@ -47,7 +49,7 @@ def test_old_book_restores_to_0017_only_in_new_folder(tmp_path, monkeypatch, ver
     finally:
         session.close()
     original = hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest()
-    restored, _ = restore(archive, tmp_path / "restored.pfvault")
+    restored, _ = restore(archive, tmp_path / "restored.pfvault", monkeypatch)
     try:
         assert restored.schema_revision == "0017" and restored.supports_payment_calendars
         actual = state(restored)
@@ -67,7 +69,7 @@ def test_old_book_restores_to_0017_only_in_new_folder(tmp_path, monkeypatch, ver
 
 def test_0017_preserves_versions_receipts_and_rejects_an_older_reader(tmp_path, monkeypatch):
     path = tmp_path / "positions.pfvault"
-    source, old_pf = vault.create_vault(path, "Синтетическая книга 0017", PASSWORD)
+    source, old_pf = create_at(monkeypatch, path, "0017")
     command = str(uuid4())
     try:
         assert source.schema_revision == "0017"
@@ -90,7 +92,7 @@ def test_0017_preserves_versions_receipts_and_rejects_an_older_reader(tmp_path, 
             vault.open_vault(path, PASSWORD)
     assert hashes(path) == source_before
     target = tmp_path / "copy.pfvault"
-    restored, new_pf = restore(archive, target)
+    restored, new_pf = restore(archive, target, monkeypatch)
     try:
         assert (
             restored.schema_revision == "0017"
@@ -139,7 +141,7 @@ def test_0017_restore_fault_never_publishes(tmp_path, monkeypatch, prefix):
     with monkeypatch.context() as patch:
         patch.setattr(op, "execute", fail)
         with pytest.raises(OSError, match="Синтетический отказ"):
-            restore(archive, target)
+            restore(archive, target, monkeypatch)
     assert not target.exists()
     assert not list(tmp_path.glob(".pf-restore-*"))
     assert before == (hashes(source), hashlib.sha256(archive.read_bytes()).hexdigest())

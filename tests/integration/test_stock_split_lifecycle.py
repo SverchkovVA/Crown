@@ -1,4 +1,4 @@
-"""Пробный цикл 0018 на временных зашифрованных книгах."""
+"""Штатный цикл 0018 на временных зашифрованных книгах."""
 
 import hashlib
 from contextlib import closing
@@ -25,20 +25,7 @@ from tests.unit.test_payment_calendar_codec import calendar
 
 NEW_PASSWORD = "Вымышленный пароль восстановления с дроблением акций"
 BASE_SCHEMAS = tuple(version for version in migrations.SUPPORTED_SCHEMAS if version < "0018")
-TRIAL_SCHEMA = "0018"
-
-
-@pytest.fixture
-def split_schema(monkeypatch):
-    supported = (*BASE_SCHEMAS, TRIAL_SCHEMA)
-    for module in (migrations, container):
-        monkeypatch.setattr(module, "SUPPORTED_SCHEMAS", supported)
-        monkeypatch.setattr(module, "SCHEMA_HEAD", TRIAL_SCHEMA)
-    monkeypatch.setattr(
-        vault,
-        "initialize_schema",
-        lambda engine: migrations.initialize_schema(engine, target=TRIAL_SCHEMA),
-    )
+CORPORATE_SCHEMA = "0018"
 
 
 def restore(archive, target):
@@ -50,9 +37,7 @@ def immutable_copy(source, archive):
 
 
 @pytest.mark.parametrize("version", BASE_SCHEMAS)
-def test_older_book_restores_to_0018_only_in_new_folder(
-    tmp_path, monkeypatch, split_schema, version
-):
+def test_older_book_restores_to_0018_only_in_new_folder(tmp_path, monkeypatch, version):
     source = tmp_path / "original.pfvault"
     session, old_pf = create_at(monkeypatch, source, version)
     with closing(session):
@@ -80,7 +65,7 @@ def test_older_book_restores_to_0018_only_in_new_folder(
     target = tmp_path / "restored.pfvault"
     restored, new_pf = restore(archive, target)
     with closing(restored):
-        assert restored.schema_revision == TRIAL_SCHEMA and restored.supports_corporate_events
+        assert restored.schema_revision == CORPORATE_SCHEMA and restored.supports_corporate_events
         assert restored.replica_id != replica and new_pf != old_pf
         actual = state(restored)
         assert all(actual[key] == value for key, value in expected.items())
@@ -93,17 +78,15 @@ def test_older_book_restores_to_0018_only_in_new_folder(
         assert reopened.schema_revision == version and not reopened.supports_corporate_events
     assert immutable_copy(source, archive) == before
     with closing(vault.open_vault(target, new_pf, recovery=True)) as recovered:
-        assert recovered.schema_revision == TRIAL_SCHEMA
+        assert recovered.schema_revision == CORPORATE_SCHEMA
 
 
-def test_format2_survives_reopen_and_backup_restore_with_receipts(
-    tmp_path, monkeypatch, split_schema
-):
+def test_format2_survives_reopen_and_backup_restore_with_receipts(tmp_path, monkeypatch):
     source = tmp_path / "split.pfvault"
     session, original_pf = vault.create_vault(source, "Учебная книга 0018", PASSWORD)
     first_command, split_command = str(uuid4()), str(uuid4())
     with closing(session):
-        assert session.schema_revision == TRIAL_SCHEMA and session.supports_corporate_events
+        assert session.schema_revision == CORPORATE_SCHEMA and session.supports_corporate_events
         account = session.catalog.add_account("Учебный инвестсчёт", AccountKind.INVESTMENT)
         prior = inputs(account)
         first = session.investment_positions.save(prior, command_id=first_command)
@@ -136,9 +119,9 @@ def test_format2_survives_reopen_and_backup_restore_with_receipts(
 
     with closing(vault.open_vault(source, PASSWORD)) as reopened:
         assert reopened.investment_positions.history(first.id) == [first, second]
-    assert container.verify_backup(archive, BACKUP_PASSWORD)["schema"] == TRIAL_SCHEMA
+    assert container.verify_backup(archive, BACKUP_PASSWORD)["schema"] == CORPORATE_SCHEMA
     contents = container.inspect_backup(archive, BACKUP_PASSWORD)
-    assert (contents.source_schema, contents.restore_schema) == (TRIAL_SCHEMA, TRIAL_SCHEMA)
+    assert (contents.source_schema, contents.restore_schema) == (CORPORATE_SCHEMA, CORPORATE_SCHEMA)
     assert (contents.accounts, contents.investment_positions, contents.operations) == (1, 1, 0)
     target = tmp_path / "restored.pfvault"
     restored, new_pf = restore(archive, target)
@@ -165,7 +148,7 @@ def test_format2_survives_reopen_and_backup_restore_with_receipts(
         "ALTER TABLE investment_position_revisions_0018",
     ],
 )
-def test_0018_restore_failure_leaves_no_published_book(tmp_path, monkeypatch, split_schema, prefix):
+def test_0018_restore_failure_leaves_no_published_book(tmp_path, monkeypatch, prefix):
     source = tmp_path / "original.pfvault"
     session, _ = create_at(monkeypatch, source, "0017")
     with closing(session):

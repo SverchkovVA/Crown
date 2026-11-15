@@ -166,11 +166,12 @@ class InvestmentPreviewOptions(QDialog):
         if not storage:
             layout.addWidget(_label("Введённые данные хранятся в этой форме."))
         self.split_notice = _label(
-            "Дробление участвует в расчёте черновика. Сохранение такой позиции пока недоступно."
+            "Дробление доступно в черновике. Для сохранения восстановите копию книги в новую папку."
         )
         layout.addWidget(self.split_notice)
         self.amortization_notice = _label(
-            "Частичное погашение можно рассчитать в черновике. Сохранение пока недоступно."
+            "Частичное погашение доступно в черновике. "
+            "Для сохранения восстановите копию книги в новую папку."
         )
         layout.addWidget(self.amortization_notice)
         self.feedback = _label("")

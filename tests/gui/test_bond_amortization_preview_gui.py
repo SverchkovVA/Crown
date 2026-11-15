@@ -17,7 +17,8 @@ from tests.gui.test_investment_preview_gui import add, show_position
 from tests.gui.test_planning_scenarios_workflow import current
 
 
-def test_partial_redemption_preview_separates_nominal_and_does_not_save(session, qtbot):
+def test_partial_redemption_preview_separates_nominal_and_does_not_save(session_0017, qtbot):
+    session = session_0017
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     before = session.ledger.operations(), session.ledger.balances()
     window = MainWindow()

@@ -13,7 +13,8 @@ from personal_finance.presentation.investment_preview import (
 from personal_finance.presentation.main_window import MainWindow
 
 
-def test_split_is_previewed_without_saving_or_reusing_an_obsolete_quote(session, qtbot):
+def test_split_is_previewed_without_saving_or_reusing_an_obsolete_quote(session_0017, qtbot):
+    session = session_0017
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     prior = session.investment_positions.items(), session.ledger.operations()
     window = MainWindow()

@@ -21,10 +21,9 @@ from tests.conftest import PASSWORD
 from tests.gui.test_investment_preview_gui import add, show_position
 from tests.gui.test_investment_storage_gui import set_price
 from tests.gui.test_planning_scenarios_workflow import current
-from tests.integration.test_stock_split_lifecycle import split_schema as split_schema
 
 
-def test_split_saved_and_reopened_from_investment_forms(tmp_path, qtbot, split_schema):
+def test_split_saved_and_reopened_from_investment_forms(tmp_path, qtbot):
     path = tmp_path / "split.pfvault"
     session, _ = create_vault(path, "Учебная книга 0018", PASSWORD)
     session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)

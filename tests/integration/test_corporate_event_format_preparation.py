@@ -82,9 +82,12 @@ def test_format2_requires_explicit_codec_and_preserves_legacy_json():
             investment_position_from_json(change, allow_corporate_events=True)
 
 
-def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision(session, tmp_path):
+def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision(
+    session_0017, tmp_path, monkeypatch
+):
+    session = session_0017
     # A full copy of this temporary test book is taken with the session closed.
-    assert session.schema_revision == migration_runner.SCHEMA_HEAD == "0017"
+    assert session.schema_revision == "0017" and not session.supports_corporate_events
     account = session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     source = session.root
     command_id = str(uuid4())
@@ -138,8 +141,13 @@ def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision
         engine.dispose()
     assert hashes(source) == baseline
     target_before = hashes(target)
-    with pytest.raises(UnsupportedFormat, match="совместимую"):
-        open_vault(target, PASSWORD)
+    with monkeypatch.context() as old_reader:
+        prior_schemas = tuple(
+            value for value in migration_runner.SUPPORTED_SCHEMAS if value < "0018"
+        )
+        old_reader.setattr(migration_runner, "SUPPORTED_SCHEMAS", prior_schemas)
+        with pytest.raises(UnsupportedFormat, match="совместимую"):
+            open_vault(target, PASSWORD)
     assert hashes(target) == target_before
     with closing(open_vault(source, PASSWORD)) as reopened:
         assert reopened.investment_positions.get(record.id) == record

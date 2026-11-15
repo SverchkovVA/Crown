@@ -29,9 +29,9 @@ from personal_finance.bootstrap.ocr_audit_self_test import (
 )
 from personal_finance.bootstrap.ocr_runtime import load_runtime_manifest, recognitions_for_directory
 from personal_finance.bootstrap.planning_reports_self_test import (
-    check_investment_example,
+    check_investment_examples,
     check_planning_reports,
-    store_investment_example,
+    store_investment_examples,
 )
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashSourceKind, cash_flow_sources
@@ -976,8 +976,9 @@ def self_test(
                     if source.ledger is None:
                         raise RuntimeError("Журнал недоступен после повторного открытия.")
                     before_investments = source.ledger.operations(include_deleted=True)
-                    investment = store_investment_example(source, today)
-                    investment_account_id = investment[1].inputs.account_id
+                    investments = store_investment_examples(source, today)
+                    check_investment_examples(source, today, investments)
+                    investment_account_id = investments[0].initial.inputs.account_id
                     expected_balances[investment_account_id] = 0
                     if (
                         source.ledger is None
@@ -998,7 +999,7 @@ def self_test(
                     )
                 try:
                     with _step(report, "check_restored_data"):
-                        check_investment_example(restored, today, *investment)
+                        check_investment_examples(restored, today, investments)
                         restored_planning = restored.planning_scenarios
                         if (
                             restored_planning is None
