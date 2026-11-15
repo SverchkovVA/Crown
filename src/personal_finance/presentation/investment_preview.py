@@ -217,7 +217,7 @@ class InvestmentPreviewOptions(QDialog):
                 )
             elif isinstance(item, BondAmortization):
                 name, quantity, amount = (
-                    AMORTIZATION_LABEL,
+                    "Амортизация",
                     str(item.quantity),
                     item.principal_minor,
                 )
@@ -388,10 +388,11 @@ class InvestmentPreviewDialog(QDialog):
             layout.addStretch()
             return
         (position,) = portfolio.positions
+        distributions = "Купоны" if request.security.kind is SecurityKind.BOND else "Выплаты"
         self.summary.setText(
             f"Бумаг: {position.quantity} · Стоимость партий {amount(position.cost_minor)} · "
             f"Результат продаж и погашений {amount(position.realized_minor)} · "
-            f"Выплаты {amount(position.distributions_minor)}"
+            f"{distributions} {amount(position.distributions_minor)}"
         )
         market_minor = None
         if valuation.positions:
@@ -523,7 +524,7 @@ class InvestmentPreviewDialog(QDialog):
         if portfolio.amortizations:
             self.amortizations = self._section(
                 tabs,
-                AMORTIZATION_LABEL,
+                "Амортизация",
                 [
                     "Дата",
                     "Бумаг",
@@ -545,6 +546,7 @@ class InvestmentPreviewDialog(QDialog):
                 ],
                 (1, 2, 3, 4, 5),
             )
+            tabs.setTabToolTip(tabs.indexOf(self.amortizations), AMORTIZATION_LABEL)
             header = self.amortizations.horizontalHeader()
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             header.setStretchLastSection(True)
