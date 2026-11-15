@@ -161,7 +161,8 @@ def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision
         "CREATE TRIGGER investment_position_payload_scope",
     ],
 )
-def test_candidate_ddl_rolls_back_rows_metadata_and_triggers(session, monkeypatch, statement):
+def test_candidate_ddl_rolls_back_rows_metadata_and_triggers(session_0017, monkeypatch, statement):
+    session = session_0017
     account = session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
     saved = session.investment_positions.save(inputs(account))
     before = snapshot(session.engine)
