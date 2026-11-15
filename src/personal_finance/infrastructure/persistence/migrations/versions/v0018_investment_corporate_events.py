@@ -12,15 +12,29 @@ depends_on = None
 _TABLE = "investment_position_revisions"
 _STAGING = "investment_position_revisions_0018"
 _FORMAT_CHECK = "AND json_extract(position_json,'$.format')=1"
-_NEW_CHECK = """AND (
-        (json_extract(position_json,'$.format')=1 AND json_type(position_json,'$.splits') IS NULL)
+_NEW_CHECK = """AND json_type(position_json,'$.format') IS 'integer' AND (
+        (
+            json_extract(position_json,'$.format')=1
+            AND json_type(position_json,'$.splits') IS NULL
+            AND json_type(position_json,'$.amortizations') IS NULL
+        )
         OR (
             json_extract(position_json,'$.format')=2
             AND json_extract(position_json,'$.security.kind') IS 'stock'
+            AND json_type(position_json,'$.amortizations') IS NULL
             AND json_type(position_json,'$.splits') IS 'array'
             AND json_array_length(position_json,'$.splits') BETWEEN 1 AND 9999
             AND json_array_length(position_json,'$.events')
                 + json_array_length(position_json,'$.splits') <= 10000
+        )
+        OR (
+            json_extract(position_json,'$.format')=3
+            AND json_extract(position_json,'$.security.kind') IS 'bond'
+            AND json_type(position_json,'$.splits') IS NULL
+            AND json_type(position_json,'$.amortizations') IS 'array'
+            AND json_array_length(position_json,'$.amortizations') BETWEEN 1 AND 9999
+            AND json_array_length(position_json,'$.events')
+                + json_array_length(position_json,'$.amortizations') <= 10000
         )
     )"""
 

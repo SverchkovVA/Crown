@@ -128,7 +128,12 @@ def report_saved_portfolio(
         # Порядок и цена относятся к позиции счёта. Один код на двух счетах
         # может иметь одинаковые номера сделок и разные ручные цены.
         portfolio = project_investments(
-            (account,), (inputs.security,), inputs.events, as_of, splits=inputs.splits
+            (account,),
+            (inputs.security,),
+            inputs.events,
+            as_of,
+            splits=inputs.splits,
+            amortizations=inputs.amortizations,
         )
         if not portfolio.positions:
             continue

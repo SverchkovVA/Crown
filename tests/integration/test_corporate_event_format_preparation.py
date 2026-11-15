@@ -61,15 +61,15 @@ def snapshot(engine):
 def test_format2_requires_explicit_codec_and_preserves_legacy_json():
     legacy = inputs()
     raw = investment_position_json(legacy)
-    assert investment_position_json(legacy, allow_splits=True) == raw
-    assert investment_position_from_json(raw, allow_splits=True) == legacy
+    assert investment_position_json(legacy, allow_corporate_events=True) == raw
+    assert investment_position_from_json(raw, allow_corporate_events=True) == legacy
     candidate = with_split(legacy)
     with pytest.raises(ValidationError, match="совместимая"):
         investment_position_json(candidate)
-    extended = investment_position_json(candidate, allow_splits=True)
+    extended = investment_position_json(candidate, allow_corporate_events=True)
     decoded = json.loads(extended)
     assert decoded["format"] == 2 and decoded["splits"][0]["multiplier"] == 2
-    assert investment_position_from_json(extended, allow_splits=True) == candidate
+    assert investment_position_from_json(extended, allow_corporate_events=True) == candidate
     with pytest.raises(ValidationError, match="формат"):
         investment_position_from_json(extended)
     for change in (
@@ -79,7 +79,7 @@ def test_format2_requires_explicit_codec_and_preserves_legacy_json():
         extended + " ",
     ):
         with pytest.raises(ValidationError, match="формат"):
-            investment_position_from_json(change, allow_splits=True)
+            investment_position_from_json(change, allow_corporate_events=True)
 
 
 def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision(session, tmp_path):
@@ -96,7 +96,11 @@ def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision
             split, identifier=record.id, expected_revision_id=record.revision_id
         )
     forced = SqlInvestmentPositions(
-        session.engine, session.book_id, session.replica_id, session.mutex, allow_splits=True
+        session.engine,
+        session.book_id,
+        session.replica_id,
+        session.mutex,
+        allow_corporate_events=True,
     )
     with pytest.raises(IntegrityError, match="CHECK constraint"):
         forced.save(split, identifier=record.id, expected_revision_id=record.revision_id)
@@ -113,7 +117,9 @@ def test_staged_update_keeps_old_receipts_and_integrity_and_accepts_new_revision
         heads, rows, _ = snapshot(engine)
         assert heads == ("0018",)
         assert rows == before[1]
-        repo = SqlInvestmentPositions(engine, identity, replica, session.mutex, allow_splits=True)
+        repo = SqlInvestmentPositions(
+            engine, identity, replica, session.mutex, allow_corporate_events=True
+        )
         assert repo.history(record.id) == [record]
         assert repo.save(stock, command_id=command_id) == record
         revised = repo.save(split, identifier=record.id, expected_revision_id=record.revision_id)

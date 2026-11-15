@@ -249,6 +249,7 @@ class InvestmentPortfolioDialog(QDialog):
             self.report.as_of,
             inputs.prices,
             inputs.splits,
+            inputs.amortizations,
         )
         present_form(InvestmentPreviewDialog(request, row.valuation, self), None)
 

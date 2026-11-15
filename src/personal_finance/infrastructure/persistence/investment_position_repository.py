@@ -39,12 +39,12 @@ def _content_hash(raw: str, deleted: bool, parent: str | None) -> str:
     )
 
 
-def _record(row: RowMapping, *, allow_splits: bool) -> SavedInvestmentPosition:
+def _record(row: RowMapping, *, allow_corporate_events: bool) -> SavedInvestmentPosition:
     try:
         require_identifier(row["id"])
         require_identifier(row["revision_id"])
         raw = row["position_json"]
-        inputs = investment_position_from_json(raw, allow_splits=allow_splits)
+        inputs = investment_position_from_json(raw, allow_corporate_events=allow_corporate_events)
         if (
             row["sealed"] != 1
             or row["is_deleted"] not in (0, 1)
@@ -69,9 +69,9 @@ class SqlInvestmentPositions:
         replica_id: str,
         mutex: RLock,
         *,
-        allow_splits: bool = False,
+        allow_corporate_events: bool = False,
     ) -> None:
-        self._allow_splits = allow_splits
+        self._allow_corporate_events = allow_corporate_events
         self._engine, self._book_id, self._replica_id, self._mutex = (
             engine,
             book_id,
@@ -114,7 +114,7 @@ class SqlInvestmentPositions:
         )
         if row is None:
             raise VaultError("Версия инвестиционной позиции отсутствует.")
-        return _record(row, allow_splits=self._allow_splits)
+        return _record(row, allow_corporate_events=self._allow_corporate_events)
 
     def _current(self, connection: Connection, identifier: str) -> SavedInvestmentPosition:
         row = (
@@ -127,7 +127,7 @@ class SqlInvestmentPositions:
         )
         if row is None:
             raise ValidationError("Инвестиционная позиция не найдена в этой книге.")
-        return _record(row, allow_splits=self._allow_splits)
+        return _record(row, allow_corporate_events=self._allow_corporate_events)
 
     def get(self, identifier: str) -> SavedInvestmentPosition:
         require_identifier(identifier)
@@ -149,7 +149,7 @@ class SqlInvestmentPositions:
             ),
             {"book": self._book_id, "archived": int(include_archived)},
         ).mappings()
-        return [_record(row, allow_splits=self._allow_splits) for row in rows]
+        return [_record(row, allow_corporate_events=self._allow_corporate_events) for row in rows]
 
     def _history(self, connection: Connection, identifier: str) -> list[SavedInvestmentPosition]:
         current = self._current(connection, identifier)
@@ -162,7 +162,10 @@ class SqlInvestmentPositions:
             .all()
         )
         records = {
-            row["revision_id"]: (_record(row, allow_splits=self._allow_splits), row["parent_id"])
+            row["revision_id"]: (
+                _record(row, allow_corporate_events=self._allow_corporate_events),
+                row["parent_id"],
+            )
             for row in rows
         }
         edges: int = connection.execute(
@@ -222,7 +225,7 @@ class SqlInvestmentPositions:
             raise ValidationError("Нельзя архивировать ещё не созданную позицию.")
         command_id = str(uuid4()) if command_id is None else command_id
         require_identifier(command_id)
-        raw = investment_position_json(inputs, allow_splits=self._allow_splits)
+        raw = investment_position_json(inputs, allow_corporate_events=self._allow_corporate_events)
         digest = _digest(
             {
                 "kind": KIND + "-command",

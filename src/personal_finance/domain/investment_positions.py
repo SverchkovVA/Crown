@@ -13,6 +13,7 @@ from personal_finance.domain.investment_prices import (
     validate_price_for_security,
 )
 from personal_finance.domain.investments import (
+    BondAmortization,
     DistributionKind,
     InvestmentPortfolio,
     PortfolioEvent,
@@ -40,6 +41,7 @@ class InvestmentPositionInputs:
     events: tuple[PortfolioEvent, ...]
     prices: tuple[ManualPrice, ...] = ()
     splits: tuple[StockSplit, ...] = ()
+    amortizations: tuple[BondAmortization, ...] = ()
 
     def __post_init__(self) -> None:
         require_identifier(self.account_id)
@@ -56,7 +58,6 @@ class InvestmentPositionInputs:
             raise ValidationError("Операции должны относиться к одному счёту и инструменту.")
         if (
             not isinstance(self.splits, tuple)
-            or len(self.events) + len(self.splits) > MAX_POSITION_EVENTS
             or (self.splits and self.security.kind is not SecurityKind.STOCK)
             or any(
                 not isinstance(split, StockSplit)
@@ -65,7 +66,21 @@ class InvestmentPositionInputs:
                 for split in self.splits
             )
         ):
-            raise ValidationError("Проверьте дробления и общее количество событий позиции.")
+            raise ValidationError("Проверьте дробления в инвестиционной позиции.")
+        if (
+            not isinstance(self.amortizations, tuple)
+            or (self.amortizations and self.security.kind is not SecurityKind.BOND)
+            or any(
+                not isinstance(item, BondAmortization)
+                or item.account_id != self.account_id
+                or item.security_id != self.security.id
+                or item.face_before.currency != self.security.currency
+                for item in self.amortizations
+            )
+        ):
+            raise ValidationError("Проверьте счёт, облигацию и валюту частичного погашения.")
+        if len(self.events) + len(self.splits) + len(self.amortizations) > MAX_POSITION_EVENTS:
+            raise ValidationError("Для позиции можно хранить до 10 000 событий.")
         if not isinstance(self.prices, tuple) or len(self.prices) > MAX_POSITION_PRICES:
             raise ValidationError("Для позиции можно хранить до 10 000 ручных цен.")
         dates: set[date] = set()
@@ -87,12 +102,22 @@ class InvestmentPositionInputs:
             "splits",
             tuple(sorted(self.splits, key=lambda row: (row.occurred_on, row.sequence))),
         )
+        object.__setattr__(
+            self,
+            "amortizations",
+            tuple(sorted(self.amortizations, key=lambda row: (row.occurred_on, row.sequence))),
+        )
 
     def check_for(self, account: Account) -> InvestmentPortfolio:
         if not isinstance(account, Account) or account.id != self.account_id:
             raise ValidationError("Инвестиционная позиция относится к другому счёту.")
         return project_investments(
-            (account,), (self.security,), self.events, date.max, splits=self.splits
+            (account,),
+            (self.security,),
+            self.events,
+            date.max,
+            splits=self.splits,
+            amortizations=self.amortizations,
         )
 
 
@@ -142,13 +167,18 @@ def _price_payload(price: ManualPrice) -> dict[str, Any]:
 
 
 def investment_position_json(
-    inputs: InvestmentPositionInputs, *, allow_splits: bool = False
+    inputs: InvestmentPositionInputs, *, allow_corporate_events: bool = False
 ) -> str:
-    if inputs.splits and not allow_splits:
-        raise ValidationError("Для сохранения дробления нужна совместимая схема книги.")
+    if (inputs.splits or inputs.amortizations) and not allow_corporate_events:
+        raise ValidationError(
+            "Для хранения дробления или амортизации нужна совместимая схема книги."
+        )
     security = inputs.security
-    split_payload = (
-        {
+    version = 1
+    corporate_events = {}
+    if inputs.splits:
+        version = 2
+        corporate_events = {
             "splits": [
                 {
                     "id": event.id,
@@ -159,12 +189,24 @@ def investment_position_json(
                 for event in inputs.splits
             ]
         }
-        if inputs.splits
-        else {}
-    )
+    elif inputs.amortizations:
+        version = 3
+        corporate_events = {
+            "amortizations": [
+                {
+                    "id": event.id,
+                    "on": event.occurred_on.isoformat(),
+                    "sequence": event.sequence,
+                    "quantity": event.quantity,
+                    "face_before_minor": event.face_before.minor,
+                    "face_after_minor": event.face_after.minor,
+                }
+                for event in inputs.amortizations
+            ]
+        }
     raw = json.dumps(
         {
-            "format": 2 if inputs.splits else 1,
+            "format": version,
             "account_id": inputs.account_id,
             "security": {
                 "id": security.id,
@@ -178,7 +220,7 @@ def investment_position_json(
             },
             "events": [_event_payload(event) for event in inputs.events],
             "prices": [_price_payload(price) for price in inputs.prices],
-            **split_payload,
+            **corporate_events,
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -227,7 +269,7 @@ def _price_from_json(raw: dict[str, Any], security: Security) -> ManualPrice:
 
 
 def investment_position_from_json(
-    raw: str, *, allow_splits: bool = False
+    raw: str, *, allow_corporate_events: bool = False
 ) -> InvestmentPositionInputs:
     try:
         if not isinstance(raw, str) or len(raw.encode("utf-8")) > MAX_POSITION_PAYLOAD_BYTES:
@@ -236,7 +278,8 @@ def investment_position_from_json(
         version = data["format"]
         if (
             type(version) is not int
-            or (version != 1 and not (version == 2 and allow_splits))
+            or version not in (1, 2, 3)
+            or (version != 1 and not allow_corporate_events)
             or not isinstance(data["events"], list)
             or not isinstance(data["prices"], list)
         ):
@@ -252,7 +295,8 @@ def investment_position_from_json(
         )
         account_id = data["account_id"]
         splits = data["splits"] if version == 2 else []
-        if not isinstance(splits, list):
+        amortizations = data["amortizations"] if version == 3 else []
+        if not isinstance(splits, list) or not isinstance(amortizations, list):
             raise ValueError
         inputs = InvestmentPositionInputs(
             account_id,
@@ -270,8 +314,21 @@ def investment_position_from_json(
                 )
                 for event in splits
             ),
+            tuple(
+                BondAmortization(
+                    event["id"],
+                    account_id,
+                    security.id,
+                    date.fromisoformat(event["on"]),
+                    event["sequence"],
+                    event["quantity"],
+                    Money(event["face_before_minor"], security.currency),
+                    Money(event["face_after_minor"], security.currency),
+                )
+                for event in amortizations
+            ),
         )
-        if investment_position_json(inputs, allow_splits=allow_splits) != raw:
+        if investment_position_json(inputs, allow_corporate_events=allow_corporate_events) != raw:
             raise ValueError
         return inputs
     except (

@@ -347,7 +347,7 @@ class VaultSession:
                     book_id,
                     self.replica_id,
                     self.mutex,
-                    allow_splits=self.supports_stock_splits,
+                    allow_corporate_events=self.supports_stock_splits,
                 )
                 if features_revision == "0017"
                 else None

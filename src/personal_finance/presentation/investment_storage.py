@@ -63,7 +63,11 @@ class SavedInvestmentPositionsDialog(QDialog):
                 [
                     record.inputs.security.code,
                     options.accounts[record.inputs.account_id].name,
-                    str(len(record.inputs.events) + len(record.inputs.splits)),
+                    str(
+                        len(record.inputs.events)
+                        + len(record.inputs.splits)
+                        + len(record.inputs.amortizations)
+                    ),
                     str(len(record.inputs.prices)),
                 ]
                 for record in self.records
@@ -126,7 +130,11 @@ class InvestmentVersionHistoryDialog(QDialog):
                     local_time(record.created_at),
                     record.inputs.security.code,
                     "Архивная" if record.is_deleted else "Действующая" if index == 0 else "Прежняя",
-                    str(len(record.inputs.events) + len(record.inputs.splits)),
+                    str(
+                        len(record.inputs.events)
+                        + len(record.inputs.splits)
+                        + len(record.inputs.amortizations)
+                    ),
                     str(len(record.inputs.prices)),
                 ]
                 for index, record in enumerate(self.versions)
@@ -233,6 +241,7 @@ class InvestmentStorage:
                     _date(dialog.as_of),
                     inputs.prices,
                     inputs.splits,
+                    inputs.amortizations,
                 )
                 self.window._show_investment_calculation(self.session, request)
 

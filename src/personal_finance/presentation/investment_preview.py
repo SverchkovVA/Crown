@@ -87,7 +87,7 @@ class InvestmentPreviewOptions(QDialog):
         self.security_id = inputs.security.id if inputs else str(uuid4())
         self.saved_security = inputs.security if inputs else None
         self.events: list[InvestmentDraftEvent] = (
-            list((*inputs.events, *inputs.splits)) if inputs else []
+            list((*inputs.events, *inputs.splits, *inputs.amortizations)) if inputs else []
         )
         self.prices = {price.quoted_on: price for price in inputs.prices} if inputs else {}
         self.storage = storage
