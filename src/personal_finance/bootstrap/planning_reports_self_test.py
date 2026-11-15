@@ -1,11 +1,13 @@
 """Синтетическая проверка отчётов и расчётов планирования без записи книги."""
 
 import hashlib
-from datetime import date
+from dataclasses import replace
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
 from PySide6.QtCore import QCoreApplication, QEvent
+from PySide6.QtWidgets import QTabWidget
 
 from personal_finance.application.analytics import Analytics
 from personal_finance.application.vault import VaultSession
@@ -18,9 +20,11 @@ from personal_finance.domain.investment_positions import (
 )
 from personal_finance.domain.investment_prices import ManualPrice, PriceUnit, value_investments
 from personal_finance.domain.investments import (
+    BondAmortization,
     Security,
     SecurityKind,
     SecurityTrade,
+    StockSplit,
     TradeKind,
     project_investments,
 )
@@ -132,6 +136,7 @@ def check_planning_reports(
     calendar_dialog = PaymentCalendarDialog(forecast)
     forecast_dialog = BalanceForecastDialog(balance)
     investment = _investment_preview(day)
+    split_view, repayment_view = _corporate_event_previews(day)
     dialogs = (
         budget_dialog,
         position_dialog,
@@ -139,6 +144,8 @@ def check_planning_reports(
         calendar_dialog,
         forecast_dialog,
         investment,
+        split_view,
+        repayment_view,
     )
     try:
         if (
@@ -148,6 +155,14 @@ def check_planning_reports(
             or forecast_dialog.days.model().rowCount() != 1
         ):
             raise RuntimeError("Учтённые строки недоступны в интерфейсе отчётов.")
+        split_tabs = split_view.findChild(QTabWidget)
+        if (
+            split_tabs is None
+            or split_tabs.tabText(split_tabs.count() - 1) != "Дробление акций"
+            or repayment_view.amortizations.model().rowCount() != 1
+            or repayment_view.amortizations.model().index(0, 3).data() != "750,00"
+        ):
+            raise RuntimeError("Корпоративное событие недоступно в собранном отчёте.")
     finally:
         for dialog in dialogs:
             dialog.reject()
@@ -210,6 +225,62 @@ def _investment_preview(day: date) -> InvestmentPreviewDialog:
     ):
         raise RuntimeError("Партии FIFO недоступны в интерфейсе инвестиционной позиции.")
     return dialog
+
+
+def _corporate_event_previews(day: date) -> tuple[InvestmentPreviewDialog, InvestmentPreviewDialog]:
+    account = Account(str(uuid4()), "Синтетический счёт", AccountKind.INVESTMENT, None)
+    base = _investment_inputs(account, day)
+    split = StockSplit(str(uuid4()), account.id, base.security.id, day, 4, 3)
+    old_price = replace(base.prices[0], quoted_on=day - timedelta(days=1))
+    split_request = InvestmentPreviewRequest(
+        account, base.security, base.events, day, (old_price,), splits=(split,)
+    )
+    split_value = value_investments(
+        project_investments((account,), (base.security,), base.events, day, splits=(split,)),
+        split_request.prices,
+    )
+    (share,) = split_value.positions
+    if (share.position.quantity, share.position.cost_minor, share.price) != (3, 401, None):
+        raise RuntimeError("Дробление не сохранило себестоимость или применило прежнюю цену.")
+
+    bond = Security(str(uuid4()), "BOND-TEST", "Синтетическая облигация", SecurityKind.BOND)
+    purchase = SecurityTrade(
+        str(uuid4()),
+        account.id,
+        bond.id,
+        day,
+        1,
+        TradeKind.BUY,
+        3,
+        Money(270000),
+        Money(9),
+        Money(9000),
+    )
+    amortization = BondAmortization(
+        str(uuid4()), account.id, bond.id, day, 2, 3, Money(100000), Money(75000)
+    )
+    obsolete = ManualPrice(
+        bond.id, day, PriceUnit.PERCENT_OF_FACE, Decimal("99.2"), RUB, Money(100000), Money(0)
+    )
+    repayment_request = InvestmentPreviewRequest(
+        account, bond, (purchase,), day, (obsolete,), amortizations=(amortization,)
+    )
+    portfolio = project_investments(
+        (account,), (bond,), (purchase,), day, amortizations=(amortization,)
+    )
+    repayment_value = value_investments(portfolio, repayment_request.prices)
+    (holding,) = repayment_value.positions
+    (receipt,) = portfolio.amortizations
+    if (
+        (holding.position.quantity, holding.position.cost_minor, holding.price) != (3, 211507, None)
+        or receipt.realized_minor != 7498
+        or receipt.event.principal_minor != 75000
+    ):
+        raise RuntimeError("Частичное погашение не совпало с проверочной себестоимостью.")
+    return (
+        InvestmentPreviewDialog(split_request, split_value),
+        InvestmentPreviewDialog(repayment_request, repayment_value),
+    )
 
 
 def store_investment_example(
