@@ -37,6 +37,13 @@ class QuoteRefreshRow:
 QuoteProvider = Callable[[tuple[QuoteInstrument, ...]], Iterable[MarketQuote]]
 
 
+@dataclass(frozen=True, slots=True)
+class BookQuoteAccess:
+    book_id: str
+    provider: QuoteProvider
+    bindings: tuple[QuoteBinding, ...]
+
+
 def _aware(value: datetime) -> bool:
     return isinstance(value, datetime) and value.utcoffset() is not None
 

@@ -1,5 +1,6 @@
 """Встроенная сводка сохранённых инвестиционных позиций."""
 
+from collections.abc import Sequence
 from datetime import date
 from html import escape
 
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from personal_finance.application.market_price_refresh import QuoteRefreshRow, QuoteStatus
 from personal_finance.domain.financial_assets import FinancialAssetTotal
 from personal_finance.domain.investment_cash_reconciliation import InvestmentCashRow
 from personal_finance.domain.investment_portfolio import (
@@ -74,8 +76,20 @@ def _row_amount(minor: int | None, currency: Currency) -> str:
     return f"{format_report_amount(minor, currency)} {unit}"
 
 
+_QUOTE_STATUS = {
+    QuoteStatus.UPDATED: "Цена сохранена",
+    QuoteStatus.CURRENT: "Такая цена уже сохранена",
+    QuoteStatus.MISSING: "Источник не вернул цену",
+    QuoteStatus.INCOMPATIBLE: "Цена не подходит по валюте, формату или дате",
+    QuoteStatus.AMBIGUOUS: "Источник вернул противоречивые цены",
+    QuoteStatus.OLDER: "Ответ старше сохранённой цены",
+    QuoteStatus.SOURCE_UNAVAILABLE: "Источник недоступен",
+}
+
+
 class InvestmentPortfolioDialog(QDialog):
     exportRequested = Signal()
+    priceRefreshRequested = Signal()
 
     def __init__(
         self,
@@ -86,6 +100,7 @@ class InvestmentPortfolioDialog(QDialog):
         assets: tuple[FinancialAssetTotal, ...] = (),
         account_names: dict[str, str] | None = None,
         category_names: dict[str, str] | None = None,
+        can_refresh_prices: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Инвестиционный портфель")
@@ -101,6 +116,10 @@ class InvestmentPortfolioDialog(QDialog):
         self.show_allocation.clicked.connect(self._open_allocation)
         self.show_allocation.setVisible(any(row.position.quantity for row in report.rows))
         title_row.addWidget(self.show_allocation)
+        self.refresh_prices = QPushButton("Обновить цены")
+        self.refresh_prices.clicked.connect(self.priceRefreshRequested)
+        self.refresh_prices.setVisible(can_refresh_prices and bool(report.rows))
+        title_row.addWidget(self.refresh_prices)
         layout.addLayout(title_row)
         if report.unavailable_count:
             layout.addWidget(_label(f"Позиций на недоступных счетах: {report.unavailable_count}."))
@@ -119,6 +138,60 @@ class InvestmentPortfolioDialog(QDialog):
             return
 
         self.totals = _table("Итоги портфеля по валютам")
+        self.totals.setSelectionMode(self.totals.SelectionMode.NoSelection)
+        self.totals.setToolTip(
+            "Себест. — себестоимость оставшихся бумаг. "
+            "Реализация — результат продаж и погашений за вычетом себестоимости и комиссий."
+        )
+        layout.addWidget(self.totals)
+        self.unpriced = _label(
+            "Оценка включает бумаги с ценой. Для общего результата нужны все цены."
+        )
+        layout.addWidget(self.unpriced)
+
+        self.positions = _table("Позиции в инвестиционном портфеле")
+        header = self.positions.horizontalHeader()
+        header.setMinimumSectionSize(header.fontMetrics().horizontalAdvance("Инструмент") + 24)
+        layout.addWidget(self.positions, 1)
+        self.details = QPushButton("Открыть расчёт позиции")
+        self.details.setEnabled(False)
+        self.details.clicked.connect(self._open_details)
+        self.positions.doubleClicked.connect(lambda _: self._open_details())
+        actions = QWidget()
+        actions.setProperty("stickyActions", True)
+        footer = QHBoxLayout(actions)
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.addWidget(self.details)
+        self.check_cash = QPushButton("Сверить с журналом")
+        self.check_cash.setVisible(bool(reconciliation))
+        self.check_cash.clicked.connect(self._open_reconciliation)
+        footer.addWidget(self.check_cash)
+        footer.addWidget(self.show_assets)
+        self.export = QPushButton("Экспорт…")
+        self.export.clicked.connect(self.exportRequested)
+        footer.addWidget(self.export)
+        layout.addWidget(actions)
+        self._populate_tables()
+
+    def show_refreshed(
+        self,
+        report: SavedPortfolioReport,
+        assets: tuple[FinancialAssetTotal, ...],
+        result: Sequence[QuoteRefreshRow],
+    ) -> None:
+        selected = self._selected()
+        self.report = report
+        self.assets = assets
+        outcomes = {row.binding.security.id: row.status for row in result}
+        self._populate_tables(outcomes)
+        if selected is not None:
+            for index, row in enumerate(report.rows):
+                if row.record.id == selected.record.id:
+                    self.positions.selectRow(index)
+                    break
+
+    def _populate_tables(self, outcomes: dict[str, QuoteStatus] | None = None) -> None:
+        report = self.report
         replace_table(
             self.totals,
             [
@@ -144,24 +217,13 @@ class InvestmentPortfolioDialog(QDialog):
             ],
             right_columns=(1, 2, 3, 4, 5, 6),
         )
-        self.totals.setSelectionMode(self.totals.SelectionMode.NoSelection)
         self.totals.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.totals.setMaximumHeight(
             self.totals.horizontalHeader().sizeHint().height()
             + min(3, len(report.totals)) * self.totals.verticalHeader().defaultSectionSize()
             + 20
         )
-        self.totals.setToolTip(
-            "Себест. — себестоимость оставшихся бумаг. "
-            "Реализация — результат продаж и погашений за вычетом себестоимости и комиссий."
-        )
-        layout.addWidget(self.totals)
-        if any(item.unpriced_count for item in report.totals):
-            layout.addWidget(
-                _label("Оценка включает бумаги с ценой. Для общего результата нужны все цены.")
-            )
-
-        self.positions = _table("Позиции в инвестиционном портфеле")
+        self.unpriced.setVisible(any(item.unpriced_count for item in report.totals))
         model = replace_table(
             self.positions,
             [
@@ -187,38 +249,23 @@ class InvestmentPortfolioDialog(QDialog):
                 for row in report.rows
             ],
             right_columns=(2, 3, 4, 5),
+            selection_changed=self._selection_changed,
         )
         for index, row in enumerate(report.rows):
             security = row.position.security
             kind = SECURITY_LABELS[security.kind]
             model.item(index, 0).setToolTip(f"{kind} · {security.code}")
-            if row.valuation.positions:
-                quote = row.valuation.positions[0].market_quote
-                if quote is not None:
-                    model.item(index, 4).setToolTip(escape(market_quote_caption(quote)))
-        header = self.positions.horizontalHeader()
-        header.setMinimumSectionSize(header.fontMetrics().horizontalAdvance("Инструмент") + 24)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.positions, 1)
-        self.details = QPushButton("Открыть расчёт позиции")
-        self.details.setEnabled(False)
-        self.details.clicked.connect(self._open_details)
-        self.positions.selectionModel().selectionChanged.connect(self._selection_changed)
-        self.positions.doubleClicked.connect(lambda _: self._open_details())
-        actions = QWidget()
-        actions.setProperty("stickyActions", True)
-        footer = QHBoxLayout(actions)
-        footer.setContentsMargins(0, 0, 0, 0)
-        footer.addWidget(self.details)
-        self.check_cash = QPushButton("Сверить с журналом")
-        self.check_cash.setVisible(bool(reconciliation))
-        self.check_cash.clicked.connect(self._open_reconciliation)
-        footer.addWidget(self.check_cash)
-        footer.addWidget(self.show_assets)
-        self.export = QPushButton("Экспорт…")
-        self.export.clicked.connect(self.exportRequested)
-        footer.addWidget(self.export)
-        layout.addWidget(actions)
+            details = []
+            if row.valuation.positions and (quote := row.valuation.positions[0].market_quote):
+                details.append(market_quote_caption(quote))
+            if outcomes is not None and (status := outcomes.get(security.id)) is not None:
+                details.append(f"Обновление: {_QUOTE_STATUS[status]}.")
+            if details:
+                model.item(index, 4).setToolTip(
+                    "<p>" + "<br>".join(escape(line) for line in details) + "</p>"
+                )
+        self.positions.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self._selection_changed()
 
     def _open_allocation(self) -> None:
         present_form(PortfolioAllocationDialog(self.report, self), None)

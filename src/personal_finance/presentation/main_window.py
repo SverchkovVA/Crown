@@ -51,6 +51,13 @@ from personal_finance.application.classification import (
     prepare_import_categories,
 )
 from personal_finance.application.importing import read_statement
+from personal_finance.application.market_price_refresh import (
+    BookQuoteAccess,
+    QuoteBinding,
+    QuoteRefreshRow,
+    QuoteStatus,
+    update_market_quote_cache,
+)
 from personal_finance.application.ocr_cards import (
     CardRecognition,
     OcrCardPreview,
@@ -276,6 +283,7 @@ class MainWindow(QMainWindow):
         ocr_recognitions: tuple[CardRecognition, ...] = (),
         recent_books: LocalRecentBooks | None = None,
         payment_reminders: PaymentReminderPreferences | None = None,
+        market_quote_access: BookQuoteAccess | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
@@ -298,6 +306,7 @@ class MainWindow(QMainWindow):
             ocr_recognitions[0] if ocr_recognitions else None,
         )
         self._ocr_actions: list[QAction] = []
+        self._market_quote_access = market_quote_access
         self.session: VaultSession | None = None
         self._account_records: list[Account] = []
         self._journal_operations: list[Operation] = []
@@ -714,6 +723,13 @@ class MainWindow(QMainWindow):
             return
         panel = self._report_forms
         storage, ledger = session.investment_positions, session.ledger
+        cache = session.market_quote_cache
+        access = self._market_quote_access
+        bindings = (
+            access.bindings
+            if cache is not None and access and access.book_id == session.book_id
+            else ()
+        )
         options = InvestmentPortfolioOptions(self)
 
         def calculate() -> None:
@@ -735,10 +751,56 @@ class MainWindow(QMainWindow):
                     records = storage.items()
                     operations = ledger.operations()
                     balances = ledger.balances(as_of)
-                report = report_saved_portfolio(accounts, records, as_of)
+                    quotes = cache.snapshot(bindings, through=as_of) if cache and bindings else {}
+                report = report_saved_portfolio(accounts, records, as_of, market_quotes=quotes)
                 matches = reconcile_investment_cash(report, operations)
                 assets = summarize_financial_assets(accounts, balances, report)
                 return report, matches, assets, accounts, categories
+
+            def refresh_prices(
+                dialog: InvestmentPortfolioDialog, active_bindings: tuple[QuoteBinding, ...]
+            ) -> None:
+                if self._busy or self.session is not session or cache is None or access is None:
+                    return
+                if as_of != date.today():
+                    panel.message("Откройте портфель на сегодня, чтобы обновить цены.")
+                    return
+
+                def update() -> tuple[
+                    tuple[QuoteRefreshRow, ...],
+                    SavedPortfolioReport,
+                    tuple[FinancialAssetTotal, ...],
+                ]:
+                    rows = update_market_quote_cache(
+                        access.provider,
+                        cache,
+                        active_bindings,
+                        as_of=as_of,
+                        clock=lambda: datetime.now(UTC),
+                    )
+                    report, _, assets, _, _ = build()
+                    return rows, report, assets
+
+                def completed(
+                    result: tuple[
+                        tuple[QuoteRefreshRow, ...],
+                        SavedPortfolioReport,
+                        tuple[FinancialAssetTotal, ...],
+                    ],
+                ) -> None:
+                    if self.session is not session:
+                        return
+                    rows, report, assets = result
+                    dialog.show_refreshed(report, assets, rows)
+                    updated = sum(row.status is QuoteStatus.UPDATED for row in rows)
+                    current = sum(row.status is QuoteStatus.CURRENT for row in rows)
+                    unavailable = len(rows) - updated - current
+                    panel.message(
+                        f"Цены обновлены: {updated}. Уже актуальны: {current}. "
+                        f"Нет подходящего ответа: {unavailable}."
+                    )
+
+                self._panel_job(panel, update, completed, "Обновление цен…")
 
             def show(
                 result: tuple[
@@ -752,6 +814,8 @@ class MainWindow(QMainWindow):
                 if self.session is not session:
                     return
                 report, matches, assets, accounts, categories = result
+                held = {row.position.security for row in report.rows if row.position.quantity > 0}
+                active_bindings = tuple(binding for binding in bindings if binding.security in held)
                 dialog = InvestmentPortfolioDialog(
                     report,
                     self,
@@ -761,9 +825,13 @@ class MainWindow(QMainWindow):
                     category_names={
                         item.id: category_title(item, categories) for item in categories
                     },
+                    can_refresh_prices=bool(active_bindings) and as_of == date.today(),
                 )
                 dialog.exportRequested.connect(
-                    lambda: self._request_portfolio_export(session, report)
+                    lambda: self._request_portfolio_export(session, dialog.report)
+                )
+                dialog.priceRefreshRequested.connect(
+                    lambda: refresh_prices(dialog, active_bindings)
                 )
                 present_form(dialog, panel)
 
