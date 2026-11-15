@@ -47,9 +47,9 @@ def test_saved_scenario_compares_interest_and_opens_snapshot_without_writes(
     worker_calls = []
     method = Analytics.deposit_plan_fact
 
-    def observe(service, *args):
+    def observe(service, *args, **kwargs):
         worker_calls.append(QThread.currentThread() != window.thread())
-        return method(service, *args)
+        return method(service, *args, **kwargs)
 
     monkeypatch.setattr(Analytics, "deposit_plan_fact", observe)
     window = MainWindow()

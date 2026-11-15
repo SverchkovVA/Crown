@@ -347,7 +347,11 @@ class DepositScenariosController:
 
             self._job(
                 lambda: analytics.deposit_plan_fact(
-                    record.scenario, selection.account, selection.category, selection.through
+                    record.scenario,
+                    selection.account,
+                    selection.category,
+                    selection.through,
+                    dedicated_account=selection.dedicated_account,
                 ),
                 show,
                 self._failed,

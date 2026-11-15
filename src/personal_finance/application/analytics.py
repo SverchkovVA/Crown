@@ -40,9 +40,22 @@ class Analytics:
         return cash_flow_report(self._snapshot(), period, scope)
 
     def deposit_plan_fact(
-        self, scenario: DepositScenario, account: Account, category: Category, through: date
+        self,
+        scenario: DepositScenario,
+        account: Account,
+        category: Category,
+        through: date,
+        *,
+        dedicated_account: bool = False,
     ) -> DepositPlanFact:
-        return deposit_plan_fact(scenario, self._snapshot(), account, category, through)
+        return deposit_plan_fact(
+            scenario,
+            self._snapshot(),
+            account,
+            category,
+            through,
+            dedicated_account=dedicated_account,
+        )
 
     def account_position(self, accounts: list[Account], as_of: date) -> AccountPosition:
         return account_position(self._snapshot(), accounts, as_of)

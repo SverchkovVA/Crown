@@ -1,10 +1,12 @@
 """Встроенные формы сверки процентов по вкладу."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDateEdit,
     QDialog,
@@ -18,8 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from personal_finance.domain.analytics import OperationFlow
+from personal_finance.domain.analytics_cashflow import CashMovement
 from personal_finance.domain.deposit_plan_fact import DepositPlanFact
 from personal_finance.domain.deposit_scenarios import SavedDepositScenario
+from personal_finance.domain.ledger import OPERATION_LABELS
 from personal_finance.domain.models import Account, Category, CategoryKind
 from personal_finance.presentation.analytics import (
     OperationSourceDialog,
@@ -38,6 +43,7 @@ class DepositPlanFactSelection:
     account: Account
     category: Category
     through: date
+    dedicated_account: bool = False
 
 
 class DepositPlanFactOptions(QDialog):
@@ -100,6 +106,11 @@ class DepositPlanFactOptions(QDialog):
         fields.addRow("Категория", self.category)
         fields.addRow("По включительно", self.through)
         layout.addLayout(fields)
+        self.dedicated_account = QCheckBox("Рассчитать доходность по отдельному счёту вклада")
+        self.dedicated_account.setToolTip(
+            "Выберите, если на счёте записаны все движения только этого вклада и его проценты."
+        )
+        layout.addWidget(self.dedicated_account)
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
         self.feedback.hide()
@@ -126,7 +137,10 @@ class DepositPlanFactOptions(QDialog):
             self.feedback.show()
             return
         self.result_selection = DepositPlanFactSelection(
-            account, category, date(*self.through.date().getDate())
+            account,
+            category,
+            date(*self.through.date().getDate()),
+            self.dedicated_account.isChecked(),
         )
         self.accept()
 
@@ -171,6 +185,19 @@ class DepositPlanFactDialog(QDialog):
         totals.addRow("Факт по журналу", _label(amount(report.actual_minor)))
         totals.addRow("Разница", _label(amount(report.difference_minor)))
         layout.addLayout(totals)
+        actual = report.actual_yield
+        if actual is not None:
+            annual = actual.annual_percent
+            if annual is None:
+                layout.addWidget(
+                    _label(f"Годовая доходность недоступна. {actual.unavailable_reason}")
+                )
+            else:
+                display = f"{annual:.2E}" if annual.adjusted() >= 6 else f"{annual:.2f}"
+                totals.addRow(
+                    "Годовая доходность по журналу", _label(display.replace(".", ",") + " %")
+                )
+                totals.addRow("Остаток на дату среза", _label(amount(actual.closing_minor)))
         if not report.sources:
             layout.addWidget(_label("В выбранном счёте и категории за этот период записей нет."))
 
@@ -223,6 +250,41 @@ class DepositPlanFactDialog(QDialog):
         self.sources.doubleClicked.connect(lambda _: self._open_source())
         detail_layout.addWidget(self.open_source)
         tabs.addTab(details, "Записи журнала")
+        if actual is not None and actual.annual_percent is not None:
+            movements = QWidget()
+            movement_layout = QVBoxLayout(movements)
+            self.yield_sources = QTableView()
+            self.yield_sources.setAccessibleName("Движения отдельного счёта вклада")
+            self._configure_table(self.yield_sources)
+            replace_table(
+                self.yield_sources,
+                ["Дата", "Вид", "По счёту"],
+                [
+                    [
+                        date_text(flow.operation.draft.occurred_on),
+                        OPERATION_LABELS[flow.operation.draft.kind],
+                        amount(flow.minor),
+                    ]
+                    for flow in actual.movements
+                ],
+                right_columns=(2,),
+            )
+            movement_layout.addWidget(self.yield_sources, 1)
+            open_movement = QPushButton("Открыть версию операции")
+            open_movement.setEnabled(False)
+            self.yield_sources.selectionModel().selectionChanged.connect(
+                lambda: open_movement.setEnabled(
+                    bool(self.yield_sources.selectionModel().selectedRows())
+                )
+            )
+
+            def open_details() -> None:
+                self._open_selected(self.yield_sources, actual.movements)
+
+            open_movement.clicked.connect(open_details)
+            self.yield_sources.doubleClicked.connect(lambda _: open_details())
+            movement_layout.addWidget(open_movement)
+            tabs.addTab(movements, "Движения вклада")
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.button(QDialogButtonBox.StandardButton.Close).setText("К списку сценариев")
@@ -238,8 +300,13 @@ class DepositPlanFactDialog(QDialog):
         header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
 
     def _open_source(self) -> None:
-        rows = self.sources.selectionModel().selectedRows()
+        self._open_selected(self.sources, self.report.sources)
+
+    def _open_selected(
+        self, table: QTableView, flows: Sequence[OperationFlow | CashMovement]
+    ) -> None:
+        rows = table.selectionModel().selectedRows()
         if len(rows) != 1:
             return
-        flow = self.report.sources[rows[0].row()]
+        flow = flows[rows[0].row()]
         present_form(OperationSourceDialog(flow, self._categories, self._accounts, self), None)
