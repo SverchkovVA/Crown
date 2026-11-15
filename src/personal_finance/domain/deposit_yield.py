@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from datetime import date
 from decimal import Context, Decimal, localcontext
+from itertools import pairwise
 
 from personal_finance.domain.deposits import MAX_EVENTS, MAX_TERM_DAYS, DepositForecast
 from personal_finance.domain.errors import ValidationError
@@ -52,15 +53,23 @@ def effective_deposit_yield(flows: Sequence[tuple[date, Money]]) -> Decimal:
     gain = net > 0
     # При убытке обращаем даты. Тогда искомый множитель всегда в (0, 1),
     # а степени неотрицательны при обоих знаках результата.
+    descending = ordered[::-1] if gain else ordered
+    leading = Decimal(descending[0][1])
     terms = tuple(
-        ((day - first).days if gain else (last - day).days, Decimal(minor))
-        for day, minor in ordered
+        (abs((previous_day - day).days), Decimal(minor))
+        for (previous_day, _), (day, minor) in pairwise(descending)
     )
+    gaps = {gap for gap, _ in terms}
     with localcontext(_CALCULATION):
         low, high = Decimal(0), Decimal(1)
         for _ in range(_SEARCH_STEPS):
             step = (low + high) / 2
-            value = sum(minor * step**offset for offset, minor in terms)
+            # Схема Горнера по промежуткам между датами. Одинаковые
+            # интервалы используют одну степень множителя на шаг поиска.
+            discounts = {gap: step**gap for gap in gaps}
+            value = leading
+            for gap, coefficient in terms:
+                value = value * discounts[gap] + coefficient
             if value == 0:
                 low = high = step
                 break
