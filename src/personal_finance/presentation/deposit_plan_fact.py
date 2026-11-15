@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
@@ -36,6 +37,11 @@ from personal_finance.presentation.deposit_scenarios import date_text
 from personal_finance.presentation.inline_forms import present_form
 from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.tables import replace_table
+
+
+def _annual_percent(value: Decimal) -> str:
+    display = f"{value:.2E}" if value.adjusted() >= 6 else f"{value:.2f}"
+    return display.replace(".", ",") + " %"
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,16 +193,18 @@ class DepositPlanFactDialog(QDialog):
         layout.addLayout(totals)
         actual = report.actual_yield
         if actual is not None:
+            planned = report.planned_yield
+            totals.addRow(
+                "Годовая доходность по сценарию",
+                _label(_annual_percent(planned) if planned is not None else "Недоступна"),
+            )
             annual = actual.annual_percent
             if annual is None:
                 layout.addWidget(
                     _label(f"Годовая доходность недоступна. {actual.unavailable_reason}")
                 )
             else:
-                display = f"{annual:.2E}" if annual.adjusted() >= 6 else f"{annual:.2f}"
-                totals.addRow(
-                    "Годовая доходность по журналу", _label(display.replace(".", ",") + " %")
-                )
+                totals.addRow("Годовая доходность по журналу", _label(_annual_percent(annual)))
                 totals.addRow("Остаток на дату среза", _label(amount(actual.closing_minor)))
         if not report.sources:
             layout.addWidget(_label("В выбранном счёте и категории за этот период записей нет."))

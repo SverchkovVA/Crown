@@ -1,11 +1,14 @@
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from decimal import ROUND_DOWN, Decimal, localcontext
 
 import pytest
 
-from personal_finance.domain.deposit_yield import effective_deposit_yield
+from personal_finance.domain.deposit_yield import effective_deposit_yield, forecast_deposit_yield
+from personal_finance.domain.deposits import forecast_deposit
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import MAX_MINOR, Currency, Money
+from tests.unit.test_deposit_plan_fact import OPENING, comparison_scenario
 
 START = date(2024, 1, 1)
 
@@ -101,3 +104,18 @@ def test_matches_published_xirr_example():
             for day, value in values
         )
         assert abs(residual) < Decimal("1e-47")
+
+
+@pytest.mark.parametrize("capitalize", [False, True])
+def test_scenario_uses_terminal_balance_and_counts_paid_interest_once(capitalize):
+    end = OPENING + timedelta(days=365)
+    scenario = replace(
+        comparison_scenario(), matures_on=end, payout_dates=(end,), capitalize=capitalize
+    )
+    forecast = forecast_deposit(scenario)
+    expected = Decimal("36.5")
+    assert abs(forecast_deposit_yield(forecast, end) - expected) < Decimal("1e-48")
+    assert forecast_deposit_yield(forecast, end + timedelta(days=30)) == forecast_deposit_yield(
+        forecast, end
+    )
+    assert forecast_deposit_yield(forecast, end - timedelta(days=30)) == Decimal(0)

@@ -1,6 +1,7 @@
 """Сравнение запланированных процентов с выбранным доходом журнала."""
 
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -14,7 +15,7 @@ from personal_finance.domain.analytics import (
     report_sources,
 )
 from personal_finance.domain.analytics_cashflow import CashMovement, cash_flow_report
-from personal_finance.domain.deposit_yield import effective_deposit_yield
+from personal_finance.domain.deposit_yield import effective_deposit_yield, forecast_deposit_yield
 from personal_finance.domain.deposits import DepositScenario, forecast_deposit
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.ledger import Operation, OperationKind
@@ -47,6 +48,7 @@ class DepositPlanFact:
     months: tuple[DepositInterestMonth, ...]
     sources: tuple[OperationFlow, ...]
     actual_yield: ActualDepositYield | None = None
+    planned_yield: Decimal | None = None
 
     @property
     def planned_minor(self) -> int:
@@ -139,12 +141,17 @@ def deposit_plan_fact(
 
     payout_dates = set(scenario.payout_dates)
     planned: dict[date, int] = {}
-    for day in forecast_deposit(scenario).days:
+    forecast = forecast_deposit(scenario)
+    for day in forecast.days:
         if day.day <= through and day.day in payout_dates:
             month = day.day.replace(day=1)
             planned[month] = planned.get(month, 0) + day.payout_minor
     recorded = {row.month: row.totals.income_minor for row in actual.months}
     sources = report_sources(actual, currency, category_id=category.id) if actual.totals else ()
+    planned_yield = None
+    if dedicated_account:
+        with suppress(ValidationError):
+            planned_yield = forecast_deposit_yield(forecast, through)
     return DepositPlanFact(
         period,
         currency,
@@ -156,4 +163,5 @@ def deposit_plan_fact(
         _yield_from_ledger(period, account, currency, operations, sources)
         if dedicated_account
         else None,
+        planned_yield,
     )

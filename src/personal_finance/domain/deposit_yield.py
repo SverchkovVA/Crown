@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import date
 from decimal import Context, Decimal, localcontext
 
-from personal_finance.domain.deposits import MAX_EVENTS, MAX_TERM_DAYS
+from personal_finance.domain.deposits import MAX_EVENTS, MAX_TERM_DAYS, DepositForecast
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import Currency, Money
 
@@ -71,3 +71,22 @@ def effective_deposit_yield(flows: Sequence[tuple[date, Money]]) -> Decimal:
         factor = (low + high) / 2
         annual = (Decimal(1) / factor if gain else factor) ** _YEAR_DAYS
         return (annual - 1) * 100
+
+
+def forecast_deposit_yield(forecast: DepositForecast, through: date) -> Decimal:
+    scenario = forecast.scenario
+    currency = scenario.initial.currency
+    flows = [(scenario.opened_on, Money(-scenario.initial.minor, currency))]
+    closing = forecast.days[0]
+    for day in forecast.days:
+        if day.day > through:
+            break
+        closing = day
+        if day.movement_minor:
+            flows.append((day.day, Money(-day.movement_minor, currency)))
+        separate_payout = day.payout_minor - day.capitalized_minor
+        if separate_payout:
+            flows.append((day.day, Money(separate_payout, currency)))
+    if closing.closing_minor:
+        flows.append((closing.day, Money(closing.closing_minor, currency)))
+    return effective_deposit_yield(flows)

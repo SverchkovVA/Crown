@@ -54,7 +54,7 @@ def test_dedicated_account_yield_through_normal_gui_with_snapshot_details(qtbot,
         qtbot.waitUntil(lambda: not window._busy, timeout=15000)
         view = current(window, DepositPlanFactDialog)
         labels = [label.text() for label in view.findChildren(QLabel)]
-        assert "10,00 %" in labels
+        assert "10,00 %" in labels and "36,50 %" in labels
         assert "1 100,00 RUB" in labels
         view.findChild(QTabWidget).setCurrentIndex(2)
         model = view.yield_sources.model()
