@@ -39,12 +39,12 @@ def _content_hash(raw: str, deleted: bool, parent: str | None) -> str:
     )
 
 
-def _record(row: RowMapping) -> SavedInvestmentPosition:
+def _record(row: RowMapping, *, allow_splits: bool) -> SavedInvestmentPosition:
     try:
         require_identifier(row["id"])
         require_identifier(row["revision_id"])
         raw = row["position_json"]
-        inputs = investment_position_from_json(raw)
+        inputs = investment_position_from_json(raw, allow_splits=allow_splits)
         if (
             row["sealed"] != 1
             or row["is_deleted"] not in (0, 1)
@@ -62,7 +62,16 @@ def _record(row: RowMapping) -> SavedInvestmentPosition:
 
 
 class SqlInvestmentPositions:
-    def __init__(self, engine: Engine, book_id: str, replica_id: str, mutex: RLock) -> None:
+    def __init__(
+        self,
+        engine: Engine,
+        book_id: str,
+        replica_id: str,
+        mutex: RLock,
+        *,
+        allow_splits: bool = False,
+    ) -> None:
+        self._allow_splits = allow_splits
         self._engine, self._book_id, self._replica_id, self._mutex = (
             engine,
             book_id,
@@ -105,7 +114,7 @@ class SqlInvestmentPositions:
         )
         if row is None:
             raise VaultError("Версия инвестиционной позиции отсутствует.")
-        return _record(row)
+        return _record(row, allow_splits=self._allow_splits)
 
     def _current(self, connection: Connection, identifier: str) -> SavedInvestmentPosition:
         row = (
@@ -118,7 +127,7 @@ class SqlInvestmentPositions:
         )
         if row is None:
             raise ValidationError("Инвестиционная позиция не найдена в этой книге.")
-        return _record(row)
+        return _record(row, allow_splits=self._allow_splits)
 
     def get(self, identifier: str) -> SavedInvestmentPosition:
         require_identifier(identifier)
@@ -140,7 +149,7 @@ class SqlInvestmentPositions:
             ),
             {"book": self._book_id, "archived": int(include_archived)},
         ).mappings()
-        return [_record(row) for row in rows]
+        return [_record(row, allow_splits=self._allow_splits) for row in rows]
 
     def _history(self, connection: Connection, identifier: str) -> list[SavedInvestmentPosition]:
         current = self._current(connection, identifier)
@@ -152,7 +161,10 @@ class SqlInvestmentPositions:
             .mappings()
             .all()
         )
-        records = {row["revision_id"]: (_record(row), row["parent_id"]) for row in rows}
+        records = {
+            row["revision_id"]: (_record(row, allow_splits=self._allow_splits), row["parent_id"])
+            for row in rows
+        }
         edges: int = connection.execute(
             text("""SELECT count(*) FROM revision_parents p
                 JOIN entity_revisions r ON r.id=p.revision_id WHERE r.entity_id=:id"""),
@@ -210,7 +222,7 @@ class SqlInvestmentPositions:
             raise ValidationError("Нельзя архивировать ещё не созданную позицию.")
         command_id = str(uuid4()) if command_id is None else command_id
         require_identifier(command_id)
-        raw = investment_position_json(inputs)
+        raw = investment_position_json(inputs, allow_splits=self._allow_splits)
         digest = _digest(
             {
                 "kind": KIND + "-command",
