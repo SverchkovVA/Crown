@@ -242,6 +242,9 @@ class InvestmentStorage:
         request = self.options.prepare_request()
         if request is None:
             return
+        if request.splits:
+            self.panel.message("Позицию с дроблением пока можно только рассчитать.")
+            return
         try:
             inputs = InvestmentPositionInputs(
                 request.account.id, request.security, request.events, request.prices

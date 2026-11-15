@@ -34,6 +34,7 @@ from personal_finance.domain.investments import (
     Security,
     SecurityKind,
     SecurityTrade,
+    StockSplit,
 )
 from personal_finance.domain.models import RUB, Account
 from personal_finance.presentation.analytics import _label, format_report_amount
@@ -43,6 +44,7 @@ from personal_finance.presentation.investment_editors import (
     DISTRIBUTION_LABELS,
     MAX_UI_INTEGER,
     SECURITY_LABELS,
+    SPLIT_LABEL,
     TRADE_LABELS,
     InvestmentEventEditor,
     ManualPriceEditor,
@@ -59,6 +61,7 @@ class InvestmentPreviewRequest:
     events: tuple[PortfolioEvent, ...]
     as_of: date
     prices: tuple[ManualPrice, ...]
+    splits: tuple[StockSplit, ...] = ()
 
 
 class InvestmentPreviewOptions(QDialog):
@@ -77,7 +80,9 @@ class InvestmentPreviewOptions(QDialog):
         self.accounts = {value.id: value for value in accounts}
         self.security_id = inputs.security.id if inputs else str(uuid4())
         self.saved_security = inputs.security if inputs else None
-        self.events: list[PortfolioEvent] = list(inputs.events) if inputs else []
+        self.events: list[PortfolioEvent | StockSplit] = (
+            list((*inputs.events, *inputs.splits)) if inputs else []
+        )
         self.prices = {price.quoted_on: price for price in inputs.prices} if inputs else {}
         self.storage = storage
         self.request: InvestmentPreviewRequest | None = None
@@ -121,11 +126,11 @@ class InvestmentPreviewOptions(QDialog):
             self.kind.setCurrentIndex(self.kind.findData(inputs.security.kind.value))
             self.code.setText(inputs.security.code)
             self.mark_saved(inputs.security)
-        self.table = _table("Сделки и выплаты позиции")
+        self.table = _table("События инвестиционной позиции")
         layout.addWidget(self.table, 1)
         actions = QHBoxLayout()
         actions.setSpacing(6)
-        self.add = QPushButton("Добавить сделку или выплату")
+        self.add = QPushButton("Добавить событие")
         self.edit = QPushButton("Изменить")
         self.remove = QPushButton("Убрать")
         self.add.clicked.connect(lambda: self._edit_event(None))
@@ -148,6 +153,10 @@ class InvestmentPreviewOptions(QDialog):
         layout.addLayout(prices)
         if not storage:
             layout.addWidget(_label("Введённые данные хранятся в этой форме."))
+        self.split_notice = _label(
+            "Дробление участвует в расчёте черновика. Сохранение такой позиции пока недоступно."
+        )
+        layout.addWidget(self.split_notice)
         self.feedback = _label("")
         self.feedback.setObjectName("feedbackError")
         self.feedback.hide()
@@ -178,6 +187,17 @@ class InvestmentPreviewOptions(QDialog):
     def _refresh(self) -> None:
         rows = []
         for item in self.events:
+            if isinstance(item, StockSplit):
+                rows.append(
+                    [
+                        date_text(item.occurred_on),
+                        str(item.sequence),
+                        SPLIT_LABEL,
+                        f"×{item.multiplier}",
+                        "—",
+                    ]
+                )
+                continue
             if isinstance(item, SecurityTrade):
                 name, quantity, amount = (
                     TRADE_LABELS[item.kind],
@@ -206,7 +226,9 @@ class InvestmentPreviewOptions(QDialog):
         self._selection_changed()
         self.kind.setEnabled(not self.events and not self.prices and self.saved_security is None)
         self.calculate.setEnabled(bool(self.events))
-        self.save_position.setEnabled(self.storage and bool(self.events))
+        has_split = any(isinstance(event, StockSplit) for event in self.events)
+        self.save_position.setEnabled(self.storage and bool(self.events) and not has_split)
+        self.split_notice.setVisible(has_split)
         latest = self._latest_price()
         self.price_status.setText(
             "Ручная цена не указана"
@@ -288,9 +310,18 @@ class InvestmentPreviewOptions(QDialog):
         return InvestmentPreviewRequest(
             account,
             security,
-            tuple(replace(value, account_id=account.id) for value in self.events),
+            tuple(
+                replace(value, account_id=account.id)
+                for value in self.events
+                if not isinstance(value, StockSplit)
+            ),
             _date(self.as_of),
             tuple(self.prices.values()),
+            tuple(
+                replace(value, account_id=account.id)
+                for value in self.events
+                if isinstance(value, StockSplit)
+            ),
         )
 
     def _calculate(self) -> None:
@@ -339,7 +370,12 @@ class InvestmentPreviewDialog(QDialog):
         if valuation.positions:
             (valued,) = valuation.positions
             if valued.price is None or valued.market_minor is None:
-                layout.addWidget(_label("Ручной цены на дату расчёта нет."))
+                message = (
+                    "Укажите ручную цену после дробления в расчёте на одну бумагу."
+                    if portfolio.splits
+                    else "Ручной цены на дату расчёта нет."
+                )
+                layout.addWidget(_label(message))
             else:
                 price = valued.price
                 price_text = format(price.value, "f").replace(".", ",")
@@ -444,6 +480,17 @@ class InvestmentPreviewDialog(QDialog):
             ],
             (2,),
         )
+        if portfolio.splits:
+            self._section(
+                tabs,
+                SPLIT_LABEL,
+                ["Дата", "Порядок", "Множитель количества"],
+                [
+                    [date_text(row.occurred_on), str(row.sequence), f"×{row.multiplier}"]
+                    for row in portfolio.splits
+                ],
+                (1, 2),
+            )
         layout.addWidget(tabs, 1)
 
     @staticmethod

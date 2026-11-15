@@ -25,6 +25,7 @@ from personal_finance.domain.investments import (
     SecurityDistribution,
     SecurityKind,
     SecurityTrade,
+    StockSplit,
     TradeKind,
 )
 from personal_finance.domain.models import RUB, Account, Money
@@ -42,6 +43,8 @@ TRADE_LABELS = {
     TradeKind.REDEEM: "Погашение",
 }
 DISTRIBUTION_LABELS = {DistributionKind.DIVIDEND: "Дивиденды", DistributionKind.COUPON: "Купон"}
+SPLIT_KIND = "stock_split"
+SPLIT_LABEL = "Дробление акций"
 MAX_UI_INTEGER = 2_147_483_647
 
 
@@ -61,15 +64,15 @@ class InvestmentEventEditor(QDialog):
         security_kind: SecurityKind,
         day: QDate,
         sequence: int,
-        event: PortfolioEvent | None = None,
+        event: PortfolioEvent | StockSplit | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Сделка или выплата")
+        self.setWindowTitle("Событие инвестиционной позиции")
         self.account = account
         self.security_id = security_id
         self.bond = security_kind is SecurityKind.BOND
         self.event_id = event.id if event else str(uuid4())
-        self.entry: PortfolioEvent | None = None
+        self.entry: PortfolioEvent | StockSplit | None = None
         layout = QVBoxLayout(self)
         form = self.form = QFormLayout()
         form.setHorizontalSpacing(12)
@@ -82,6 +85,8 @@ class InvestmentEventEditor(QDialog):
                 self.kind.addItem(name, value.value)
         payout = DistributionKind.COUPON if self.bond else DistributionKind.DIVIDEND
         self.kind.addItem(DISTRIBUTION_LABELS[payout], payout.value)
+        if security_kind is SecurityKind.STOCK:
+            self.kind.addItem(SPLIT_LABEL, SPLIT_KIND)
         form.addRow("Вид", self.kind)
         self.day = _date_input(QDate(event.occurred_on) if event else day, "Дата операции")
         form.addRow("Дата", self.day)
@@ -94,6 +99,10 @@ class InvestmentEventEditor(QDialog):
         self.quantity.setRange(1, MAX_UI_INTEGER)
         self.quantity.setAccessibleName("Количество бумаг")
         form.addRow("Количество бумаг", self.quantity)
+        self.multiplier = QSpinBox()
+        self.multiplier.setRange(2, MAX_UI_INTEGER)
+        self.multiplier.setAccessibleName("Во сколько раз увеличилось количество акций")
+        form.addRow("Множитель количества", self.multiplier)
         self.amount = _money_input("Денежная сумма операции в рублях")
         form.addRow("Сумма, ₽", self.amount)
         self.fee = _money_input("Комиссия в рублях")
@@ -110,7 +119,10 @@ class InvestmentEventEditor(QDialog):
         self.apply.setObjectName("primary")
         self.apply.clicked.connect(self._apply)
         layout.addWidget(self.apply)
-        if event is not None:
+        if isinstance(event, StockSplit):
+            self.kind.setCurrentIndex(self.kind.findData(SPLIT_KIND))
+            self.multiplier.setValue(event.multiplier)
+        elif event is not None:
             position = self.kind.findData(event.kind.value)
             if position >= 0:
                 self.kind.setCurrentIndex(position)
@@ -125,7 +137,11 @@ class InvestmentEventEditor(QDialog):
         self._show_fields()
 
     def _show_fields(self) -> None:
-        trade = self.kind.currentData() in TRADE_LABELS
+        kind = self.kind.currentData()
+        trade = kind in TRADE_LABELS
+        split = kind == SPLIT_KIND
+        self.form.setRowVisible(self.multiplier, split)
+        self.form.setRowVisible(self.amount, not split)
         self.form.setRowVisible(self.quantity, trade)
         self.form.setRowVisible(self.fee, trade)
         self.form.setRowVisible(self.accrued, trade and self.bond)
@@ -142,19 +158,22 @@ class InvestmentEventEditor(QDialog):
             self.sequence.value(),
         )
         try:
-            amount = Money.parse(self.amount.text(), RUB)
             kind = self.kind.currentData()
-            if kind in TRADE_LABELS:
+            if kind == SPLIT_KIND:
+                self.entry = StockSplit(*fields, self.multiplier.value())
+            elif kind in TRADE_LABELS:
                 self.entry = SecurityTrade(
                     *fields,
                     TradeKind(kind),
                     self.quantity.value(),
-                    amount,
+                    Money.parse(self.amount.text(), RUB),
                     Money.parse(self.fee.text(), RUB),
                     Money.parse(self.accrued.text(), RUB) if self.bond else None,
                 )
             else:
-                self.entry = SecurityDistribution(*fields, DistributionKind(kind), amount)
+                self.entry = SecurityDistribution(
+                    *fields, DistributionKind(kind), Money.parse(self.amount.text(), RUB)
+                )
         except ValidationError as error:
             self.feedback.setText(str(error))
             self.feedback.show()

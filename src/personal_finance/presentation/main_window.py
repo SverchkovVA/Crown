@@ -894,7 +894,11 @@ class MainWindow(QMainWindow):
             if account is None:
                 raise ValidationError("Инвестиционный счёт больше недоступен.")
             portfolio = project_investments(
-                (account,), (request.security,), request.events, request.as_of
+                (account,),
+                (request.security,),
+                request.events,
+                request.as_of,
+                splits=request.splits,
             )
             return value_investments(portfolio, request.prices)
 
