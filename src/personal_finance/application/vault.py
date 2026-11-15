@@ -46,6 +46,7 @@ from personal_finance.infrastructure.persistence.investment_position_repository 
     SqlInvestmentPositions,
 )
 from personal_finance.infrastructure.persistence.ledger_repository import SqlLedgerRepository
+from personal_finance.infrastructure.persistence.market_quote_cache import SqlMarketQuoteCache
 from personal_finance.infrastructure.persistence.migration_runner import (
     initialize_schema,
     supported_schema,
@@ -113,7 +114,12 @@ class VaultSession:
         self.engine = make_engine(self.database_path, self.backup_key)
         try:
             self.schema_revision = supported_schema(self.engine)
-            self.supports_corporate_events = self.schema_revision == "0018"
+            self.supports_corporate_events = self.schema_revision in ("0018", "0019")
+            self.market_quote_cache = (
+                SqlMarketQuoteCache(self.engine, book_id, self.mutex)
+                if self.schema_revision == "0019"
+                else None
+            )
             features_revision = "0017" if self.supports_corporate_events else self.schema_revision
             self.supports_payment_calendars = features_revision in ("0016", "0017")
             with self.engine.connect() as connection:
@@ -404,6 +410,8 @@ class VaultSession:
                 self.planning_scenarios.check_integrity()
             if self.investment_positions is not None:
                 self.investment_positions.check_integrity()
+            if self.market_quote_cache is not None:
+                self.market_quote_cache.check_integrity()
 
     def snapshot(self, target: Path) -> None:
         with self.mutex:

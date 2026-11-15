@@ -45,7 +45,7 @@ def bond(**values):
 
 def refresh(provider, bindings, previous=None):
     return refresh_market_prices(
-        provider, bindings, {} if previous is None else previous, as_of=TODAY, fetched_at=NOW
+        provider, bindings, {} if previous is None else previous, as_of=TODAY, clock=lambda: NOW
     )
 
 

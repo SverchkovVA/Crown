@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Protocol
 
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.investment_prices import (
@@ -147,12 +148,11 @@ def refresh_market_prices(
     previous: Mapping[str, MarketQuote],
     *,
     as_of: date,
-    fetched_at: datetime,
+    clock: Callable[[], datetime],
 ) -> tuple[QuoteRefreshRow, ...]:
     """Вызывает источник только по явному запросу сценария обновления."""
-    if type(as_of) is not date or not _aware(fetched_at):
-        raise ValidationError("Для запроса цен нужны дата расчёта и момент с часовым поясом.")
-    fetched_at = fetched_at.astimezone(UTC)
+    if type(as_of) is not date:
+        raise ValidationError("Для запроса цен нужна календарная дата.")
     if not bindings:
         return ()
     if any(
@@ -189,6 +189,10 @@ def refresh_market_prices(
                 requests[quote.instrument].append(quote)
     except (OSError, ValidationError):
         source_failed = True
+    fetched_at = clock()
+    if not _aware(fetched_at):
+        raise ValidationError("Момент получения цен должен содержать часовой пояс.")
+    fetched_at = fetched_at.astimezone(UTC)
     result = []
     for binding in bindings:
         old = existing.get(binding.security.id)
@@ -201,3 +205,27 @@ def refresh_market_prices(
         latest = choices[0] if status is QuoteStatus.UPDATED else old
         result.append(QuoteRefreshRow(binding, status, latest))
     return tuple(result)
+
+
+class MarketQuoteCache(Protocol):
+    def snapshot(
+        self, bindings: Sequence[QuoteBinding], through: date = date.max
+    ) -> dict[str, MarketQuote]: ...
+
+    def save_updates(self, rows: Sequence[QuoteRefreshRow]) -> tuple[QuoteRefreshRow, ...]: ...
+
+
+def update_market_quote_cache(
+    provider: QuoteProvider,
+    cache: MarketQuoteCache,
+    bindings: Sequence[QuoteBinding],
+    *,
+    as_of: date,
+    clock: Callable[[], datetime],
+) -> tuple[QuoteRefreshRow, ...]:
+    """Получает котировки вне транзакции, затем записывает подтверждённые результаты."""
+    if not bindings:
+        return ()
+    previous = cache.snapshot(bindings)
+    rows = refresh_market_prices(provider, bindings, previous, as_of=as_of, clock=clock)
+    return cache.save_updates(rows)

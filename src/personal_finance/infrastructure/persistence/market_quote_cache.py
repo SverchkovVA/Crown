@@ -107,10 +107,34 @@ class SqlMarketQuoteCache:
         return quote
 
     def latest(self, binding: QuoteBinding, through: date = date.max) -> MarketQuote | None:
+        return self.snapshot((binding,), through).get(binding.security.id)
+
+    def snapshot(
+        self, bindings: Sequence[QuoteBinding], through: date = date.max
+    ) -> dict[str, MarketQuote]:
         if type(through) is not date:
             raise ValidationError("Для выбора котировки нужна календарная дата.")
+        result = {}
         with self._mutex, self._engine.connect() as conn:
-            return self._latest(conn, binding, through)
+            for binding in bindings:
+                if (quote := self._latest(conn, binding, through)) is not None:
+                    result[binding.security.id] = quote
+        return result
+
+    def check_integrity(self) -> None:
+        with self._mutex, self._engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT * FROM market_quote_cache WHERE book_id=:book_id"),
+                {"book_id": self._book_id},
+            ).mappings()
+            for row in rows:
+                try:
+                    instrument = QuoteInstrument(
+                        row["provider"], row["instrument_code"], row["board"] or None
+                    )
+                except ValidationError as error:
+                    raise VaultError("Привязка сохранённой котировки повреждена.") from error
+                _decode(instrument, row)
 
     def save_updates(self, rows: Sequence[QuoteRefreshRow]) -> tuple[QuoteRefreshRow, ...]:
         if not rows:
