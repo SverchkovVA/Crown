@@ -860,7 +860,7 @@ class MainWindow(QMainWindow):
             self,
             accounts,
             storage=storage is not None,
-            supports_stock_splits=session.supports_stock_splits,
+            supports_corporate_events=session.supports_corporate_events,
             inputs=record.inputs if record else None,
         )
         if storage is not None:

@@ -256,11 +256,10 @@ class InvestmentStorage:
         request = self.options.prepare_request()
         if request is None:
             return
-        if request.amortizations:
-            self.panel.message("Позицию с частичным погашением пока можно только рассчитать.")
-            return
-        if request.splits and not self.session.supports_stock_splits:
-            self.panel.message("Позицию с дроблением пока можно только рассчитать.")
+        if (request.splits or request.amortizations) and not self.session.supports_corporate_events:
+            self.panel.message(
+                "Для сохранения позиции с этим событием нужна совместимая схема книги."
+            )
             return
         try:
             inputs = InvestmentPositionInputs(
@@ -269,6 +268,7 @@ class InvestmentStorage:
                 request.events,
                 request.prices,
                 request.splits,
+                request.amortizations,
             )
         except ValidationError as error:
             self.panel.message(str(error))

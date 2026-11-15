@@ -78,7 +78,7 @@ class InvestmentPreviewOptions(QDialog):
         accounts: Sequence[Account],
         *,
         storage: bool = False,
-        supports_stock_splits: bool = False,
+        supports_corporate_events: bool = False,
         inputs: InvestmentPositionInputs | None = None,
     ) -> None:
         super().__init__(parent)
@@ -87,11 +87,16 @@ class InvestmentPreviewOptions(QDialog):
         self.security_id = inputs.security.id if inputs else str(uuid4())
         self.saved_security = inputs.security if inputs else None
         self.events: list[InvestmentDraftEvent] = (
-            list((*inputs.events, *inputs.splits, *inputs.amortizations)) if inputs else []
+            sorted(
+                (*inputs.events, *inputs.splits, *inputs.amortizations),
+                key=lambda item: (item.occurred_on, item.sequence),
+            )
+            if inputs
+            else []
         )
         self.prices = {price.quoted_on: price for price in inputs.prices} if inputs else {}
         self.storage = storage
-        self.supports_stock_splits = supports_stock_splits
+        self.supports_corporate_events = supports_corporate_events
         self.request: InvestmentPreviewRequest | None = None
         layout = QVBoxLayout(self)
         fields = QFormLayout()
@@ -244,13 +249,15 @@ class InvestmentPreviewOptions(QDialog):
         self.kind.setEnabled(not self.events and not self.prices and self.saved_security is None)
         self.calculate.setEnabled(bool(self.events))
         has_split = any(isinstance(event, StockSplit) for event in self.events)
-        split_draft = has_split and not self.supports_stock_splits
-        has_amortization = any(isinstance(event, BondAmortization) for event in self.events)
+        split_draft = has_split and not self.supports_corporate_events
+        amortization_draft = not self.supports_corporate_events and any(
+            isinstance(event, BondAmortization) for event in self.events
+        )
         self.save_position.setEnabled(
-            self.storage and bool(self.events) and not (split_draft or has_amortization)
+            self.storage and bool(self.events) and not (split_draft or amortization_draft)
         )
         self.split_notice.setVisible(split_draft)
-        self.amortization_notice.setVisible(has_amortization)
+        self.amortization_notice.setVisible(amortization_draft)
         latest = self._latest_price()
         self.price_status.setText(
             "Ручная цена не указана"

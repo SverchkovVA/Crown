@@ -56,7 +56,7 @@ def test_older_book_restores_to_0018_only_in_new_folder(
     source = tmp_path / "original.pfvault"
     session, old_pf = create_at(monkeypatch, source, version)
     with closing(session):
-        assert session.schema_revision == version and not session.supports_stock_splits
+        assert session.schema_revision == version and not session.supports_corporate_events
         account = session.catalog.add_account("Учебный брокерский счёт", AccountKind.INVESTMENT)
         if session.ledger is not None:
             session.ledger.add(
@@ -80,7 +80,7 @@ def test_older_book_restores_to_0018_only_in_new_folder(
     target = tmp_path / "restored.pfvault"
     restored, new_pf = restore(archive, target)
     with closing(restored):
-        assert restored.schema_revision == TRIAL_SCHEMA and restored.supports_stock_splits
+        assert restored.schema_revision == TRIAL_SCHEMA and restored.supports_corporate_events
         assert restored.replica_id != replica and new_pf != old_pf
         actual = state(restored)
         assert all(actual[key] == value for key, value in expected.items())
@@ -90,7 +90,7 @@ def test_older_book_restores_to_0018_only_in_new_folder(
             assert restored.investment_positions.history(position.id) == [position]
         restored.check_integrity()
     with closing(vault.open_vault(source, PASSWORD)) as reopened:
-        assert reopened.schema_revision == version and not reopened.supports_stock_splits
+        assert reopened.schema_revision == version and not reopened.supports_corporate_events
     assert immutable_copy(source, archive) == before
     with closing(vault.open_vault(target, new_pf, recovery=True)) as recovered:
         assert recovered.schema_revision == TRIAL_SCHEMA
@@ -103,7 +103,7 @@ def test_format2_survives_reopen_and_backup_restore_with_receipts(
     session, original_pf = vault.create_vault(source, "Учебная книга 0018", PASSWORD)
     first_command, split_command = str(uuid4()), str(uuid4())
     with closing(session):
-        assert session.schema_revision == TRIAL_SCHEMA and session.supports_stock_splits
+        assert session.schema_revision == TRIAL_SCHEMA and session.supports_corporate_events
         account = session.catalog.add_account("Учебный инвестсчёт", AccountKind.INVESTMENT)
         prior = inputs(account)
         first = session.investment_positions.save(prior, command_id=first_command)

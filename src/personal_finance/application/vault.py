@@ -113,8 +113,8 @@ class VaultSession:
         self.engine = make_engine(self.database_path, self.backup_key)
         try:
             self.schema_revision = supported_schema(self.engine)
-            self.supports_stock_splits = self.schema_revision == "0018"
-            features_revision = "0017" if self.supports_stock_splits else self.schema_revision
+            self.supports_corporate_events = self.schema_revision == "0018"
+            features_revision = "0017" if self.supports_corporate_events else self.schema_revision
             self.supports_payment_calendars = features_revision in ("0016", "0017")
             with self.engine.connect() as connection:
                 book = connection.execute(text("SELECT id,name FROM books")).one()
@@ -347,7 +347,7 @@ class VaultSession:
                     book_id,
                     self.replica_id,
                     self.mutex,
-                    allow_corporate_events=self.supports_stock_splits,
+                    allow_corporate_events=self.supports_corporate_events,
                 )
                 if features_revision == "0017"
                 else None

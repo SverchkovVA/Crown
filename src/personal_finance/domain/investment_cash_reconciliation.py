@@ -7,8 +7,8 @@ from enum import StrEnum
 
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashMovement, cash_flow_report
-from personal_finance.domain.investment_portfolio import SavedPortfolioReport
-from personal_finance.domain.investments import PortfolioEvent, SecurityTrade
+from personal_finance.domain.investment_portfolio import PortfolioRow, SavedPortfolioReport
+from personal_finance.domain.investments import BondAmortization, PortfolioEvent, SecurityTrade
 from personal_finance.domain.ledger import Operation, OperationKind
 from personal_finance.domain.models import Account, Currency
 
@@ -25,7 +25,7 @@ class InvestmentCashRow:
     account: Account
     security_code: str
     currency: Currency
-    event: PortfolioEvent
+    event: PortfolioEvent | BondAmortization
     minor: int
     status: InvestmentCashStatus
     candidates: tuple[CashMovement, ...]
@@ -49,7 +49,7 @@ def reconcile_investment_cash(
                 movement.minor,
             )
             movements[key].append(movement)
-    events = [
+    events: list[tuple[PortfolioRow, PortfolioEvent | BondAmortization, int]] = [
         (
             row,
             event,
@@ -59,6 +59,11 @@ def reconcile_investment_cash(
         for event in row.record.inputs.events
         if event.occurred_on <= portfolio.as_of
     ]
+    events.extend(
+        (row, receipt.event, receipt.event.principal_minor)
+        for row in portfolio.rows
+        for receipt in row.valuation.portfolio.amortizations
+    )
     counts = Counter(
         (event.account_id, event.occurred_on, row.position.security.currency, minor)
         for row, event, minor in events

@@ -6,12 +6,16 @@ from personal_finance.domain.investment_cash_reconciliation import (
     InvestmentCashRow,
     InvestmentCashStatus,
 )
-from personal_finance.domain.investments import SecurityTrade
+from personal_finance.domain.investments import BondAmortization, PortfolioEvent, SecurityTrade
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.analytics_cashflow import CashFlowSourcesDialog
 from personal_finance.presentation.deposit_scenarios import date_text
 from personal_finance.presentation.inline_forms import present_form
-from personal_finance.presentation.investment_editors import DISTRIBUTION_LABELS, TRADE_LABELS
+from personal_finance.presentation.investment_editors import (
+    AMORTIZATION_LABEL,
+    DISTRIBUTION_LABELS,
+    TRADE_LABELS,
+)
 from personal_finance.presentation.recurring_payments import _table
 from personal_finance.presentation.tables import replace_table
 
@@ -21,6 +25,14 @@ _STATUS_LABELS = {
     InvestmentCashStatus.UNIQUE: "Один кандидат",
     InvestmentCashStatus.AMBIGUOUS: "Нужно уточнить",
 }
+
+
+def _event_label(event: PortfolioEvent | BondAmortization) -> str:
+    if isinstance(event, BondAmortization):
+        return AMORTIZATION_LABEL
+    if isinstance(event, SecurityTrade):
+        return TRADE_LABELS[event.kind]
+    return DISTRIBUTION_LABELS[event.kind]
 
 
 class InvestmentCashDialog(QDialog):
@@ -51,11 +63,7 @@ class InvestmentCashDialog(QDialog):
                     date_text(row.event.occurred_on),
                     row.security_code,
                     row.account.name,
-                    (
-                        TRADE_LABELS[row.event.kind]
-                        if isinstance(row.event, SecurityTrade)
-                        else DISTRIBUTION_LABELS[row.event.kind]
-                    ),
+                    _event_label(row.event),
                     f"{format_report_amount(row.minor, row.currency)} {row.currency.code}",
                     _STATUS_LABELS[row.status],
                 ]
