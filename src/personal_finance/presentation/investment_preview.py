@@ -73,6 +73,7 @@ class InvestmentPreviewOptions(QDialog):
         accounts: Sequence[Account],
         *,
         storage: bool = False,
+        supports_stock_splits: bool = False,
         inputs: InvestmentPositionInputs | None = None,
     ) -> None:
         super().__init__(parent)
@@ -85,6 +86,7 @@ class InvestmentPreviewOptions(QDialog):
         )
         self.prices = {price.quoted_on: price for price in inputs.prices} if inputs else {}
         self.storage = storage
+        self.supports_stock_splits = supports_stock_splits
         self.request: InvestmentPreviewRequest | None = None
         layout = QVBoxLayout(self)
         fields = QFormLayout()
@@ -227,8 +229,9 @@ class InvestmentPreviewOptions(QDialog):
         self.kind.setEnabled(not self.events and not self.prices and self.saved_security is None)
         self.calculate.setEnabled(bool(self.events))
         has_split = any(isinstance(event, StockSplit) for event in self.events)
-        self.save_position.setEnabled(self.storage and bool(self.events) and not has_split)
-        self.split_notice.setVisible(has_split)
+        split_draft = has_split and not self.supports_stock_splits
+        self.save_position.setEnabled(self.storage and bool(self.events) and not split_draft)
+        self.split_notice.setVisible(split_draft)
         latest = self._latest_price()
         self.price_status.setText(
             "Ручная цена не указана"

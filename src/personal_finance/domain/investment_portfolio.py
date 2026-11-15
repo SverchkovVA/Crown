@@ -127,7 +127,9 @@ def report_saved_portfolio(
             raise ValidationError("Одинаковый код валюты указан с разной точностью.")
         # Порядок и цена относятся к позиции счёта. Один код на двух счетах
         # может иметь одинаковые номера сделок и разные ручные цены.
-        portfolio = project_investments((account,), (inputs.security,), inputs.events, as_of)
+        portfolio = project_investments(
+            (account,), (inputs.security,), inputs.events, as_of, splits=inputs.splits
+        )
         if not portfolio.positions:
             continue
         (position,) = portfolio.positions

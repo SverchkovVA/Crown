@@ -113,7 +113,9 @@ class VaultSession:
         self.engine = make_engine(self.database_path, self.backup_key)
         try:
             self.schema_revision = supported_schema(self.engine)
-            self.supports_payment_calendars = self.schema_revision in ("0016", "0017")
+            self.supports_stock_splits = self.schema_revision == "0018"
+            features_revision = "0017" if self.supports_stock_splits else self.schema_revision
+            self.supports_payment_calendars = features_revision in ("0016", "0017")
             with self.engine.connect() as connection:
                 book = connection.execute(text("SELECT id,name FROM books")).one()
                 if book.id != book_id:
@@ -131,7 +133,7 @@ class VaultSession:
                     book_id,
                     self.replica_id,
                     self.mutex,
-                    supports_splits=self.schema_revision
+                    supports_splits=features_revision
                     in (
                         "0004",
                         "0005",
@@ -148,7 +150,7 @@ class VaultSession:
                         "0016",
                         "0017",
                     ),
-                    supports_refunds=self.schema_revision
+                    supports_refunds=features_revision
                     in (
                         "0005",
                         "0006",
@@ -164,7 +166,7 @@ class VaultSession:
                         "0016",
                         "0017",
                     ),
-                    supports_periods=self.schema_revision
+                    supports_periods=features_revision
                     in (
                         "0006",
                         "0007",
@@ -179,7 +181,7 @@ class VaultSession:
                         "0016",
                         "0017",
                     ),
-                    supports_tags=self.schema_revision
+                    supports_tags=features_revision
                     in (
                         "0007",
                         "0008",
@@ -194,7 +196,7 @@ class VaultSession:
                         "0017",
                     ),
                 )
-                if self.schema_revision
+                if features_revision
                 in (
                     "0003",
                     "0004",
@@ -228,14 +230,14 @@ class VaultSession:
             )
             self.importing = (
                 Importing(SqlImportRepository(self.engine, book_id, self.mutex, ledger_repository))
-                if self.schema_revision
+                if features_revision
                 in ("0008", "0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017")
                 and ledger_repository is not None
                 else None
             )
             self.periods = (
                 Periods(SqlPeriodRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision
+                if features_revision
                 in (
                     "0006",
                     "0007",
@@ -256,7 +258,7 @@ class VaultSession:
                 Organization(
                     SqlOrganizationRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision
+                if features_revision
                 in (
                     "0007",
                     "0008",
@@ -278,7 +280,7 @@ class VaultSession:
                     self.mutex,
                     self.ensure_open,
                 )
-                if self.schema_revision
+                if features_revision
                 in ("0009", "0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017")
                 else None
             )
@@ -288,9 +290,9 @@ class VaultSession:
                     book_id,
                     self.mutex,
                     ledger_repository,
-                    supports_batches=self.schema_revision
+                    supports_batches=features_revision
                     in ("0011", "0012", "0013", "0014", "0015", "0016", "0017"),
-                    supports_universal=self.schema_revision
+                    supports_universal=features_revision
                     in (
                         "0012",
                         "0013",
@@ -300,7 +302,7 @@ class VaultSession:
                         "0017",
                     ),
                 )
-                if self.schema_revision
+                if features_revision
                 in ("0010", "0011", "0012", "0013", "0014", "0015", "0016", "0017")
                 and ledger_repository is not None
                 else None
@@ -310,7 +312,7 @@ class VaultSession:
             )
             self.ocr_settings = (
                 SqlOcrSettings(self.engine, book_id, self.mutex, ocr_repository)
-                if self.schema_revision in ("0011", "0012", "0013", "0014", "0015", "0016", "0017")
+                if features_revision in ("0011", "0012", "0013", "0014", "0015", "0016", "0017")
                 and ocr_repository is not None
                 else None
             )
@@ -318,12 +320,12 @@ class VaultSession:
                 DepositScenarios(
                     SqlDepositScenariosRepository(self.engine, book_id, self.replica_id, self.mutex)
                 )
-                if self.schema_revision in ("0013", "0014", "0015", "0016", "0017")
+                if features_revision in ("0013", "0014", "0015", "0016", "0017")
                 else None
             )
             self.bonuses = (
                 Bonuses(SqlBonusRepository(self.engine, book_id, self.replica_id, self.mutex))
-                if self.schema_revision in ("0014", "0015", "0016", "0017")
+                if features_revision in ("0014", "0015", "0016", "0017")
                 else None
             )
             self.planning_scenarios = (
@@ -336,12 +338,18 @@ class VaultSession:
                         supports_calendars=self.supports_payment_calendars,
                     )
                 )
-                if self.schema_revision in ("0015", "0016", "0017")
+                if features_revision in ("0015", "0016", "0017")
                 else None
             )
             self.investment_positions = (
-                SqlInvestmentPositions(self.engine, book_id, self.replica_id, self.mutex)
-                if self.schema_revision == "0017"
+                SqlInvestmentPositions(
+                    self.engine,
+                    book_id,
+                    self.replica_id,
+                    self.mutex,
+                    allow_splits=self.supports_stock_splits,
+                )
+                if features_revision == "0017"
                 else None
             )
         except Exception:

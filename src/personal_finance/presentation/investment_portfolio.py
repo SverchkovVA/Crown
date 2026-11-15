@@ -243,7 +243,12 @@ class InvestmentPortfolioDialog(QDialog):
             return
         inputs = row.record.inputs
         request = InvestmentPreviewRequest(
-            row.position.account, inputs.security, inputs.events, self.report.as_of, inputs.prices
+            row.position.account,
+            inputs.security,
+            inputs.events,
+            self.report.as_of,
+            inputs.prices,
+            inputs.splits,
         )
         present_form(InvestmentPreviewDialog(request, row.valuation, self), None)
 

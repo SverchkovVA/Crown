@@ -58,12 +58,12 @@ class SavedInvestmentPositionsDialog(QDialog):
         self.table = _table("Сохранённые инвестиционные позиции")
         replace_table(
             self.table,
-            ["Инструмент", "Счёт", "Операций", "Ручных цен"],
+            ["Инструмент", "Счёт", "Событий", "Ручных цен"],
             [
                 [
                     record.inputs.security.code,
                     options.accounts[record.inputs.account_id].name,
-                    str(len(record.inputs.events)),
+                    str(len(record.inputs.events) + len(record.inputs.splits)),
                     str(len(record.inputs.prices)),
                 ]
                 for record in self.records
@@ -119,14 +119,14 @@ class InvestmentVersionHistoryDialog(QDialog):
         self.table = _table("Неизменяемые версии позиции")
         replace_table(
             self.table,
-            ["Версия", "Сохранена", "Инструмент", "Состояние", "Операций", "Ручных цен"],
+            ["Версия", "Сохранена", "Инструмент", "Состояние", "Событий", "Ручных цен"],
             [
                 [
                     str(len(self.versions) - index),
                     local_time(record.created_at),
                     record.inputs.security.code,
                     "Архивная" if record.is_deleted else "Действующая" if index == 0 else "Прежняя",
-                    str(len(record.inputs.events)),
+                    str(len(record.inputs.events) + len(record.inputs.splits)),
                     str(len(record.inputs.prices)),
                 ]
                 for index, record in enumerate(self.versions)
@@ -227,7 +227,12 @@ class InvestmentStorage:
                 inputs = selected.inputs
                 account = self.options.accounts[inputs.account_id]
                 request = InvestmentPreviewRequest(
-                    account, inputs.security, inputs.events, _date(dialog.as_of), inputs.prices
+                    account,
+                    inputs.security,
+                    inputs.events,
+                    _date(dialog.as_of),
+                    inputs.prices,
+                    inputs.splits,
                 )
                 self.window._show_investment_calculation(self.session, request)
 
@@ -242,12 +247,16 @@ class InvestmentStorage:
         request = self.options.prepare_request()
         if request is None:
             return
-        if request.splits:
+        if request.splits and not self.session.supports_stock_splits:
             self.panel.message("Позицию с дроблением пока можно только рассчитать.")
             return
         try:
             inputs = InvestmentPositionInputs(
-                request.account.id, request.security, request.events, request.prices
+                request.account.id,
+                request.security,
+                request.events,
+                request.prices,
+                request.splits,
             )
         except ValidationError as error:
             self.panel.message(str(error))

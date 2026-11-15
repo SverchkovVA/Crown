@@ -857,7 +857,11 @@ class MainWindow(QMainWindow):
             panel.message("Сохранённая позиция недоступна для выбранной книги.")
             return
         options = InvestmentPreviewOptions(
-            self, accounts, storage=storage is not None, inputs=record.inputs if record else None
+            self,
+            accounts,
+            storage=storage is not None,
+            supports_stock_splits=session.supports_stock_splits,
+            inputs=record.inputs if record else None,
         )
         if storage is not None:
             InvestmentStorage(
