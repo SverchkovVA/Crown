@@ -26,6 +26,7 @@ from personal_finance.domain.investment_positions import InvestmentPositionInput
 from personal_finance.domain.investment_prices import (
     InvestmentValuation,
     ManualPrice,
+    MarketQuote,
     PriceUnit,
     position_result,
 )
@@ -56,6 +57,20 @@ from personal_finance.presentation.investment_editors import (
 from personal_finance.presentation.investment_price_history import ManualPriceHistory
 from personal_finance.presentation.recurring_payments import _date, _date_input, _table
 from personal_finance.presentation.tables import replace_table
+
+
+def market_quote_caption(quote: MarketQuote) -> str:
+    instrument = quote.instrument
+    parts = [
+        f"Рыночная цена от {date_text(quote.quoted_on)}",
+        f"Источник {instrument.provider}",
+        instrument.instrument_code,
+    ]
+    if instrument.board is not None:
+        parts.append(f"Режим {instrument.board}")
+    if quote.quoted_at is not None:
+        parts.append(f"{quote.quoted_at:%H:%M UTC}")
+    return " · ".join(parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,7 +447,14 @@ class InvestmentPreviewDialog(QDialog):
                         f"Изменение стоимости {amount(unrealized)}"
                     )
                 )
-                layout.addWidget(_label(f"Ручная цена от {date_text(price.quoted_on)} · {source}"))
+                caption = (
+                    market_quote_caption(valued.market_quote)
+                    if valued.market_quote is not None
+                    else f"Ручная цена от {date_text(price.quoted_on)}"
+                )
+                price_label = _label(f"{caption} · {source}")
+                price_label.setTextFormat(Qt.TextFormat.PlainText)
+                layout.addWidget(price_label)
         performance = position_result(position, market_minor)
         if performance is not None:
             caption = f"Общий результат {amount(performance.total_minor)}"

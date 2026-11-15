@@ -1,6 +1,6 @@
 """Сводка актуальных сохранённых позиций на выбранную дату."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -8,6 +8,7 @@ from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.investment_positions import SavedInvestmentPosition
 from personal_finance.domain.investment_prices import (
     InvestmentValuation,
+    MarketQuote,
     PositionResult,
     position_result,
     value_investments,
@@ -105,7 +106,11 @@ def _currency_total(currency: Currency, rows: list[PortfolioRow]) -> PortfolioCu
 
 
 def report_saved_portfolio(
-    accounts: Sequence[Account], records: Sequence[SavedInvestmentPosition], as_of: date
+    accounts: Sequence[Account],
+    records: Sequence[SavedInvestmentPosition],
+    as_of: date,
+    *,
+    market_quotes: Mapping[str, MarketQuote] | None = None,
 ) -> SavedPortfolioReport:
     if type(as_of) is not date:
         raise ValidationError("Укажите календарную дату портфеля.")
@@ -138,7 +143,7 @@ def report_saved_portfolio(
         if not portfolio.positions:
             continue
         (position,) = portfolio.positions
-        valuation = value_investments(portfolio, inputs.prices)
+        valuation = value_investments(portfolio, inputs.prices, market_quotes=market_quotes)
         valued = valuation.positions[0] if valuation.positions else None
         market = valued.market_minor if valued is not None else 0
         price_date = valued.price.quoted_on if valued is not None and valued.price else None

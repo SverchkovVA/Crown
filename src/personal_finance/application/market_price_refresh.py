@@ -3,75 +3,18 @@
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
 
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.investment_prices import (
-    ManualPrice,
-    PriceUnit,
-    validate_price_for_security,
-)
+from personal_finance.domain.investment_prices import MarketQuote, QuoteInstrument
 from personal_finance.domain.investments import Security
-from personal_finance.domain.models import Currency, Money
-
-
-@dataclass(frozen=True, slots=True)
-class QuoteInstrument:
-    provider: str
-    instrument_code: str
-    board: str | None = None
-
-    def __post_init__(self) -> None:
-        parts: tuple[str, ...] = (self.provider, self.instrument_code)
-        if self.board is not None:
-            parts += (self.board,)
-        if any(
-            not isinstance(part, str)
-            or not 1 <= len(part) <= 80
-            or not part.isprintable()
-            or any(character.isspace() for character in part)
-            for part in parts
-        ):
-            raise ValidationError("Уточните код источника, инструмента или режима торгов.")
 
 
 @dataclass(frozen=True, slots=True)
 class QuoteBinding:
     security: Security
     instrument: QuoteInstrument
-
-
-@dataclass(frozen=True, slots=True)
-class MarketQuote:
-    instrument: QuoteInstrument
-    quoted_on: date
-    unit: PriceUnit
-    value: Decimal
-    currency: Currency
-    quoted_at: datetime | None = None
-    unpaid_face: Money | None = None
-    accrued_per_security: Money | None = None
-
-    def __post_init__(self) -> None:
-        if self.quoted_at is not None and _aware(self.quoted_at):
-            object.__setattr__(self, "quoted_at", self.quoted_at.astimezone(UTC))
-
-    def price_for(self, security: Security) -> ManualPrice:
-        price = ManualPrice(
-            security.id,
-            self.quoted_on,
-            self.unit,
-            self.value,
-            self.currency,
-            self.unpaid_face,
-            self.accrued_per_security,
-        )
-        if price.value <= 0:
-            raise ValidationError("Для рыночной оценки нужна положительная цена.")
-        validate_price_for_security(security, price)
-        return price
 
 
 class QuoteStatus(StrEnum):

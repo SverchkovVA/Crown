@@ -9,15 +9,13 @@ from sqlalchemy import Connection, Engine, text
 from sqlalchemy.engine import RowMapping
 
 from personal_finance.application.market_price_refresh import (
-    MarketQuote,
     QuoteBinding,
-    QuoteInstrument,
     QuoteRefreshRow,
     QuoteStatus,
     compare_market_quotes,
 )
 from personal_finance.domain.errors import ValidationError, VaultError
-from personal_finance.domain.investment_prices import PriceUnit
+from personal_finance.domain.investment_prices import MarketQuote, PriceUnit, QuoteInstrument
 from personal_finance.domain.ledger import require_identifier
 from personal_finance.domain.models import MAX_MINOR, Currency, Money
 

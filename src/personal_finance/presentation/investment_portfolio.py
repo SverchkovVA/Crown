@@ -1,6 +1,7 @@
 """Встроенная сводка сохранённых инвестиционных позиций."""
 
 from datetime import date
+from html import escape
 
 from PySide6.QtCore import QDate, Signal
 from PySide6.QtWidgets import (
@@ -30,6 +31,7 @@ from personal_finance.presentation.investment_editors import SECURITY_LABELS
 from personal_finance.presentation.investment_preview import (
     InvestmentPreviewDialog,
     InvestmentPreviewRequest,
+    market_quote_caption,
 )
 from personal_finance.presentation.recurring_payments import _date, _date_input, _table
 from personal_finance.presentation.tables import replace_table
@@ -190,6 +192,10 @@ class InvestmentPortfolioDialog(QDialog):
             security = row.position.security
             kind = SECURITY_LABELS[security.kind]
             model.item(index, 0).setToolTip(f"{kind} · {security.code}")
+            if row.valuation.positions:
+                quote = row.valuation.positions[0].market_quote
+                if quote is not None:
+                    model.item(index, 4).setToolTip(escape(market_quote_caption(quote)))
         header = self.positions.horizontalHeader()
         header.setMinimumSectionSize(header.fontMetrics().horizontalAdvance("Инструмент") + 24)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)

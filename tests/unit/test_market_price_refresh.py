@@ -6,14 +6,17 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from personal_finance.application.market_price_refresh import (
-    MarketQuote,
     QuoteBinding,
-    QuoteInstrument,
     QuoteStatus,
     refresh_market_prices,
 )
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.investment_prices import PriceUnit, market_value_minor
+from personal_finance.domain.investment_prices import (
+    MarketQuote,
+    PriceUnit,
+    QuoteInstrument,
+    market_value_minor,
+)
 from personal_finance.domain.models import RUB, Currency, Money
 from tests.unit.test_investments import BOND, SHARE, identifier
 

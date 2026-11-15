@@ -1,13 +1,14 @@
 """Оценка портфеля по явно заданным датированным ценам."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.investments import (
+    BondAmortization,
     InvestmentPortfolio,
     Security,
     SecurityKind,
@@ -77,6 +78,57 @@ def validate_price_for_security(security: Security, price: ManualPrice) -> None:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class QuoteInstrument:
+    provider: str
+    instrument_code: str
+    board: str | None = None
+
+    def __post_init__(self) -> None:
+        parts: tuple[str, ...] = (self.provider, self.instrument_code)
+        if self.board is not None:
+            parts += (self.board,)
+        if any(
+            not isinstance(part, str)
+            or not 1 <= len(part) <= 80
+            or not part.isprintable()
+            or any(character.isspace() for character in part)
+            for part in parts
+        ):
+            raise ValidationError("Уточните код источника, инструмента или режима торгов.")
+
+
+@dataclass(frozen=True, slots=True)
+class MarketQuote:
+    instrument: QuoteInstrument
+    quoted_on: date
+    unit: PriceUnit
+    value: Decimal
+    currency: Currency
+    quoted_at: datetime | None = None
+    unpaid_face: Money | None = None
+    accrued_per_security: Money | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.quoted_at, datetime) and self.quoted_at.utcoffset() is not None:
+            object.__setattr__(self, "quoted_at", self.quoted_at.astimezone(UTC))
+
+    def price_for(self, security: Security) -> ManualPrice:
+        price = ManualPrice(
+            security.id,
+            self.quoted_on,
+            self.unit,
+            self.value,
+            self.currency,
+            self.unpaid_face,
+            self.accrued_per_security,
+        )
+        if price.value <= 0:
+            raise ValidationError("Для рыночной оценки нужна положительная цена.")
+        validate_price_for_security(security, price)
+        return price
+
+
 def market_value_minor(security: Security, price: ManualPrice, quantity: int) -> int:
     validate_price_for_security(security, price)
     if type(quantity) is not int or quantity < 0:
@@ -121,6 +173,7 @@ class ValuedPosition:
     position: SecurityPosition
     price: ManualPrice | None
     market_minor: int | None
+    market_quote: MarketQuote | None = None
 
     @property
     def unrealized_minor(self) -> int | None:
@@ -147,8 +200,26 @@ class InvestmentValuation:
     totals: tuple[ValuationTotals, ...]
 
 
+def _eligible_after_events(
+    price: ManualPrice, split_on: date, amortization: BondAmortization | None
+) -> bool:
+    return price.quoted_on >= split_on and (
+        amortization is None
+        or (
+            price.quoted_on >= amortization.occurred_on
+            and (
+                price.unit is not PriceUnit.PERCENT_OF_FACE
+                or price.unpaid_face == amortization.face_after
+            )
+        )
+    )
+
+
 def value_investments(
-    portfolio: InvestmentPortfolio, prices: Sequence[ManualPrice]
+    portfolio: InvestmentPortfolio,
+    prices: Sequence[ManualPrice],
+    *,
+    market_quotes: Mapping[str, MarketQuote] | None = None,
 ) -> InvestmentValuation:
     if not isinstance(portfolio, InvestmentPortfolio):
         raise ValidationError("Укажите рассчитанный снимок портфеля.")
@@ -194,23 +265,26 @@ def value_investments(
         security = position.security
         quote = eligible.get(security.id)
         position_key = position.account.id, security.id
-        if quote and quote.quoted_on < latest_split.get(position_key, date.min):
-            quote = None
+        split_on = latest_split.get(position_key, date.min)
         amortization = latest_amortization.get(position_key)
-        if (
-            quote
-            and amortization
-            and (
-                quote.quoted_on < amortization.occurred_on
-                or (
-                    quote.unit is PriceUnit.PERCENT_OF_FACE
-                    and quote.unpaid_face != amortization.face_after
-                )
-            )
-        ):
+        if quote is not None and not _eligible_after_events(quote, split_on, amortization):
             quote = None
+        selected_market = None
+        observation = market_quotes.get(security.id) if market_quotes else None
+        if observation is not None:
+            try:
+                market_price = observation.price_for(security)
+            except ValidationError:
+                market_price = None
+            if (
+                market_price is not None
+                and market_price.quoted_on <= portfolio.as_of
+                and (quote is None or market_price.quoted_on > quote.quoted_on)
+                and _eligible_after_events(market_price, split_on, amortization)
+            ):
+                quote, selected_market = market_price, observation
         value = None if quote is None else market_value_minor(security, quote, quantity)
-        row = ValuedPosition(position, quote, value)
+        row = ValuedPosition(position, quote, value, selected_market)
         values.append(row)
         by_currency.setdefault(security.currency, []).append(row)
     totals = []
