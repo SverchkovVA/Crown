@@ -29,4 +29,8 @@
 Нативные исходники и EXE с OCR прошли по 34 шага. В Windows Sandbox без сети,
 Python и uv запустилось главное окно и прошли все 34 шага.
 Локальный предварительный запуск — `artifacts/start-preview-deposit-yield-comparison-dev115.cmd`.
-Полный локальный набор и CI начаты отдельно.
+Проверка 15.11.2026 завершена. В [Windows и Linux CI](https://github.com/SverchkovVA/Crown/actions/runs/43728913191)
+прошли по 2844 теста. Локально прошли 2842 теста в обычном Qt и два теста вставки
+кода восстановления в изолированном Qt. Полнота сверена с Windows CI по
+логическим идентификаторам. Исходные JUnit сохранены отдельно.
+Проверенный запуск — `artifacts/start-checked-deposit-yield-dev115.cmd`.
