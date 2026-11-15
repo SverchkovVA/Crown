@@ -179,6 +179,12 @@ def value_investments(
         latest_split[position_key] = max(
             latest_split.get(position_key, date.min), event.occurred_on
         )
+    latest_amortization = {}
+    for receipt in portfolio.amortizations:
+        payment = receipt.event
+        payment_key = payment.account_id, payment.security_id
+        # Проекция уже упорядочена по дате и порядку внутри дня.
+        latest_amortization[payment_key] = payment
     values = []
     by_currency: dict[Currency, list[ValuedPosition]] = {}
     for position in portfolio.positions:
@@ -187,8 +193,20 @@ def value_investments(
             continue
         security = position.security
         quote = eligible.get(security.id)
-        if quote and quote.quoted_on < latest_split.get(
-            (position.account.id, security.id), date.min
+        position_key = position.account.id, security.id
+        if quote and quote.quoted_on < latest_split.get(position_key, date.min):
+            quote = None
+        amortization = latest_amortization.get(position_key)
+        if (
+            quote
+            and amortization
+            and (
+                quote.quoted_on < amortization.occurred_on
+                or (
+                    quote.unit is PriceUnit.PERCENT_OF_FACE
+                    and quote.unpaid_face != amortization.face_after
+                )
+            )
         ):
             quote = None
         value = None if quote is None else market_value_minor(security, quote, quantity)

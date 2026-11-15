@@ -141,6 +141,33 @@ class StockSplit(InvestmentEvent):
 
 
 @dataclass(frozen=True, slots=True)
+class BondAmortization(InvestmentEvent):
+    quantity: int
+    face_before: Money
+    face_after: Money
+
+    def __post_init__(self) -> None:
+        InvestmentEvent.__post_init__(self)
+        if type(self.quantity) is not int or not 1 <= self.quantity <= MAX_MINOR:
+            raise ValidationError(
+                "Укажите количество облигаций, на которые погашена часть номинала."
+            )
+        if (
+            not isinstance(self.face_before, Money)
+            or not isinstance(self.face_after, Money)
+            or self.face_before.currency != self.face_after.currency
+            or not 0 < self.face_after.minor < self.face_before.minor
+        ):
+            raise ValidationError("Укажите уменьшение положительного номинала в одной валюте.")
+        if self.principal_minor > MAX_MINOR:
+            raise ValidationError("Возвращённая часть номинала превышает допустимый предел.")
+
+    @property
+    def principal_minor(self) -> int:
+        return (self.face_before.minor - self.face_after.minor) * self.quantity
+
+
+@dataclass(frozen=True, slots=True)
 class OpenLot:
     acquisition_id: str
     acquired_on: date
@@ -170,6 +197,26 @@ class Disposal:
 
 
 @dataclass(frozen=True, slots=True)
+class PrincipalCostAllocation:
+    acquisition_id: str
+    cost_minor: int
+
+
+@dataclass(frozen=True, slots=True)
+class AmortizationReceipt:
+    event: BondAmortization
+    allocations: tuple[PrincipalCostAllocation, ...]
+
+    @property
+    def cost_minor(self) -> int:
+        return sum(row.cost_minor for row in self.allocations)
+
+    @property
+    def realized_minor(self) -> int:
+        return self.event.principal_minor - self.cost_minor
+
+
+@dataclass(frozen=True, slots=True)
 class SecurityPosition:
     account: Account
     security: Security
@@ -194,6 +241,12 @@ class InvestmentPortfolio:
     disposals: tuple[Disposal, ...]
     distributions: tuple[SecurityDistribution, ...]
     splits: tuple[StockSplit, ...] = ()
+    amortizations: tuple[AmortizationReceipt, ...] = ()
+
+
+def _proportional_share(total: int, part: int, whole: int) -> int:
+    amount, rest = divmod(total * part, whole)
+    return amount + int(2 * rest >= whole)
 
 
 @dataclass(slots=True)
@@ -202,11 +255,11 @@ class _Lot:
     acquired_on: date
     quantity: int
     cost_minor: int
+    accrued_minor: int = 0
     sold: int = 0
 
     def _cumulative_cost(self, quantity: int) -> int:
-        whole, rest = divmod(self.cost_minor * quantity, self.quantity)
-        return whole + int(2 * rest >= self.quantity)
+        return _proportional_share(self.cost_minor, quantity, self.quantity)
 
     def allocate(self, quantity: int) -> FifoAllocation:
         before = self._cumulative_cost(self.sold)
@@ -229,6 +282,19 @@ class _Lot:
         self.cost_minor = remaining.cost_minor
         self.sold = 0
 
+    def amortize(self, *, decrease: int, nominal: int) -> PrincipalCostAllocation:
+        remaining = self.open_lot()
+        accrued = self.accrued_minor - _proportional_share(
+            self.accrued_minor, self.sold, self.quantity
+        )
+        # Уплаченный НКД относится к процентам, поэтому долю номинала считаем без него.
+        allocated = _proportional_share(remaining.cost_minor - accrued, decrease, nominal)
+        self.quantity = remaining.quantity
+        self.cost_minor = remaining.cost_minor - allocated
+        self.accrued_minor = accrued
+        self.sold = 0
+        return PrincipalCostAllocation(self.acquisition_id, allocated)
+
 
 @dataclass(slots=True)
 class _Position:
@@ -237,6 +303,7 @@ class _Position:
     realized_minor: int = 0
     distributions_minor: int = 0
     purchases_minor: int = 0
+    remaining_face: Money | None = None
 
     def dispose(self, trade: SecurityTrade) -> Disposal:
         if trade.quantity > self.quantity:
@@ -262,6 +329,24 @@ class _Position:
         for lot in self.lots:
             lot.split(event.multiplier)
         self.quantity = quantity
+
+    def amortize(self, event: BondAmortization) -> AmortizationReceipt:
+        if event.quantity != self.quantity:
+            raise ValidationError(
+                "Количество облигаций в погашении должно совпадать с остатком на счёте."
+            )
+        if self.remaining_face is not None and self.remaining_face != event.face_before:
+            raise ValidationError(
+                "Номинал должен совпадать с остатком после предыдущего погашения."
+            )
+        nominal = event.face_before.minor
+        decrease = nominal - event.face_after.minor
+        receipt = AmortizationReceipt(
+            event, tuple(lot.amortize(decrease=decrease, nominal=nominal) for lot in self.lots)
+        )
+        self.remaining_face = event.face_after
+        self.realized_minor += receipt.realized_minor
+        return receipt
 
 
 def _check_security(event: PortfolioEvent, account: Account, security: Security) -> None:
@@ -289,6 +374,7 @@ def project_investments(
     as_of: date,
     *,
     splits: Sequence[StockSplit] = (),
+    amortizations: Sequence[BondAmortization] = (),
 ) -> InvestmentPortfolio:
     if type(as_of) is not date:
         raise ValidationError("Укажите календарную дату инвестиционного отчёта.")
@@ -314,12 +400,14 @@ def project_investments(
 
     event_ids: set[str] = set()
     orders: set[tuple[str, date, int]] = set()
-    current: list[PortfolioEvent | StockSplit] = []
+    current: list[PortfolioEvent | StockSplit | BondAmortization] = []
     if any(not isinstance(event, (SecurityTrade, SecurityDistribution)) for event in events):
         raise ValidationError("Укажите сделку или денежную выплату.")
     if any(not isinstance(split, StockSplit) for split in splits):
         raise ValidationError("Укажите событие дробления акций.")
-    for event in (*events, *splits):
+    if any(not isinstance(item, BondAmortization) for item in amortizations):
+        raise ValidationError("Укажите частичное погашение облигации.")
+    for event in (*events, *splits, *amortizations):
         matched_account = account_by_id.get(event.account_id)
         matched_security = security_by_id.get(event.security_id)
         if matched_account is None or matched_security is None:
@@ -329,6 +417,14 @@ def project_investments(
                 raise ValidationError("Дробление предусмотрено для акций.")
             if matched_account.currency != matched_security.currency.code:
                 raise ValidationError("Валюты акции и счёта должны совпадать.")
+        elif isinstance(event, BondAmortization):
+            if matched_security.kind is not SecurityKind.BOND:
+                raise ValidationError("Частичное погашение номинала предусмотрено для облигаций.")
+            if (
+                event.face_before.currency != matched_security.currency
+                or matched_account.currency != matched_security.currency.code
+            ):
+                raise ValidationError("Валюты номинала, облигации и счёта должны совпадать.")
         else:
             _check_security(event, matched_account, matched_security)
         order = event.account_id, event.occurred_on, event.sequence
@@ -343,6 +439,7 @@ def project_investments(
     disposals = []
     distributions = []
     applied_splits = []
+    receipts = []
     for event in sorted(current, key=lambda row: (row.occurred_on, row.account_id, row.sequence)):
         key = event.account_id, event.security_id
         position = positions.get(key)
@@ -351,12 +448,20 @@ def project_investments(
         if isinstance(event, StockSplit):
             position.split(event)
             applied_splits.append(event)
+        elif isinstance(event, BondAmortization):
+            receipts.append(position.amortize(event))
         elif isinstance(event, SecurityDistribution):
             position.distributions_minor += event.received.minor
             distributions.append(event)
         elif event.kind is TradeKind.BUY:
             position.lots.append(
-                _Lot(event.id, event.occurred_on, event.quantity, -event.cash_delta_minor)
+                _Lot(
+                    event.id,
+                    event.occurred_on,
+                    event.quantity,
+                    -event.cash_delta_minor,
+                    accrued_minor=event.accrued_interest.minor if event.accrued_interest else 0,
+                )
             )
             position.quantity += event.quantity
             position.purchases_minor -= event.cash_delta_minor
@@ -379,4 +484,5 @@ def project_investments(
         tuple(disposals),
         tuple(distributions),
         tuple(applied_splits),
+        tuple(receipts),
     )
