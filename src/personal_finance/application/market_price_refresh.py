@@ -119,6 +119,13 @@ def _status(
     candidate = rows[0]
     if any(value != candidate for value in rows[1:]):
         return QuoteStatus.AMBIGUOUS
+    return compare_market_quotes(candidate, previous)
+
+
+def compare_market_quotes(candidate: MarketQuote, previous: MarketQuote | None) -> QuoteStatus:
+    """Сравнивает проверенные наблюдения одного источника и режима."""
+    if previous is not None and candidate.instrument != previous.instrument:
+        raise ValidationError("Цены относятся к разным источникам или режимам торгов.")
     if previous is None or candidate.quoted_on > previous.quoted_on:
         return QuoteStatus.UPDATED
     if candidate == previous:
