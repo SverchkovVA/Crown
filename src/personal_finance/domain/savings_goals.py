@@ -1,11 +1,15 @@
 """План накоплений с равными ежемесячными пополнениями, без процентов."""
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from datetime import date
 
+from personal_finance.domain.analytics import ReportPeriod, ReportScope
+from personal_finance.domain.analytics_cashflow import CashMovement, cash_flow_report
 from personal_finance.domain.calendar_dates import add_calendar_months
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.models import Money
+from personal_finance.domain.ledger import Operation
+from personal_finance.domain.models import Account, Money
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,4 +89,36 @@ def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection
         payments,
         required,
         projected,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SavingsGoalAccountProgress:
+    account: Account
+    projection: SavingsGoalProjection
+    sources: tuple[CashMovement, ...]
+
+
+def savings_goal_account_progress(
+    scenario: SavingsGoalScenario, account: Account, operations: Sequence[Operation]
+) -> SavingsGoalAccountProgress:
+    currency = scenario.target.currency
+    if account.currency != currency.code:
+        raise ValidationError("Выберите счёт в валюте цели.")
+    report = cash_flow_report(
+        operations,
+        ReportPeriod(scenario.as_of, scenario.as_of),
+        ReportScope(frozenset((account.id,))),
+    )
+    position = report.accounts[0].totals if report.accounts else None
+    if position is not None and position.currency != currency:
+        raise ValidationError("Валюта движений счёта отличается от валюты цели.")
+    balance = position.closing_minor if position is not None else 0
+    if balance < 0:
+        raise ValidationError(
+            "На дату расчёта у счёта отрицательный остаток. Выберите другой счёт."
+        )
+    based_on_account = replace(scenario, current=Money(balance, currency))
+    return SavingsGoalAccountProgress(
+        account, project_savings_goal(based_on_account), report.movements
     )

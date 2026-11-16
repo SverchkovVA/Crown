@@ -5,6 +5,7 @@ from datetime import date
 from PySide6.QtCore import QDate, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from personal_finance.domain.errors import ValidationError
-from personal_finance.domain.models import RUB, Money
+from personal_finance.domain.models import RUB, Account, Money
 from personal_finance.domain.savings_goals import SavingsGoalProjection, SavingsGoalScenario
 from personal_finance.presentation.analytics import _label, format_report_amount
 from personal_finance.presentation.analytics_cashflow import _size
@@ -113,20 +114,86 @@ class SavingsGoalOptions(QDialog):
         self.calculationRequested.emit()
 
 
+class SavingsGoalAccountOptions(QDialog):
+    calculationRequested = Signal(str)
+
+    def __init__(
+        self, scenario: SavingsGoalScenario, accounts: list[Account], parent: QWidget
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Цель накоплений · Выбор счёта")
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            _label(
+                f"Остаток на конец {scenario.as_of:%d.%m.%Y}. "
+                "Выберите счёт, средства которого выделены на эту цель."
+            )
+        )
+        self.account = QComboBox()
+        self.account.setAccessibleName("Счёт для расчёта цели")
+        self.account.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.account.setMinimumContentsLength(22)
+        self.account.addItem("Выберите счёт", None)
+        for account in sorted(accounts, key=lambda item: (item.name.casefold(), item.id)):
+            self.account.addItem(account.name, account.id)
+        form = QFormLayout()
+        form.addRow("Счёт", self.account)
+        layout.addLayout(form)
+        self.feedback = _label("" if accounts else "В книге нет счёта в валюте цели.")
+        self.feedback.setObjectName("feedbackError")
+        self.feedback.setVisible(not accounts)
+        layout.addWidget(self.feedback)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.calculate = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.calculate.setText("Рассчитать")
+        self.calculate.setEnabled(False)
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
+        self.account.currentIndexChanged.connect(self._account_changed)
+        buttons.accepted.connect(self._request)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        layout.addStretch(1)
+
+    def _account_changed(self, index: int) -> None:
+        self.calculate.setEnabled(index > 0)
+        self.feedback.hide()
+
+    def show_error(self, message: str) -> None:
+        self.feedback.setText(message)
+        self.feedback.show()
+
+    def _request(self) -> None:
+        if identifier := self.account.currentData():
+            self.calculationRequested.emit(identifier)
+
+
 class SavingsGoalDialog(QDialog):
-    def __init__(self, result: SavingsGoalProjection, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        result: SavingsGoalProjection,
+        parent: QWidget | None = None,
+        *,
+        account_name: str | None = None,
+    ) -> None:
         super().__init__(parent)
         self.projection = result
         self.setWindowTitle("Цель накоплений · Расчёт")
         _size(self, 900, 650)
         layout = QVBoxLayout(self)
         scenario = result.scenario
-        layout.addWidget(
-            _label(
-                "Прогноз по введённым суммам и ежемесячным пополнениям. "
-                "Сверяйте накопления с журналом и обновляйте условия по мере изменений."
+        if account_name is None:
+            layout.addWidget(_label("Прогноз по введённым суммам и ежемесячным пополнениям."))
+        else:
+            layout.addWidget(
+                _label(
+                    f"Счёт «{account_name}». Прогноз от денежного остатка по журналу "
+                    "и ежемесячного пополнения из условий цели."
+                )
             )
-        )
         form = QFormLayout()
         form.setHorizontalSpacing(24)
         self.fields: dict[str, QLabel] = {}
@@ -141,7 +208,10 @@ class SavingsGoalDialog(QDialog):
             return f"{format_report_amount(minor, currency)} {currency.code}"
 
         field("Дата расчёта", f"{scenario.as_of:%d.%m.%Y}")
-        field("Уже накоплено", amount(scenario.current.minor))
+        field(
+            "Уже накоплено" if account_name is None else "Остаток на счёте",
+            amount(scenario.current.minor),
+        )
         field("Цель", amount(scenario.target.minor))
         field("Осталось накопить", amount(result.remaining_minor))
         percent = result.progress_basis_points
@@ -191,7 +261,9 @@ class SavingsGoalDialog(QDialog):
             )
         )
         layout.addStretch()
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.button(QDialogButtonBox.StandardButton.Close).setText("К условиям")
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        self.buttons.button(QDialogButtonBox.StandardButton.Close).setText(
+            "К условиям" if account_name is None else "К выбору счёта"
+        )
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)

@@ -118,3 +118,19 @@ def test_goal_payment_count_and_minimum_contribution_match_calendar(anchor, days
         assert (required - 1) * len(paydays) < remaining
     else:
         assert required is None
+
+
+def test_goal_account_progress_distinguishes_empty_account_and_currency_mismatch():
+    import uuid
+    from dataclasses import replace
+
+    from personal_finance.domain.models import Account, AccountKind
+    from personal_finance.domain.savings_goals import savings_goal_account_progress
+
+    scenario = SavingsGoalScenario(date(2026, 1, 31), Money(100), Money(300), Money(100))
+    account = Account(str(uuid.uuid4()), "Учебный счёт", AccountKind.SAVINGS, None)
+    result = savings_goal_account_progress(scenario, account, ())
+    assert result.projection.scenario.current == Money(0) and result.sources == ()
+    assert result.projection.progress_basis_points == 0 and scenario.current == Money(100)
+    with pytest.raises(ValidationError, match="валюте цели"):
+        savings_goal_account_progress(scenario, replace(account, currency="USD"), ())

@@ -23,13 +23,16 @@ from personal_finance.domain.planning_scenarios import (
     planning_kind,
 )
 from personal_finance.domain.savings_goals import (
+    SavingsGoalAccountProgress,
     SavingsGoalProjection,
     SavingsGoalScenario,
     project_savings_goal,
 )
 from personal_finance.presentation.analytics import _label
+from personal_finance.presentation.analytics_cashflow import CashFlowSourcesDialog
 from personal_finance.presentation.budget import BudgetDialog
 from personal_finance.presentation.inline_forms import InlineForms, present_form
+from personal_finance.presentation.ledger_dialogs import category_title
 from personal_finance.presentation.planning_options import (
     BudgetScenarioOptions,
     SavingsGoalScenarioOptions,
@@ -40,7 +43,7 @@ from personal_finance.presentation.planning_scenarios import (
     PlanningRequest,
     SavedPlanningDialog,
 )
-from personal_finance.presentation.savings_goals import SavingsGoalDialog
+from personal_finance.presentation.savings_goals import SavingsGoalAccountOptions, SavingsGoalDialog
 
 if TYPE_CHECKING:
     from personal_finance.presentation.main_window import MainWindow
@@ -255,7 +258,82 @@ class PlanningScenariosController:
         summary = _label(text)
         summary.setToolTip(f"Версия условий: {record.revision_id}")
         layout.insertWidget(0, summary)
+        if isinstance(dialog, SavingsGoalDialog) and self.session.ledger is not None:
+            scenario = dialog.projection.scenario
+            account = dialog.buttons.addButton(
+                "По остатку счёта…", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            account.clicked.connect(lambda: self._choose_goal_account(scenario))
         present_form(dialog, self.panel, lambda _: self.open())
+
+    def _choose_goal_account(self, scenario: SavingsGoalScenario) -> None:
+        ledger = self.session.ledger
+        if ledger is None:
+            return
+        analytics = Analytics(ledger, self.session.mutex, self.session.ensure_open)
+
+        def show(accounts: list[Account]) -> None:
+            options = SavingsGoalAccountOptions(
+                scenario,
+                [
+                    account
+                    for account in accounts
+                    if account.currency == scenario.target.currency.code
+                ],
+                self.window,
+            )
+
+            def calculate(account_id: str) -> None:
+                def read() -> tuple[SavingsGoalAccountProgress, list[Account], list[Category]]:
+                    current_accounts = self.session.catalog.accounts()
+                    account = next(
+                        (item for item in current_accounts if item.id == account_id), None
+                    )
+                    if account is None:
+                        raise ValidationError("Выбранный счёт больше недоступен.")
+                    return (
+                        analytics.savings_goal_progress(scenario, account),
+                        current_accounts,
+                        self.session.catalog.categories(),
+                    )
+
+                self._job(
+                    read,
+                    lambda data: self._show_goal_account_progress(*data),
+                    options.show_error,
+                    "Расчёт прогресса по журналу…",
+                )
+
+            options.calculationRequested.connect(calculate)
+            present_form(options, self.panel)
+
+        self._job(self.session.catalog.accounts, show, self.panel.message, "Загрузка счетов…")
+
+    def _show_goal_account_progress(
+        self,
+        result: SavingsGoalAccountProgress,
+        accounts: list[Account],
+        categories: list[Category],
+    ) -> None:
+        dialog = SavingsGoalDialog(result.projection, self.window, account_name=result.account.name)
+        if result.sources:
+
+            def show_sources() -> None:
+                sources = CashFlowSourcesDialog(
+                    result.sources,
+                    result.projection.scenario.target.currency,
+                    "Цель накоплений · Движения счёта",
+                    {account.id: account.name for account in accounts},
+                    {category.id: category_title(category, categories) for category in categories},
+                    dialog,
+                )
+                present_form(sources, self.panel)
+
+            button = dialog.buttons.addButton(
+                "Движения счёта", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            button.clicked.connect(show_sources)
+        present_form(dialog, self.panel)
 
     def _history(self, records: list[SavedPlanningScenario]) -> None:
         dialog = PlanningHistoryDialog(records, self.window)

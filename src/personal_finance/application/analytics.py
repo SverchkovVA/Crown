@@ -22,6 +22,11 @@ from personal_finance.domain.ledger import Operation
 from personal_finance.domain.models import Account, Category, Money
 from personal_finance.domain.periods import AccountingMonth
 from personal_finance.domain.recurring_payments import PaymentSchedule
+from personal_finance.domain.savings_goals import (
+    SavingsGoalAccountProgress,
+    SavingsGoalScenario,
+    savings_goal_account_progress,
+)
 
 
 class Analytics:
@@ -56,6 +61,11 @@ class Analytics:
             through,
             dedicated_account=dedicated_account,
         )
+
+    def savings_goal_progress(
+        self, scenario: SavingsGoalScenario, account: Account
+    ) -> SavingsGoalAccountProgress:
+        return savings_goal_account_progress(scenario, account, self._snapshot())
 
     def account_position(self, accounts: list[Account], as_of: date) -> AccountPosition:
         return account_position(self._snapshot(), accounts, as_of)
