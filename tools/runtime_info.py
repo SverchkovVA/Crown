@@ -28,6 +28,7 @@ def source_fingerprint(root: Path) -> str:
         ("packaging", "*.ps1"),
         ("packaging", "*.psm1"),
         ("packaging", "*.spec"),
+        ("packaging", "*.nsi"),
         ("packaging", "*.json"),
     ]:
         files.update((root / folder).rglob(pattern))
