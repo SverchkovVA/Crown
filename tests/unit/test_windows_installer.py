@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from tools.windows_installer import BUNDLE, COMPILER_INPUT, EXE, MANIFEST, prepare
+from tools import windows_installer
+from tools.runtime_info import source_fingerprint
+from tools.windows_installer import BUILD_RECEIPT, BUNDLE, COMPILER_INPUT, EXE, MANIFEST, prepare
 from tools.windows_payload import report
 
 
@@ -27,8 +29,9 @@ def _checked_build(tmp_path: Path) -> Path:
         "payload_manifest": MANIFEST,
         "payload_sha256": hashlib.sha256(manifest).hexdigest(),
         "exe_sha256": hashlib.sha256(b"fake-exe").hexdigest(),
+        "source_sha256": source_fingerprint(Path(__file__).resolve().parents[2]),
     }
-    (root / "build-result.json").write_text(json.dumps(receipt), encoding="utf-8")
+    (root / BUILD_RECEIPT).write_text(json.dumps(receipt), encoding="utf-8")
     return root
 
 
@@ -51,6 +54,10 @@ def test_prepares_explicit_install_and_uninstall_lists(tmp_path: Path) -> None:
     (build / BUNDLE / EXE).write_bytes(b"modified after prepare")
     assert (output / COMPILER_INPUT / BUNDLE / EXE).read_bytes() == b"fake-exe"
     assert (output / COMPILER_INPUT / MANIFEST).read_bytes() == (build / MANIFEST).read_bytes()
+    assert (output / COMPILER_INPUT / BUILD_RECEIPT).read_bytes() == (
+        build / BUILD_RECEIPT
+    ).read_bytes()
+    assert (output / COMPILER_INPUT / "crown.nsi").is_file()
 
 
 @pytest.mark.parametrize(
@@ -64,6 +71,19 @@ def test_refuses_changed_build(tmp_path: Path, file: str, message: str) -> None:
     build = _checked_build(tmp_path)
     (build / file).write_bytes(b"changed")
     with pytest.raises(ValueError, match=message):
+        prepare(build, tmp_path)
+    assert not (tmp_path / "payload.nsh").exists()
+
+
+@pytest.mark.parametrize("during_staging", [False, True])
+def test_refuses_source_change_without_version_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, during_staging: bool
+) -> None:
+    build = _checked_build(tmp_path)
+    current = source_fingerprint(Path(__file__).resolve().parents[2])
+    fingerprints = iter([current, "0" * 64] if during_staging else ["0" * 64])
+    monkeypatch.setattr(windows_installer, "source_fingerprint", lambda root: next(fingerprints))
+    with pytest.raises(ValueError, match="Исходники"):
         prepare(build, tmp_path)
     assert not (tmp_path / "payload.nsh").exists()
 

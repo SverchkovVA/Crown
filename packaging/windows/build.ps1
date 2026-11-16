@@ -18,6 +18,16 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     if (Test-Path -LiteralPath $outputRoot) { throw 'Папка сборки уже существует.' }
     [void](New-Item -ItemType Directory -Path $outputRoot -ErrorAction Stop)
 }
+function Get-BuildSourceFingerprint([string]$Step) {
+    $probe = Invoke-PfProcess -FilePath $python -ArgumentList @('-m', 'tools.runtime_info') `
+        -WorkingDirectory $projectRoot -LogPrefix (Join-Path $outputRoot $Step) `
+        -Step $Step -Environment $buildEnvironment -TimeoutSeconds 60
+    if ($probe.status -ne 'passed') { throw 'Не удалось вычислить отпечаток исходников.' }
+    $source = Get-Content -LiteralPath (Join-Path $outputRoot "$Step.stdout.log") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($source.source_sha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Получен неверный отпечаток исходников.' }
+    return $source.source_sha256
+}
+
 $record = [ordered]@{ format = 1; status = 'running'; failed_step = $null; executable = $null }
 $currentStep = 'dependencies'
 try {
@@ -29,8 +39,6 @@ try {
             -Step 'dependencies' -Environment $environment -TimeoutSeconds 1800
         if ($sync.status -ne 'passed') { throw 'Установка зависимостей завершилась ошибкой.' }
     }
-    $currentStep = 'pyinstaller'
-    Write-Host 'Сборка в новую папку…'
     $python = Join-Path $projectRoot '.venv/Scripts/python.exe'
     # PyInstaller ищет DLL также через PATH. Сторонние программы могут поставлять
     # старые системные библиотеки; в сборку должны попадать зависимости .venv/Windows.
@@ -40,6 +48,10 @@ try {
         PATH = (@((Split-Path -Parent $python), [Environment]::SystemDirectory,
             [Environment]::GetFolderPath('Windows')) -join [System.IO.Path]::PathSeparator)
     }
+    $currentStep = 'source_before_build'
+    $sourceFingerprint = Get-BuildSourceFingerprint $currentStep
+    $currentStep = 'pyinstaller'
+    Write-Host 'Сборка в новую папку…'
     $arguments = @('-m', 'PyInstaller',
         '--distpath', (Join-Path $outputRoot 'app'), '--workpath', (Join-Path $outputRoot 'work'),
         'packaging/windows/personal_finance.spec')
@@ -71,6 +83,11 @@ try {
         -WorkingDirectory $projectRoot -LogPrefix (Join-Path $outputRoot 'measure-payload') `
         -Step 'measure_payload' -Environment $buildEnvironment -TimeoutSeconds 180
     if ($measured.status -ne 'passed') { throw 'Не удалось измерить состав приложения.' }
+    $currentStep = 'source_after_build'
+    if ((Get-BuildSourceFingerprint $currentStep) -cne $sourceFingerprint) {
+        throw 'Исходники изменились во время сборки Windows.'
+    }
+    $record['source_sha256'] = $sourceFingerprint
     $record['payload_manifest'] = 'app-payload.json'
     $record['payload_sha256'] = (Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash.ToLowerInvariant()
     $record.status = 'passed'

@@ -9,16 +9,21 @@ from dataclasses import asdict
 from pathlib import Path
 
 from personal_finance import __version__
+from tools.runtime_info import source_fingerprint
 from tools.windows_payload import PayloadFile, measure
 
 BUNDLE = Path("app/PersonalFinance")
 EXE = "PersonalFinance.exe"
 MANIFEST = "app-payload.json"
 COMPILER_INPUT = "compiler-input"
+BUILD_RECEIPT = "build-result.json"
+_PROJECT = Path(__file__).resolve().parents[1]
+_INSTALLER_SCRIPT = _PROJECT / "packaging/windows/crown.nsi"
 
 
-def _read_build(directory: Path) -> tuple[tuple[PayloadFile, ...], bytes]:
-    record = json.loads((directory / "build-result.json").read_bytes())
+def _read_build(directory: Path, source: str) -> tuple[tuple[PayloadFile, ...], bytes, bytes]:
+    raw_record = (directory / BUILD_RECEIPT).read_bytes()
+    record = json.loads(raw_record)
     if (
         not isinstance(record, dict)
         or record.get("format") != 1
@@ -27,6 +32,8 @@ def _read_build(directory: Path) -> tuple[tuple[PayloadFile, ...], bytes]:
         or record.get("payload_manifest") != MANIFEST
     ):
         raise ValueError("Укажите папку штатной проверенной сборки Windows.")
+    if record.get("source_sha256") != source:
+        raise ValueError("Исходники отличаются от зафиксированных при сборке приложения.")
     raw_manifest = (directory / MANIFEST).read_bytes()
     digest = hashlib.sha256(raw_manifest).hexdigest()
     if record.get("payload_sha256") != digest:
@@ -43,7 +50,7 @@ def _read_build(directory: Path) -> tuple[tuple[PayloadFile, ...], bytes]:
         or record.get("exe_sha256") != next(item.sha256 for item in files if item.path == EXE)
     ):
         raise ValueError("Файлы приложения или их версия отличаются от результата сборки.")
-    return files, raw_manifest
+    return files, raw_manifest, raw_record
 
 
 def _script(files: tuple[PayloadFile, ...], digest: str) -> str:
@@ -88,7 +95,8 @@ def _script(files: tuple[PayloadFile, ...], digest: str) -> str:
 
 
 def prepare(build: Path, output: Path) -> tuple[int, str]:
-    files, raw_manifest = _read_build(build)
+    source = source_fingerprint(_PROJECT)
+    files, raw_manifest, raw_record = _read_build(build, source)
     if not re.fullmatch(r"\d+\.\d+\.\d+(?:\.dev\d+)?", __version__):
         raise ValueError("Номер версии приложения не подходит для установки.")
 
@@ -101,7 +109,11 @@ def prepare(build: Path, output: Path) -> tuple[int, str]:
         shutil.copyfile(build / BUNDLE / file.path, destination)
     if measure(copied_bundle) != files:
         raise ValueError("Файлы приложения изменились при копировании для NSIS.")
+    shutil.copyfile(_INSTALLER_SCRIPT, compiler_input / _INSTALLER_SCRIPT.name)
+    if source_fingerprint(_PROJECT) != source:
+        raise ValueError("Исходники изменились при подготовке установщика.")
     (compiler_input / MANIFEST).write_bytes(raw_manifest)
+    (compiler_input / BUILD_RECEIPT).write_bytes(raw_record)
     digest = hashlib.sha256(raw_manifest).hexdigest()
     with (output / "payload.nsh").open("x", encoding="utf-8-sig", newline="\n") as stream:
         stream.write(_script(files, digest))

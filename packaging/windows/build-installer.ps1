@@ -37,6 +37,7 @@ try {
     $compilerInput = Join-Path $outputRoot 'compiler-input'
     $manifestFile = Join-Path $compilerInput 'app-payload.json'
     $manifest = Get-Content -LiteralPath $manifestFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $sourceBuild = Get-Content -LiteralPath (Join-Path $compilerInput 'build-result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $version = $manifest.application
     $name = 'Crown-' + $version + '-windows-x64-setup.exe'
     $outputFile = Join-Path $outputRoot $name
@@ -47,7 +48,7 @@ try {
         ('/DCROWN_GENERATED=' + (Join-Path $outputRoot 'payload.nsh')),
         "/DCROWN_MANIFEST=$manifestFile",
         ('/DCROWN_NSIS_LICENSE=' + (Join-Path $nsis 'COPYING')),
-        (Join-Path $PSScriptRoot 'crown.nsi'))
+        (Join-Path $compilerInput 'crown.nsi'))
     $compilerEnvironment = @{
         NSISDIR=$nsis; NSISCONFDIR=$null
         PATH=(@($nsis, [Environment]::SystemDirectory, [Environment]::GetFolderPath('Windows')) -join [IO.Path]::PathSeparator)
@@ -69,6 +70,7 @@ try {
     $receipt['installer_sha256']=(Get-FileHash -LiteralPath $outputFile).Hash.ToLowerInvariant()
     $receipt['payload_sha256']=(Get-FileHash -LiteralPath $manifestFile).Hash.ToLowerInvariant()
     $receipt['payload_files']=$manifest.file_count
+    $receipt['source_sha256']=$sourceBuild.source_sha256
     Write-PfJson -Path (Join-Path $outputRoot 'installer-build.json') -Value $receipt
     Write-Host ('Установщик: ' + $name)
     exit 0
