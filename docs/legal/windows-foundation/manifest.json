@@ -104,6 +104,51 @@
       "origin": "managed-python-runtime",
       "source_path": "LICENSE.txt",
       "sha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3"
+    },
+    {
+      "component": "OpenSSL",
+      "runtime_build": "CPython 3.13.16+20261013 x86_64 Windows",
+      "path": "cpython-native/LICENSE.openssl-3.txt",
+      "origin": "python-build-standalone",
+      "source_path": "python/licenses/LICENSE.openssl-3.txt",
+      "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+      "sha256": "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96"
+    },
+    {
+      "component": "libffi",
+      "runtime_build": "CPython 3.13.16+20261013 x86_64 Windows",
+      "path": "cpython-native/LICENSE.libffi.txt",
+      "origin": "python-build-standalone",
+      "source_path": "python/licenses/LICENSE.libffi.txt",
+      "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+      "sha256": "9afb8970cd29fc1031fa647278e4bef613399e2e3468a1e3a397f4d158c6101c"
+    },
+    {
+      "component": "bzip2",
+      "runtime_build": "CPython 3.13.16+20261013 x86_64 Windows",
+      "path": "cpython-native/LICENSE.bzip2.txt",
+      "origin": "python-build-standalone",
+      "source_path": "python/licenses/LICENSE.bzip2.txt",
+      "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+      "sha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910"
+    },
+    {
+      "component": "liblzma",
+      "runtime_build": "CPython 3.13.16+20261013 x86_64 Windows",
+      "path": "cpython-native/LICENSE.liblzma.txt",
+      "origin": "python-build-standalone",
+      "source_path": "python/licenses/LICENSE.liblzma.txt",
+      "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+      "sha256": "d87d218dd908b3243ec4cbc72af400e5b7437513ea9d9229291d0812b8464fec"
+    },
+    {
+      "component": "SQLite",
+      "runtime_build": "CPython 3.13.16+20261013 x86_64 Windows",
+      "path": "cpython-native/LICENSE.sqlite.txt",
+      "origin": "python-build-standalone",
+      "source_path": "python/licenses/LICENSE.sqlite.txt",
+      "archive_sha256": "784db2d7087fbecf1e0b807f908f2846de039e107e4195736039c8a217884b46",
+      "sha256": "d8eb9aba7ef6b5ed06cb3ec19a7242316af2e5933c638eb67fb781c13884e01d"
     }
   ]
 }
