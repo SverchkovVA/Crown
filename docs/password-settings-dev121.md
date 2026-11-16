@@ -42,6 +42,6 @@
 баз совпали до и после смены. Форма отрисована при 100%, 125% и 150% в
 обеих темах. Итоговый связанный набор: 11 тестов Windows Qt.
 
-Предварительный запуск — `artifacts/start-preview-password-settings-dev121.cmd`.
-Полный локальный прогон и [CI](https://github.com/SverchkovVA/Crown/actions/runs/43846728258)
-продолжаются.
+Локально и в [CI Windows и Linux](https://github.com/SverchkovVA/Crown/actions/runs/43846728258)
+прошло по 2858 тестов. Сверены SHA-256, JUnit и отчёты четырёх технических
+архивов. Проверенный запуск — rtifacts/start-checked-(name)-dev121.cmd.
