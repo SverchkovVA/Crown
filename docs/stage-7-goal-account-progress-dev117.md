@@ -33,6 +33,8 @@
 прошли по 34 шага с локальным OCR. В госте подтверждено отсутствие маршрута по
 умолчанию, Python и uv. Интерактивный сеанс приложения проверен на основной Windows.
 
-Предварительный запуск — `artifacts/start-preview-goal-account-progress-dev117.cmd`.
-Полный локальный набор и [CI](https://github.com/SverchkovVA/Crown/actions/runs/43835961449)
-ещё выполняются.
+Проверенный запуск — `artifacts/start-checked-goal-account-progress-dev117.cmd`.
+Локально и в [CI Windows и Linux](https://github.com/SverchkovVA/Crown/actions/runs/43835961449)
+прошло по 2846 тестов. По четырём техническим архивам сверены SHA-256, исходник,
+версия, JUnit и JSON самопроверок. Локальная сборка с OCR имеет SHA-256
+`b2c4d534c40b42ee38dd651f814b224779653d2bb4c08fc3d3e18638483212ee`.
