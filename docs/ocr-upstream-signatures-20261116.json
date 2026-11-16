@@ -1,0 +1,610 @@
+{
+  "format": 1,
+  "verified": 13,
+  "total": 13,
+  "archive_bytes_checked": true,
+  "runtime_modified": false,
+  "license_audit_complete": false,
+  "key_material": [
+    {
+      "label": "gnu-authoritative",
+      "url": "https://ftp.gnu.org/gnu/gnu-keyring.gpg",
+      "status": "URLError",
+      "http_status": null
+    },
+    {
+      "label": "xz-authoritative",
+      "url": "https://tukaani.org/misc/lasse_collin_pubkey.txt",
+      "sha256": "7b44485541eefe7cecb8bcf30682904bb6c3d70aae21bbfffc5fca742cb6f56f",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "3690C240CE51B4670D30AD1C38EE757D69184620"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "jpeg-authoritative",
+      "url": "https://raw.githubusercontent.com/libjpeg-turbo/repo/main/LJT-GPG-KEY",
+      "sha256": "9a34027e528eea605be09ec3bf2a3cc3926f6c853e97b86914eb37f350691ca9",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "expat-maintainer",
+      "url": "https://github.com/hartwork.gpg",
+      "sha256": "94ecb6d2dce61f22935c1352552ab3d75599c2ef4ff5e42d4ae0724c32431898",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "3176EF7DB2367F1FCA4F306B1F9B0E909AF37285"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "pcre2-maintainer",
+      "url": "https://github.com/NWilson.gpg",
+      "sha256": "a30a15d2da05e4bc0f31b19ccb4f7eed6144709bb19f4939ccc655662701b9f1",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "A95536204A3BB489715231282A98E77EB6F24CA8"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+      "sha256": "a02c65495a46ce084162aa2143ebc588a136798ece5089ea85dce1d0691c87ef",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "3176EF7DB2367F1FCA4F306B1F9B0E909AF37285",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3176EF7DB2367F1FCA4F306B1F9B0E909AF37285",
+      "sha256": "0d6c6c76a985da397a14e5fabc930c361c3f447bb23f36d013235d0a9f9d43cd",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "3176EF7DB2367F1FCA4F306B1F9B0E909AF37285"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "E30674707856409FF1948010BE6C3AAC63AD8E3F",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE30674707856409FF1948010BE6C3AAC63AD8E3F",
+      "sha256": "57bfc31739b8e62035294cacb738cae1fcfbaa51a05c12b15f96237b30b8f060",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "E30674707856409FF1948010BE6C3AAC63AD8E3F"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xE0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+      "sha256": "0bd07c86411a43bc53b2c2167a22b324077b9762a1af84780577f8f74ba76bdd",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "B1D2BD1375BECB784CF4F8C4D73CF638C53C06BE",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xB1D2BD1375BECB784CF4F8C4D73CF638C53C06BE",
+      "sha256": "6845489dcb7b48ca4876222624be7dab8f21e17616f1621e010ee4cf6c850af6",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "B1D2BD1375BECB784CF4F8C4D73CF638C53C06BE"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "462225C3B46F34879FC8496CD605848ED7E69871",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x462225C3B46F34879FC8496CD605848ED7E69871",
+      "sha256": "916367bb234f72a8c026ab8ee58513bc79f9228ad415b5d2d35be78c85b14861",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "462225C3B46F34879FC8496CD605848ED7E69871"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "9001B85AF9E1B83DF1BDA942F5BE8B267C6A406D",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x9001B85AF9E1B83DF1BDA942F5BE8B267C6A406D",
+      "sha256": "c9846c2416ab06fc2a163d4b84e2baed6fd61c04399a14e1eb1dab5eb880f501",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "9001B85AF9E1B83DF1BDA942F5BE8B267C6A406D"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434",
+      "sha256": "9c62b1d2e77d2fd7bc68375240f98ff9491d3f468b5f6eca046e1764ec497fef",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "3690C240CE51B4670D30AD1C38EE757D69184620",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x3690C240CE51B4670D30AD1C38EE757D69184620",
+      "sha256": "21f39c58c447fbca1d15225d9bb6713236b72ed4d4e409b520169d93bbf31a8b",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "3690C240CE51B4670D30AD1C38EE757D69184620"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "A95536204A3BB489715231282A98E77EB6F24CA8",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xA95536204A3BB489715231282A98E77EB6F24CA8",
+      "sha256": "24867285b8603cee390f195d321aeca11e6c835d31bc3b2c342fe8830d6826e9",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "A95536204A3BB489715231282A98E77EB6F24CA8"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "914C533DF9B2ADA2204F586D78E11C6B279D5C91",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x914C533DF9B2ADA2204F586D78E11C6B279D5C91",
+      "sha256": "12433e9f09a8d2c2fe1ce2015797ce168df5656b2f06db2bb8156f6236ebd807",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "914C533DF9B2ADA2204F586D78E11C6B279D5C91"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD",
+      "sha256": "f4b18ba6b4fe81a412fdcc2b5fc0558f5162149006763c11ff2ba2229b7bcdd3",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD"
+      ],
+      "import_exit": 0
+    },
+    {
+      "label": "5ED46A6721D365587791E2AA783FCD8E58BCAFBA",
+      "url": "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x5ED46A6721D365587791E2AA783FCD8E58BCAFBA",
+      "sha256": "f2413fcaadc6762083f22682b12454c765048ba6df91c3a492cd766a3c18a57d",
+      "status": "downloaded",
+      "permitted_primary_fingerprints_present": [
+        "5ED46A6721D365587791E2AA783FCD8E58BCAFBA"
+      ],
+      "import_exit": 0
+    }
+  ],
+  "negative_control": {
+    "gpg_exit": 1,
+    "status_tokens": [
+      "NEWSIG",
+      "KEY_CONSIDERED",
+      "BADSIG",
+      "FAILURE"
+    ],
+    "qualified": false
+  },
+  "cases": [
+    {
+      "pkgbase": "mingw-w64-curl",
+      "recipe_primary_fingerprints": [
+        "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2"
+      ],
+      "packet_signing_fingerprints": [
+        "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2"
+      ],
+      "original_package_sha256": "1f393077535ab17389e1fec0a685f83bff3e8fcae0e11d8fc40df227881d704c",
+      "recipe_sha256": "cf4f7f7ad5279a95133caaaa03de531c8c5fa612c04758fd84bb7e1adad3dc33",
+      "upstream_archive": "curl-8.21.0.tar.xz",
+      "upstream_sha256": "aa1b66a70eace83dc624508745646c08ae561de512ab403adffb93ac87fc72e6",
+      "signature": "curl-8.21.0.tar.xz.asc",
+      "signature_sha256": "60fa3d38eb940190d29fcedf7f806e6d0c800bf5f8b35d2d343901423faf282b",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "primary_fingerprint": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "creation_date": "2026-06-24",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-expat",
+      "recipe_primary_fingerprints": [
+        "3176EF7DB2367F1FCA4F306B1F9B0E909AF37285"
+      ],
+      "packet_signing_fingerprints": [
+        "CB8DE70A90CFBF6C3BF5CC5696262ACFFBD3AEC6"
+      ],
+      "original_package_sha256": "e81ebe8069473b2ca011a01bdb95ab01a58b46395d37f9af3e74d9bd1b2648ea",
+      "recipe_sha256": "48858c68aa03e9204406ea1da815aee836739152dcf0e737ea147c0d04256cf0",
+      "upstream_archive": "expat-2.8.2.tar.xz",
+      "upstream_sha256": "3ad89b8588e6644bd4e49981480d48b21289eebbcd4f0a1a4afb1c29f99b6ab4",
+      "signature": "expat-2.8.2.tar.xz.asc",
+      "signature_sha256": "7a1b630aa5cbffa6e3dab55d3e0a50438d5b36c61926b3628b59e707af5d3640",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "NOTATION_NAME",
+          "NOTATION_FLAGS",
+          "NOTATION_DATA",
+          "VALIDSIG",
+          "KEY_CONSIDERED",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "CB8DE70A90CFBF6C3BF5CC5696262ACFFBD3AEC6",
+        "primary_fingerprint": "3176EF7DB2367F1FCA4F306B1F9B0E909AF37285",
+        "creation_date": "2026-06-25",
+        "hash_algorithm": "8"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-freetype",
+      "recipe_primary_fingerprints": [
+        "E30674707856409FF1948010BE6C3AAC63AD8E3F"
+      ],
+      "packet_signing_fingerprints": [
+        "E30674707856409FF1948010BE6C3AAC63AD8E3F"
+      ],
+      "original_package_sha256": "ee8071d0a6e82a274e959902898115f4c9c376a2a8e209d83dfe746c18004ec0",
+      "recipe_sha256": "6b8fb0122bf6adbb608240a000aea22b7fe2c3cf2eba533155b3a9864d1511fd",
+      "upstream_archive": "freetype-2.14.3.tar.xz",
+      "upstream_sha256": "36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f",
+      "signature": "freetype-2.14.3.tar.xz.sig",
+      "signature_sha256": "9bc9f852c4ec9d037a6e92c022e0b020a00dfd9644c644c12c6d4352792f46a3",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "E30674707856409FF1948010BE6C3AAC63AD8E3F",
+        "primary_fingerprint": "E30674707856409FF1948010BE6C3AAC63AD8E3F",
+        "creation_date": "2026-03-22",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-libiconv",
+      "recipe_primary_fingerprints": [
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "packet_signing_fingerprints": [
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "original_package_sha256": "74428280c17094da5b702c29b2e1a0abae59556ea5dfdd65705cc8ccc1e000fb",
+      "recipe_sha256": "9b3212d06910560fb59e017e0b73a29d392a5082d3a47a613e61509bd7dcd475",
+      "upstream_archive": "libiconv-1.19.tar.gz",
+      "upstream_sha256": "88dd96a8c0464eca144fc791ae60cd31cd8ee78321e67397e25fc095c4a19aa6",
+      "signature": "libiconv-1.19.tar.gz.sig",
+      "signature_sha256": "30374a9cf2846418fc34977eb2b92094c3edb76021d57de541699e2b5e32dc9b",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+        "primary_fingerprint": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+        "creation_date": "2026-03-07",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-libidn2",
+      "recipe_primary_fingerprints": [
+        "B1D2BD1375BECB784CF4F8C4D73CF638C53C06BE"
+      ],
+      "packet_signing_fingerprints": [
+        "A3CC9C870B9D310ABAD4CF2F51722B08FE4745A2"
+      ],
+      "original_package_sha256": "cd83e8514fbeb6a4499299b88691b9b9ecc3114cca1e2be4f6c54aab6ae9ddd0",
+      "recipe_sha256": "cf6def1817d6a38b49c66fc4cbe36cd56705d9b8952dae13e06d60da703983ff",
+      "upstream_archive": "libidn2-2.3.8.tar.gz",
+      "upstream_sha256": "f557911bf6171621e1f72ff35f5b1825bb35b52ed45325dcdee931e5d3c0787a",
+      "signature": "libidn2-2.3.8.tar.gz.sig",
+      "signature_sha256": "268ad6787ed902fba2154bcd64347269af6c4298bdeed8d7db59df7b65fd31f2",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "KEY_CONSIDERED",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "A3CC9C870B9D310ABAD4CF2F51722B08FE4745A2",
+        "primary_fingerprint": "B1D2BD1375BECB784CF4F8C4D73CF638C53C06BE",
+        "creation_date": "2025-03-08",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-gettext",
+      "recipe_primary_fingerprints": [
+        "462225C3B46F34879FC8496CD605848ED7E69871",
+        "9001B85AF9E1B83DF1BDA942F5BE8B267C6A406D",
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "packet_signing_fingerprints": [
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "original_package_sha256": "cca0d0c8f60353faccc5ad40405240014e4a7ccc8b1c6ca9f4626aef3097d26e",
+      "recipe_sha256": "853ef80a50588f29355722a4513f24cf1a5f8de06e0b5ee326580464db539741",
+      "upstream_archive": "gettext-1.0.tar.lz",
+      "upstream_sha256": "d6342cbe1411a2fe7d139bfed80c2d63b1babc92acfedc72501cc105184f61ee",
+      "signature": "gettext-1.0.tar.lz.sig",
+      "signature_sha256": "39fae6a06678f1d34f0ad8ccb670435b48af3b062cf8f0b50d39159ac3d1c0b1",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+        "primary_fingerprint": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+        "creation_date": "2026-01-29",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-libjpeg-turbo",
+      "recipe_primary_fingerprints": [
+        "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434"
+      ],
+      "packet_signing_fingerprints": [
+        "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434"
+      ],
+      "original_package_sha256": "98bfbef730e79ca74c88842eb27730db11429dbae4d95e0f5d7859e316026a74",
+      "recipe_sha256": "bd71b8cdb87f4838d9d86475104e7ac926d56a239a1d3947721db1aae0385b92",
+      "upstream_archive": "libjpeg-turbo-3.2.0.tar.gz",
+      "upstream_sha256": "6f30092cef9fb839779646608f4ee14ae3cbac989c47fa05e841b0841f09878e",
+      "signature": "libjpeg-turbo-3.2.0.tar.gz.sig",
+      "signature_sha256": "434aa81b514a0c7b94eb1b3e7784afe4d521b1a96a71de4a2d3476be3c595555",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434",
+        "primary_fingerprint": "0338C8D8D9FDA62CF9C421BD7EC2DBB6F4DBF434",
+        "creation_date": "2026-06-30",
+        "hash_algorithm": "8"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-xz",
+      "recipe_primary_fingerprints": [
+        "3690C240CE51B4670D30AD1C38EE757D69184620"
+      ],
+      "packet_signing_fingerprints": [
+        "3690C240CE51B4670D30AD1C38EE757D69184620"
+      ],
+      "original_package_sha256": "a6096b17f7144d3ec4a35f70ebdc0819df0f6ed331f53b04d2a4452d5b66ed55",
+      "recipe_sha256": "4a55743c0aec144772fd72c5e4a3aa25a729a359516ee0ed793c3d943a31d80d",
+      "upstream_archive": "xz-5.8.3.tar.xz",
+      "upstream_sha256": "fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6",
+      "signature": "xz-5.8.3.tar.xz.sig",
+      "signature_sha256": "edeace3968888a198b05845c02b5a973732c576eadf1dbbf2ddef3adaa696a6c",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "3690C240CE51B4670D30AD1C38EE757D69184620",
+        "primary_fingerprint": "3690C240CE51B4670D30AD1C38EE757D69184620",
+        "creation_date": "2026-03-31",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-pcre2",
+      "recipe_primary_fingerprints": [
+        "A95536204A3BB489715231282A98E77EB6F24CA8"
+      ],
+      "packet_signing_fingerprints": [
+        "BACF71F10404D5761C09D392021DE40BFB63B406"
+      ],
+      "original_package_sha256": "d1af57f4346ec9542f1d191c94c470340f6268bfa732718f6db1b89d75fd6502",
+      "recipe_sha256": "38ef9a81fd7bccdd6f76d6064a4ea72e9fedcade411eb32c135afc81859cb4b1",
+      "upstream_archive": "pcre2-10.47.tar.bz2",
+      "upstream_sha256": "47fe8c99461250d42f89e6e8fdaeba9da057855d06eb7fc08d9ca03fd08d7bc7",
+      "signature": "pcre2-10.47.tar.bz2.sig",
+      "signature_sha256": "9f66addba680d709691fa3c472bd46bbd3e08c25ac881e1aaa67822f6a32cf89",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "KEY_CONSIDERED",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "BACF71F10404D5761C09D392021DE40BFB63B406",
+        "primary_fingerprint": "A95536204A3BB489715231282A98E77EB6F24CA8",
+        "creation_date": "2025-10-20",
+        "hash_algorithm": "8"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-libssh2",
+      "recipe_primary_fingerprints": [
+        "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "914C533DF9B2ADA2204F586D78E11C6B279D5C91"
+      ],
+      "packet_signing_fingerprints": [
+        "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2"
+      ],
+      "original_package_sha256": "bb78f8354441190221ece18a96c09f631fe02648f5dd7d1e247ae8d00a9fea5f",
+      "recipe_sha256": "187ea90e8d6671c06397c56153be4803b0fbecf17f8851c58b97047516b98910",
+      "upstream_archive": "libssh2-1.11.1.tar.gz",
+      "upstream_sha256": "d9ec76cbe34db98eec3539fe2c899d26b0c837cb3eb466a56b0f109cabf658f7",
+      "signature": "libssh2-1.11.1.tar.gz.asc",
+      "signature_sha256": "f5618c9356a1d5a8059d6cf64015d86547f06b2b8b1f542fbbaf381a736c8075",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "primary_fingerprint": "27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2",
+        "creation_date": "2024-10-16",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-libunistring",
+      "recipe_primary_fingerprints": [
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "packet_signing_fingerprints": [
+        "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08"
+      ],
+      "original_package_sha256": "a5bafb360d5c13c5c52ef071d5a8288ce2345346b902f20ed6e9322766ec60eb",
+      "recipe_sha256": "e612db993601f9daf35d4b527f93aad9792b7886735113ac46393a77c17264d7",
+      "upstream_archive": "libunistring-1.4.2.tar.gz",
+      "upstream_sha256": "e82664b170064e62331962126b259d452d53b227bb4a93ab20040d846fec01d8",
+      "signature": "libunistring-1.4.2.tar.gz.sig",
+      "signature_sha256": "bda305fea27509f6a9a340c56dfd7e572c565ab3c5075519adddb2fbe55ff1f4",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+        "primary_fingerprint": "E0FFBD975397F77A32AB76ECB6301D9E1BBEAC08",
+        "creation_date": "2026-02-23",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-zstd",
+      "recipe_primary_fingerprints": [
+        "4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD"
+      ],
+      "packet_signing_fingerprints": [
+        "4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD"
+      ],
+      "original_package_sha256": "306797282df799e95d550e6d0bb4b0a7b848027b8e13893a24236e060837c217",
+      "recipe_sha256": "ef88e168f729b6e57bdccb8d566a1cbc1b0b1fd4ef86b26cc4c441236e496388",
+      "upstream_archive": "zstd-1.5.7.tar.gz",
+      "upstream_sha256": "eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3",
+      "signature": "zstd-1.5.7.tar.gz.sig",
+      "signature_sha256": "24425933fb954f4608ae9383bc37ad8398e50364c1ec30bbdb5adbfe88209fb1",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD",
+        "primary_fingerprint": "4EF4AC63455FC9F4545D9B7DEF8FE99528B52FFD",
+        "creation_date": "2025-02-19",
+        "hash_algorithm": "10"
+      }
+    },
+    {
+      "pkgbase": "mingw-w64-zlib",
+      "recipe_primary_fingerprints": [
+        "5ED46A6721D365587791E2AA783FCD8E58BCAFBA"
+      ],
+      "packet_signing_fingerprints": [
+        "5ED46A6721D365587791E2AA783FCD8E58BCAFBA"
+      ],
+      "original_package_sha256": "eef69dea52357e01b272d6fd6dc4d7c0773f71260cb7bcde6047c8c383518db3",
+      "recipe_sha256": "8a4a54a964eab7efa313e2faa8267052bc237ef61f8adf82a55cc93f4028db8a",
+      "upstream_archive": "zlib-1.3.2.tar.xz",
+      "upstream_sha256": "d7a0654783a4da529d1bb793b7ad9c3318020af77667bcae35f95d0e42a792f3",
+      "signature": "zlib-1.3.2.tar.xz.asc",
+      "signature_sha256": "03ce710347e2f84fa7ed0a6ae6a93467b08031a3022fc296da40220a83b96667",
+      "verification": {
+        "gpg_exit": 0,
+        "status_tokens": [
+          "NEWSIG",
+          "KEY_CONSIDERED",
+          "SIG_ID",
+          "GOODSIG",
+          "VALIDSIG",
+          "TRUST_UNDEFINED"
+        ],
+        "qualified": true,
+        "signing_fingerprint": "5ED46A6721D365587791E2AA783FCD8E58BCAFBA",
+        "primary_fingerprint": "5ED46A6721D365587791E2AA783FCD8E58BCAFBA",
+        "creation_date": "2026-02-17",
+        "hash_algorithm": "2"
+      }
+    }
+  ]
+}
