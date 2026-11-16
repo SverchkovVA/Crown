@@ -64,6 +64,15 @@ try {
             -or $selfReport.runtime.qt_platform -ne $QtPlatform) {
         throw 'Самопроверка не подтверждает запуск Windows-сборки.'
     }
+    $currentStep = 'measure_payload'
+    $payload = Join-Path $outputRoot 'app-payload.json'
+    $measured = Invoke-PfProcess -FilePath $python `
+        -ArgumentList @('-m', 'tools.windows_payload', (Split-Path -Parent $executable), $payload) `
+        -WorkingDirectory $projectRoot -LogPrefix (Join-Path $outputRoot 'measure-payload') `
+        -Step 'measure_payload' -Environment $buildEnvironment -TimeoutSeconds 180
+    if ($measured.status -ne 'passed') { throw 'Не удалось измерить состав приложения.' }
+    $record['payload_manifest'] = 'app-payload.json'
+    $record['payload_sha256'] = (Get-FileHash -LiteralPath $payload -Algorithm SHA256).Hash.ToLowerInvariant()
     $record.status = 'passed'
     $record.executable = 'app/PersonalFinance/PersonalFinance.exe'
     $record['exe_sha256'] = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
