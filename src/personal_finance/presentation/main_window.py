@@ -174,6 +174,7 @@ from personal_finance.presentation.classification import (
 from personal_finance.presentation.deposit_scenarios_workflow import DepositScenariosController
 from personal_finance.presentation.deposits import DepositForecastDialog, DepositScenarioDialog
 from personal_finance.presentation.dialogs import (
+    ChangePasswordDialog,
     CreateDialog,
     NameDialog,
     OpenDialog,
@@ -3263,6 +3264,8 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
+        layout.addWidget(button("Сменить парольную фразу…", self.change_book_password))
+        layout.addSpacing(14)
         layout.addWidget(label("Резервные копии и проверка", "brand"))
         layout.addWidget(
             label(
@@ -3954,6 +3957,29 @@ class MainWindow(QMainWindow):
                 )
 
         present_form(dialog, panel, completed)
+
+    def change_book_password(self) -> None:
+        session = self.session
+        if session is None:
+            return
+        panel = self._settings_forms
+        dialog = ChangePasswordDialog(self)
+
+        def saved(_: object) -> None:
+            dialog.accept()
+            panel.message("Парольная фраза заменена.")
+
+        def submit(current: str, replacement: str) -> None:
+            if self.session is session:
+                self._panel_job(
+                    panel,
+                    lambda: session.change_password(current, replacement),
+                    saved,
+                    "Смена парольной фразы…",
+                )
+
+        dialog.submitted.connect(submit)
+        present_form(dialog, panel)
 
     def backup_book(self, *, panel: InlineForms | None = None) -> None:
         session = self.session

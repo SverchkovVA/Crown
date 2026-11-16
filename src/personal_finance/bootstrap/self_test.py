@@ -972,6 +972,31 @@ def self_test(
                         unexpected.close()
                         raise RuntimeError("Неверный пароль был принят.")
                     source = open_vault(root / "Исходная книга.pfvault", "тестовая фраза сборки")
+                with _step(report, "change_book_password"):
+                    original_password = "тестовая фраза сборки"
+                    next_password = " новая тестовая фраза сборки "
+                    book = source.root
+                    manifest = book / "data" / "key.json"
+                    before = json.loads(manifest.read_bytes())
+                    source.change_password(original_password, next_password)
+                    after = json.loads(manifest.read_bytes())
+                    if before["recovery_wrapped_key"] != after["recovery_wrapped_key"]:
+                        raise RuntimeError("Изменилась обёртка кода восстановления.")
+                    source.close()
+                    try:
+                        unexpected = open_vault(book, original_password)
+                    except InvalidCredentials:
+                        pass
+                    else:
+                        unexpected.close()
+                        raise RuntimeError("Прежняя парольная фраза была принята.")
+                    source = open_vault(book, recovery, recovery=True)
+                    if _balances(source) != expected_balances:
+                        raise RuntimeError("Данные через прежний PF1 отличаются.")
+                    source.close()
+                    source = open_vault(book, next_password)
+                    if _balances(source) != expected_balances:
+                        raise RuntimeError("Данные после смены фразы отличаются.")
                 with _step(report, "persist_investment_positions"):
                     if source.ledger is None:
                         raise RuntimeError("Журнал недоступен после повторного открытия.")

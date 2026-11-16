@@ -4,7 +4,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from platformdirs import user_data_dir
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QHideEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -209,6 +210,66 @@ class PasswordDialog(QDialog):
                 form_warning(self, "Проверьте ввод", str(exc))
                 return
         self.accept()
+
+
+class ChangePasswordDialog(QDialog):
+    submitted = Signal(str, str)
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Смена парольной фразы")
+        layout = QVBoxLayout(self)
+        hint = QLabel("Код восстановления PF1 продолжит открывать книгу.")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        form = QFormLayout()
+        self.current = QLineEdit()
+        self.replacement = QLineEdit()
+        self.confirm = QLineEdit()
+        for title, field in (
+            ("Текущая фраза", self.current),
+            ("Новая фраза", self.replacement),
+            ("Повторите новую фразу", self.confirm),
+        ):
+            field.setEchoMode(QLineEdit.EchoMode.Password)
+            field.setAccessibleName(title)
+            form.addRow(title, field)
+        layout.addLayout(form)
+        layout.addStretch(1)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText("Сменить парольную фразу")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Отмена")
+        buttons.accepted.connect(self._submit)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def hideEvent(self, event: QHideEvent) -> None:
+        self._clear_fields()
+        super().hideEvent(event)
+
+    def _clear_fields(self) -> None:
+        for field in (self.current, self.replacement, self.confirm):
+            field.setText("")
+
+    def _submit(self) -> None:
+        current = self.current.text()
+        replacement = self.replacement.text()
+        try:
+            validate_password(current)
+            validate_password(replacement)
+            if replacement != self.confirm.text():
+                self.confirm.setFocus()
+                raise ValidationError("Новые парольные фразы не совпадают.")
+        except ValidationError as exc:
+            form_warning(self, "Проверьте ввод", str(exc))
+            return
+        self._clear_fields()
+        self.current.setFocus()
+        self.submitted.emit(current, replacement)
 
 
 class RecoveryDialog(QDialog):
