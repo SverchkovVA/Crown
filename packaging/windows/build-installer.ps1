@@ -34,7 +34,8 @@ try {
     }
     $prepared = Invoke-PfProcess @run
     if ($prepared.status -ne 'passed') { throw 'Не удалось проверить ведомость файлов.' }
-    $manifestFile = Join-Path $build 'app-payload.json'
+    $compilerInput = Join-Path $outputRoot 'compiler-input'
+    $manifestFile = Join-Path $compilerInput 'app-payload.json'
     $manifest = Get-Content -LiteralPath $manifestFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $version = $manifest.application
     $name = 'Crown-' + $version + '-windows-x64-setup.exe'
@@ -42,15 +43,19 @@ try {
     $step = 'makensis'
     $arguments = @('/NOCONFIG', '/INPUTCHARSET', 'UTF8', '/WX',
         "/DCROWN_VERSION=$version", "/DCROWN_OUTPUT=$outputFile",
-        ('/DCROWN_BUNDLE=' + (Join-Path $build 'app/PersonalFinance')),
+        ('/DCROWN_BUNDLE=' + (Join-Path $compilerInput 'app/PersonalFinance')),
         ('/DCROWN_GENERATED=' + (Join-Path $outputRoot 'payload.nsh')),
         "/DCROWN_MANIFEST=$manifestFile",
         ('/DCROWN_NSIS_LICENSE=' + (Join-Path $nsis 'COPYING')),
         (Join-Path $PSScriptRoot 'crown.nsi'))
+    $compilerEnvironment = @{
+        NSISDIR=$nsis; NSISCONFDIR=$null
+        PATH=(@($nsis, [Environment]::SystemDirectory, [Environment]::GetFolderPath('Windows')) -join [IO.Path]::PathSeparator)
+    }
     $run = @{
         FilePath=$compiler; ArgumentList=$arguments
         WorkingDirectory=$outputRoot; LogPrefix=(Join-Path $outputRoot 'makensis')
-        Step=$step; Environment=$environment; TimeoutSeconds=900
+        Step=$step; Environment=$compilerEnvironment; TimeoutSeconds=900
     }
     $compilation = Invoke-PfProcess @run
     if ($compilation.status -ne 'passed' -or -not (Test-Path -LiteralPath $outputFile -PathType Leaf)) {

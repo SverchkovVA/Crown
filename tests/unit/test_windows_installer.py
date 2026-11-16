@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
 
-from tools.windows_installer import BUNDLE, EXE, MANIFEST, prepare
+from tools.windows_installer import BUNDLE, COMPILER_INPUT, EXE, MANIFEST, prepare
 from tools.windows_payload import report
 
 
@@ -47,6 +48,9 @@ def test_prepares_explicit_install_and_uninstall_lists(tmp_path: Path) -> None:
     )
     with pytest.raises(FileExistsError):
         prepare(build, output)
+    (build / BUNDLE / EXE).write_bytes(b"modified after prepare")
+    assert (output / COMPILER_INPUT / BUNDLE / EXE).read_bytes() == b"fake-exe"
+    assert (output / COMPILER_INPUT / MANIFEST).read_bytes() == (build / MANIFEST).read_bytes()
 
 
 @pytest.mark.parametrize(
@@ -62,3 +66,22 @@ def test_refuses_changed_build(tmp_path: Path, file: str, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         prepare(build, tmp_path)
     assert not (tmp_path / "payload.nsh").exists()
+
+
+def test_refuses_input_changed_during_staging(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    build = _checked_build(tmp_path)
+    output = tmp_path / "installer"
+    output.mkdir()
+    copyfile = shutil.copyfile
+
+    def replace_during_copy(source: Path, destination: Path) -> None:
+        if source.name == "theme.dll":
+            source.write_bytes(b"changed during staging")
+        copyfile(source, destination)
+
+    monkeypatch.setattr(shutil, "copyfile", replace_during_copy)
+    with pytest.raises(ValueError, match="изменились при копировании"):
+        prepare(build, output)
+    assert not (output / "payload.nsh").exists()

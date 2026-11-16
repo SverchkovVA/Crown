@@ -1,4 +1,4 @@
-﻿Unicode true
+Unicode true
 RequestExecutionLevel user
 CRCCheck force
 SetCompressor /SOLID lzma
@@ -48,7 +48,7 @@ Var Stage
     ${EndIf}
   ${Else}
     IntOp $0 $0 & 0x410
-    ${If} $0 != 0x10
+    ${If} $0 <> 0x10
       Goto ${FAILURE}
     ${EndIf}
   ${EndIf}
