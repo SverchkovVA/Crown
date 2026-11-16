@@ -13,7 +13,8 @@ legal = root / "docs" / "legal"
 if legal.is_dir():
     datas += [
         (str(path), "legal/" + path.parent.relative_to(legal).as_posix())
-        for path in legal.rglob("*") if path.is_file()
+        for path in legal.rglob("*")
+        if path.is_file() and path.name != ".gitattributes"
     ]
 
 analysis = Analysis(
