@@ -395,7 +395,11 @@ uv run --frozen python -m personal_finance.bootstrap.main --self-test
 сборки сохраняются. При полном прогоне `check-windows.cmd` результат находится
 в `artifacts/windows-check-…/bundle/app/PersonalFinance`.
 
-Финальный NSIS-установщик и подпись относятся к этапу 9.
+На этапе 9 подготовлен и проверен предварительный NSIS-установщик для
+текущего пользователя Windows. Подпись выпуска, система обновлений и полный
+лицензионный аудит поставки продолжаются.
+[Проверка dev131](docs/stage-9-windows-installer-dev131.md),
+[состав портативного архива](docs/stage-9-windows-artifact-identity.md).
 Linux-сборка не является Windows-программой.
 
 ## Документация
