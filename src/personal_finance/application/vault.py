@@ -63,8 +63,10 @@ from personal_finance.infrastructure.persistence.planning_scenarios_repository i
 from personal_finance.infrastructure.security.keys import (
     MAX_MANIFEST_BYTES,
     make_manifest,
+    replace_password_wrapper,
     unlock_manifest,
 )
+from personal_finance.infrastructure.security.manifest_file import read_key_file, replace_key_file
 
 
 def write_private(path: Path, contents: bytes) -> None:
@@ -365,6 +367,31 @@ class VaultSession:
     def ensure_open(self) -> None:
         if self._closed:
             raise VaultError("Книга закрыта.")
+
+    def change_password(self, current: str, replacement: str) -> None:
+        with self.mutex:
+            self.ensure_open()
+            if self._lock is None or not self._lock.is_locked:
+                raise VaultError("Откройте книгу в обычном режиме для смены парольной фразы.")
+            manifest = self.root / "data" / "key.json"
+            try:
+                previous = read_key_file(manifest)
+                updated = replace_password_wrapper(
+                    previous,
+                    current,
+                    replacement,
+                    expected_book_id=self.book_id,
+                    expected_key=self._key,
+                )
+                replace_key_file(manifest, previous, updated)
+            except OSError as exc:
+                raise VaultError("Не удалось обновить ключевой файл книги.") from exc
+            try:
+                sync_directory(manifest.parent)
+            except OSError as exc:
+                raise VaultError(
+                    "Парольная фраза заменена. Устройство не подтвердило запись каталога."
+                ) from exc
 
     def check_integrity(self) -> None:
         with self.mutex:
