@@ -4,6 +4,7 @@ import base64
 import json
 import secrets
 from typing import Any
+from uuid import UUID
 
 from nacl import pwhash
 from nacl.exceptions import CryptoError
@@ -84,17 +85,27 @@ def derive_key(password: str, settings: object) -> bytes:
     )
 
 
-def make_manifest(book_id: str, key: bytes, password: str) -> tuple[bytes, str]:
+def _manifest_aad(book_id: str) -> bytes:
+    return b"personal-finance/vault-key/v1/" + book_id.encode("ascii")
+
+
+def _wrap_password(book_id: str, key: bytes, password: str) -> tuple[dict[str, object], str]:
     validate_password(password)
     settings = kdf_settings()
-    password_key = derive_key(password, settings)
+    wrapping_key = derive_key(password, settings)
+    wrapped = Aead(wrapping_key).encrypt(key, _manifest_aad(book_id))
+    return settings, encode(bytes(wrapped))
+
+
+def make_manifest(book_id: str, key: bytes, password: str) -> tuple[bytes, str]:
+    settings, wrapped = _wrap_password(book_id, key, password)
     recovery_key = secrets.token_bytes(KEY_BYTES)
-    aad = b"personal-finance/vault-key/v1/" + book_id.encode("ascii")
+    aad = _manifest_aad(book_id)
     manifest = {
         "format": 1,
         "book_id": book_id,
         "kdf": settings,
-        "wrapped_key": encode(bytes(Aead(password_key).encrypt(key, aad))),
+        "wrapped_key": wrapped,
         "recovery_wrapped_key": encode(bytes(Aead(recovery_key).encrypt(key, aad))),
     }
     code = base64.b32encode(recovery_key).decode("ascii").rstrip("=")
@@ -102,9 +113,7 @@ def make_manifest(book_id: str, key: bytes, password: str) -> tuple[bytes, str]:
     return canonical_json(manifest), recovery
 
 
-def unlock_manifest(raw: bytes, credential: str, *, recovery: bool = False) -> tuple[str, bytes]:
-    from uuid import UUID
-
+def _manifest_data(raw: bytes) -> tuple[str, dict[str, Any]]:
     try:
         if len(raw) > MAX_MANIFEST_BYTES:
             raise ValueError
@@ -126,7 +135,11 @@ def unlock_manifest(raw: bytes, credential: str, *, recovery: bool = False) -> t
             raise ValueError
     except (ValueError, TypeError, UnicodeError, KeyError) as exc:
         raise UnsupportedFormat("Формат книги повреждён или не поддерживается.") from exc
-    aad = b"personal-finance/vault-key/v1/" + book_id.encode("ascii")
+    return book_id, data
+
+
+def _unwrap(data: dict[str, Any], book_id: str, credential: str, *, recovery: bool) -> bytes:
+    aad = _manifest_aad(book_id)
     if recovery:
         try:
             if len(credential) > 100 or not credential.startswith("PF1-"):
@@ -150,4 +163,29 @@ def unlock_manifest(raw: bytes, credential: str, *, recovery: bool = False) -> t
         raise InvalidCredentials(
             "Неверный пароль или код; возможно повреждение ключевого файла."
         ) from exc
-    return book_id, key
+    return key
+
+
+def unlock_manifest(raw: bytes, credential: str, *, recovery: bool = False) -> tuple[str, bytes]:
+    book_id, data = _manifest_data(raw)
+    return book_id, _unwrap(data, book_id, credential, recovery=recovery)
+
+
+def replace_password_wrapper(
+    raw: bytes,
+    current: str,
+    replacement: str,
+    *,
+    expected_book_id: str,
+    expected_key: bytes,
+) -> bytes:
+    """Готовит ключевой файл с другой парольной фразой для уже открытой книги."""
+    book_id, data = _manifest_data(raw)
+    if book_id != expected_book_id:
+        raise InvalidCredentials("Ключевой файл относится к другой книге.")
+    key = _unwrap(data, book_id, current, recovery=False)
+    if not secrets.compare_digest(key, expected_key):
+        raise InvalidCredentials("Ключевой файл отличается от ключа открытой книги.")
+    decode(data["recovery_wrapped_key"], Aead.NONCE_SIZE + KEY_BYTES + Aead.MACBYTES)
+    data["kdf"], data["wrapped_key"] = _wrap_password(book_id, key, replacement)
+    return canonical_json(data)
