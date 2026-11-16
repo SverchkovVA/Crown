@@ -44,4 +44,4 @@
 
 Локально и в [CI Windows и Linux](https://github.com/SverchkovVA/Crown/actions/runs/43846728258)
 прошло по 2858 тестов. Сверены SHA-256, JUnit и отчёты четырёх технических
-архивов. Проверенный запуск — rtifacts/start-checked-(name)-dev121.cmd.
+архивов. Проверенный запуск — `artifacts/start-checked-password-settings-dev121.cmd`.
