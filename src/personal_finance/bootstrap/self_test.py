@@ -1205,6 +1205,9 @@ def self_test(
                             window = MainWindow(
                                 ocr_recognitions=ocr_recognitions,
                                 payment_reminders=reminder_preferences,
+                                idle_lock_settings=QSettings(
+                                    str(root / "idle-lock.ini"), QSettings.Format.IniFormat
+                                ),
                                 recent_books=LocalRecentBooks(
                                     QSettings(
                                         str(root / "recent-books.ini"), QSettings.Format.IniFormat
@@ -1260,7 +1263,13 @@ def self_test(
                                     or window.operation_model.rowCount() != 5
                                 ):
                                     raise RuntimeError("Счета или операции не отображаются.")
-                                window.lock_book()
+                                if window.idle_lock_combo.currentData() != 0:
+                                    raise RuntimeError("Таймер по умолчанию должен быть выключен.")
+                                window.idle_lock_combo.setCurrentIndex(1)
+                                if not window._idle_lock_timer.isActive():
+                                    raise RuntimeError("Не запустился таймер закрытия книги.")
+                                window._idle_lock_timer.start(0)
+                                app.processEvents()
                                 if (
                                     window.session is not None
                                     or not reminder.button.isHidden()

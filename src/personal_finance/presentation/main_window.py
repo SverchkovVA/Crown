@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from platformdirs import user_data_dir
-from PySide6.QtCore import QDate, QEvent, QObject, Qt, QThreadPool, Slot
+from PySide6.QtCore import QDate, QEvent, QObject, QSettings, Qt, QThreadPool, QTimer, Slot
 from PySide6.QtGui import QAction, QCloseEvent, QImage, QKeyEvent, QMouseEvent, QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -285,6 +286,7 @@ class MainWindow(QMainWindow):
         recent_books: LocalRecentBooks | None = None,
         payment_reminders: PaymentReminderPreferences | None = None,
         market_quote_access: BookQuoteAccess | None = None,
+        idle_lock_settings: QSettings | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Личные финансы")
@@ -297,6 +299,14 @@ class MainWindow(QMainWindow):
         )
         app = QApplication.instance()
         assert isinstance(app, QApplication)
+        self._idle_lock_settings = (
+            idle_lock_settings if idle_lock_settings is not None else QSettings("Crown", "Security")
+        )
+        self._idle_lock_ms = 0
+        self._idle_lock_timer = QTimer(self)
+        self._idle_lock_timer.setSingleShot(True)
+        self._idle_lock_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._idle_lock_timer.timeout.connect(self._lock_when_idle)
         app.installEventFilter(self)
         self._recent_books = recent_books if recent_books is not None else LocalRecentBooks()
         self._local_ocr_preferences = LocalOcrPreferences()
@@ -331,6 +341,7 @@ class MainWindow(QMainWindow):
         )
         self.last_backup = "Резервная копия ещё не создана в этом сеансе"
         self.root_stack = QStackedWidget()
+        self.root_stack.currentChanged.connect(self._restart_idle_lock)
         self.setCentralWidget(self.root_stack)
         welcome, self._welcome_forms = self._wrap_actions(self._welcome())
         self.root_stack.addWidget(welcome)
@@ -1901,7 +1912,6 @@ class MainWindow(QMainWindow):
     def _settings(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.addWidget(label("Настройки", "heading"))
         self.settings_tabs = QTabWidget()
         recognition = QWidget()
         settings = QVBoxLayout(recognition)
@@ -2173,6 +2183,18 @@ class MainWindow(QMainWindow):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         owned = isinstance(watched, QWidget) and (watched is self or self.isAncestorOf(watched))
+        if (
+            owned
+            and event.type()
+            in (
+                QEvent.Type.MouseButtonPress,
+                QEvent.Type.KeyPress,
+                QEvent.Type.Wheel,
+                QEvent.Type.TouchBegin,
+            )
+            and self._idle_lock_timer.isActive()
+        ):
+            self._restart_idle_lock()
         app = QApplication.instance()
         if not owned or not isinstance(app, QApplication) or app.activeModalWidget() is not None:
             return super().eventFilter(watched, event)
@@ -3265,6 +3287,24 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 20, 0, 0)
         layout.addWidget(button("Сменить парольную фразу…", self.change_book_password))
+        self.idle_lock_combo = QComboBox()
+        self.idle_lock_combo.setAccessibleName("Закрывать книгу после бездействия")
+        self.idle_lock_combo.setToolTip("При закрытии книги незаписанные формы закрываются.")
+        for minutes, title in (
+            (0, "Никогда"),
+            (5, "Через 5 минут"),
+            (15, "Через 15 минут"),
+            (30, "Через 30 минут"),
+            (60, "Через час"),
+        ):
+            self.idle_lock_combo.addItem(title, minutes)
+        stored = self._idle_lock_settings.value("idle_lock_minutes", 0, type=int)
+        self.idle_lock_combo.setCurrentIndex(max(0, self.idle_lock_combo.findData(stored)))
+        self._idle_lock_ms = int(self.idle_lock_combo.currentData()) * 60_000
+        self.idle_lock_combo.currentIndexChanged.connect(self._idle_lock_changed)
+        locking = QFormLayout()
+        locking.addRow("Закрывать книгу после бездействия", self.idle_lock_combo)
+        layout.addLayout(locking)
         layout.addSpacing(14)
         layout.addWidget(label("Резервные копии и проверка", "brand"))
         layout.addWidget(
@@ -3273,29 +3313,41 @@ class MainWindow(QMainWindow):
                 "не нужен исходный компьютер. Храните хотя бы одну копию на другом носителе."
             )
         )
-        layout.addSpacing(20)
-        layout.addWidget(
+        layout.addSpacing(8)
+        backup_actions = QGridLayout()
+        backup_actions.addWidget(
             button(
                 "Создать зашифрованную копию",
                 lambda: self.backup_book(panel=self._settings_forms),
                 primary=True,
-            )
+            ),
+            0,
+            0,
         )
-        layout.addWidget(
+        backup_actions.addWidget(
             button(
                 "Проверить резервную копию", lambda: self.verify_copy(panel=self._settings_forms)
-            )
+            ),
+            0,
+            1,
         )
-        layout.addWidget(
+        backup_actions.addWidget(
             button(
                 "Восстановить в новую папку", lambda: self.restore_book(panel=self._settings_forms)
-            )
+            ),
+            1,
+            0,
         )
-        layout.addWidget(
+        backup_actions.addWidget(
             button(
                 "Проверить целостность книги", lambda: self.check_book(panel=self._settings_forms)
-            )
+            ),
+            1,
+            1,
         )
+        backup_actions.setColumnStretch(0, 1)
+        backup_actions.setColumnStretch(1, 1)
+        layout.addLayout(backup_actions)
         self.remember_book_check = QCheckBox("Показывать эту книгу в недавних на этом компьютере")
         self.remember_book_check.setToolTip(
             "Сохраняются название и путь. Пароль и код восстановления не сохраняются. "
@@ -3310,16 +3362,38 @@ class MainWindow(QMainWindow):
         layout.addLayout(directory_row)
         self.backup_status = label(self.last_backup, "muted")
         layout.addWidget(self.backup_status)
-        layout.addSpacing(20)
-        layout.addWidget(
-            label(
-                "Автоматическое резервирование и блокировка по таймеру ещё не включены. "
-                "Закрывайте книгу кнопкой и создавайте копии вручную.",
-                "muted",
-            )
-        )
         layout.addStretch()
         return page
+
+    @Slot()
+    def _idle_lock_changed(self) -> None:
+        minutes = int(self.idle_lock_combo.currentData())
+        self._idle_lock_settings.setValue("idle_lock_minutes", minutes)
+        self._idle_lock_settings.sync()
+        self._idle_lock_ms = minutes * 60_000
+        self._restart_idle_lock()
+        if self._idle_lock_settings.status() is not QSettings.Status.NoError:
+            self._settings_forms.message(
+                "Не удалось сохранить таймер на этом компьютере. "
+                "Настройка действует до закрытия приложения."
+            )
+
+    @Slot()
+    def _restart_idle_lock(self) -> None:
+        if self.session is not None and self.root_stack.currentIndex() == 1 and self._idle_lock_ms:
+            self._idle_lock_timer.start(self._idle_lock_ms)
+        else:
+            self._idle_lock_timer.stop()
+
+    @Slot()
+    def _lock_when_idle(self) -> None:
+        if self.session is None or not self._idle_lock_ms:
+            return
+        if self._busy or QApplication.activeModalWidget() is not None:
+            self._idle_lock_timer.start(250)
+            return
+        self.lock_book()
+        self._welcome_forms.message("Книга закрыта после бездействия. Откройте её снова.")
 
     def _job(
         self,
@@ -3426,6 +3500,7 @@ class MainWindow(QMainWindow):
         self.refresh()
         self.navigation.setCurrentRow(0)
         self.root_stack.setCurrentIndex(1 if show_workspace else 0)
+        self._restart_idle_lock()
         self._record_section()
         self._update_navigation()
         self.statusBar().showMessage("Работает без интернета · Книга открыта")
@@ -3599,6 +3674,7 @@ class MainWindow(QMainWindow):
         present_form(dialog, panel, completed)
 
     def lock_book(self) -> None:
+        self._idle_lock_timer.stop()
         self._calendar_reminders.clear()
         self._clear_action_panels()
         self.ocr_input.reset()
