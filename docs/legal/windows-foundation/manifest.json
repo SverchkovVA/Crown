@@ -1,0 +1,109 @@
+{
+  "format": 1,
+  "files": [
+    {
+      "component": "SQLAlchemy",
+      "version": "2.1.6",
+      "path": "sqlalchemy/AUTHORS",
+      "origin": "wheel-record",
+      "source_path": "sqlalchemy-2.1.6.dist-info/licenses/AUTHORS",
+      "sha256": "11c9de6af24a1ce9db33019364c1c2441509d7dda13dc0949f1a4b83621b2195"
+    },
+    {
+      "component": "SQLAlchemy",
+      "version": "2.1.6",
+      "path": "sqlalchemy/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "sqlalchemy-2.1.6.dist-info/licenses/LICENSE",
+      "sha256": "9bb754071e711cf75728b9051b170bfb8f9e3b879c08386c96a36989c42cd5f1"
+    },
+    {
+      "component": "alembic",
+      "version": "1.20.1",
+      "path": "alembic/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "alembic-1.20.1.dist-info/licenses/LICENSE",
+      "sha256": "6e68d94a03a0e3e327ddf3e86d1ebedc14eece3922022618fc246a36296fd0cc"
+    },
+    {
+      "component": "sqlcipher3",
+      "version": "0.6.4",
+      "path": "sqlcipher3/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "sqlcipher3-0.6.4.dist-info/licenses/LICENSE",
+      "sha256": "d2af98975b150bf6ff5ef99785b56b4b5979024a4ab3117253f1cd777f98bad6"
+    },
+    {
+      "component": "PyNaCl",
+      "version": "1.6.2",
+      "path": "pynacl/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "pynacl-1.6.2.dist-info/licenses/LICENSE",
+      "sha256": "77af5bbded959114b6d7a5eea518b2be364e04f4f4a95f9e87d9870c27713d24"
+    },
+    {
+      "component": "PyNaCl",
+      "version": "1.6.2",
+      "path": "pynacl/licenses/LICENSE.libsodium.txt",
+      "origin": "wheel-record",
+      "source_path": "pynacl-1.6.2.dist-info/licenses/licenses/LICENSE.libsodium.txt",
+      "sha256": "93e7cac854d71cdafc9d9e4e9f8fd28d87ae541b3dda224d7c8fe23d37875704"
+    },
+    {
+      "component": "filelock",
+      "version": "3.32.7",
+      "path": "filelock/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "filelock-3.32.7.dist-info/licenses/LICENSE",
+      "sha256": "608c89d5060ae9921adccf3236695bc654a9946e12323ef6c021dfa04e294d48"
+    },
+    {
+      "component": "platformdirs",
+      "version": "4.13.5",
+      "path": "platformdirs/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "platformdirs-4.13.5.dist-info/licenses/LICENSE",
+      "sha256": "29e0fd62e929850e86eb28c3fdccf0cefdf4fa94879011cffb3d0d4bed6d4db6"
+    },
+    {
+      "component": "Mako",
+      "version": "1.4.3",
+      "path": "mako/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "mako-1.4.3.dist-info/licenses/LICENSE",
+      "sha256": "8c1d171bc5d341ad9cd33d5e2c39b96a82c7bd49b3ae89a470c37e5822232054"
+    },
+    {
+      "component": "cffi",
+      "version": "2.1.1",
+      "path": "cffi/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "cffi-2.1.1.dist-info/licenses/LICENSE",
+      "sha256": "5ba24ddc57067f9249add644c3afc41a5d6dc37e23433ef759d95df370b0af63"
+    },
+    {
+      "component": "typing_extensions",
+      "version": "4.16.0",
+      "path": "typing-extensions/LICENSE",
+      "origin": "wheel-record",
+      "source_path": "typing_extensions-4.16.0.dist-info/licenses/LICENSE",
+      "sha256": "3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+    },
+    {
+      "component": "pyinstaller",
+      "version": "6.22.3",
+      "path": "pyinstaller/COPYING.txt",
+      "origin": "wheel-record",
+      "source_path": "pyinstaller-6.22.3.dist-info/licenses/COPYING.txt",
+      "sha256": "0598064c7d2718e38d7914a7d08343b2fa008e3bea9ebba2aa7a6ffa5900dd64"
+    },
+    {
+      "component": "CPython",
+      "version": "3.13.16",
+      "path": "cpython/LICENSE.txt",
+      "origin": "managed-python-runtime",
+      "source_path": "LICENSE.txt",
+      "sha256": "76900732e5f075b725f754000ad5cab1b2cf89e355c1570138476956b6413cd3"
+    }
+  ]
+}
