@@ -37,4 +37,4 @@ Python и uv прошли по 35 шагов с локальным OCR. SHA-256 
 `a0c26f0c5526960a068ab8d96e134e3908673e1843af87158e952914b185ea7a`.
 Локально и в [CI Windows и Linux](https://github.com/SverchkovVA/Crown/actions/runs/43850324838)
 прошло по 2863 тестов. Сверены SHA-256, JUnit и отчёты четырёх технических
-архивов. Проверенный запуск — rtifacts/start-checked-(name)-dev123.cmd.
+архивов. Проверенный запуск — `artifacts/start-checked-book-idle-lock-dev123.cmd`.
