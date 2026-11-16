@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLineEdit, QVBoxLayout
 from personal_finance.application.analytics import Analytics
 from personal_finance.application.planning_scenarios import PlanningScenarios
 from personal_finance.application.vault import VaultSession
+from personal_finance.domain.analytics_cashflow import CashMovement
 from personal_finance.domain.budget import BudgetExecution
 from personal_finance.domain.errors import FinanceError, ValidationError
 from personal_finance.domain.models import Account, Category, validate_name
@@ -24,9 +25,11 @@ from personal_finance.domain.planning_scenarios import (
 )
 from personal_finance.domain.savings_goals import (
     SavingsGoalAccountProgress,
+    SavingsGoalDay,
     SavingsGoalProjection,
     SavingsGoalScenario,
     project_savings_goal,
+    savings_goal_history,
 )
 from personal_finance.presentation.analytics import _label
 from personal_finance.presentation.analytics_cashflow import CashFlowSourcesDialog
@@ -43,7 +46,11 @@ from personal_finance.presentation.planning_scenarios import (
     PlanningRequest,
     SavedPlanningDialog,
 )
-from personal_finance.presentation.savings_goals import SavingsGoalAccountOptions, SavingsGoalDialog
+from personal_finance.presentation.savings_goals import (
+    SavingsGoalAccountOptions,
+    SavingsGoalDialog,
+    SavingsGoalHistoryDialog,
+)
 
 if TYPE_CHECKING:
     from personal_finance.presentation.main_window import MainWindow
@@ -318,21 +325,46 @@ class PlanningScenariosController:
         dialog = SavingsGoalDialog(result.projection, self.window, account_name=result.account.name)
         if result.sources:
 
-            def show_sources() -> None:
+            def show_sources(
+                movements: tuple[CashMovement, ...], title: str, parent: QDialog
+            ) -> None:
                 sources = CashFlowSourcesDialog(
-                    result.sources,
+                    movements,
                     result.projection.scenario.target.currency,
-                    "Цель накоплений · Движения счёта",
+                    title,
                     {account.id: account.name for account in accounts},
                     {category.id: category_title(category, categories) for category in categories},
-                    dialog,
+                    parent,
                 )
                 present_form(sources, self.panel)
 
-            button = dialog.buttons.addButton(
+            def show_history(days: tuple[SavingsGoalDay, ...]) -> None:
+                page = SavingsGoalHistoryDialog(result, days, dialog)
+
+                def show_day(index: int) -> None:
+                    day = page.days[index]
+                    show_sources(day.sources, f"Движения счёта · {day.day:%d.%m.%Y}", page)
+
+                page.sourcesRequested.connect(show_day)
+                present_form(page, self.panel)
+
+            source_button = dialog.buttons.addButton(
                 "Движения счёта", QDialogButtonBox.ButtonRole.ActionRole
             )
-            button.clicked.connect(show_sources)
+            source_button.clicked.connect(
+                lambda: show_sources(result.sources, "Цель накоплений · Движения счёта", dialog)
+            )
+            history_button = dialog.buttons.addButton(
+                "История прогресса", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            history_button.clicked.connect(
+                lambda: self._job(
+                    lambda: savings_goal_history(result),
+                    show_history,
+                    self.panel.message,
+                    "Расчёт истории прогресса…",
+                )
+            )
         present_form(dialog, self.panel)
 
     def _history(self, records: list[SavedPlanningScenario]) -> None:

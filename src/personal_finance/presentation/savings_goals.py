@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QVBoxLayout,
@@ -18,9 +19,19 @@ from PySide6.QtWidgets import (
 
 from personal_finance.domain.errors import ValidationError
 from personal_finance.domain.models import RUB, Account, Money
-from personal_finance.domain.savings_goals import SavingsGoalProjection, SavingsGoalScenario
+from personal_finance.domain.savings_goals import (
+    SavingsGoalAccountProgress,
+    SavingsGoalDay,
+    SavingsGoalProjection,
+    SavingsGoalScenario,
+)
 from personal_finance.presentation.analytics import _label, format_report_amount
-from personal_finance.presentation.analytics_cashflow import _size
+from personal_finance.presentation.analytics_cashflow import _size, _view
+from personal_finance.presentation.tables import replace_table
+
+
+def _percent(basis_points: int) -> str:
+    return f"{basis_points // 100},{basis_points % 100:02d} %"
 
 
 def _date(field: QDateEdit) -> date:
@@ -214,8 +225,7 @@ class SavingsGoalDialog(QDialog):
         )
         field("Цель", amount(scenario.target.minor))
         field("Осталось накопить", amount(result.remaining_minor))
-        percent = result.progress_basis_points
-        field("Прогресс", f"{percent // 100},{percent % 100:02d} %")
+        field("Прогресс", _percent(result.progress_basis_points))
         field("Пополнение в месяц", amount(scenario.monthly.minor))
         if result.remaining_minor == 0:
             field("Состояние", "Цель уже достигнута")
@@ -267,3 +277,68 @@ class SavingsGoalDialog(QDialog):
         )
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
+
+
+class SavingsGoalHistoryDialog(QDialog):
+    sourcesRequested = Signal(int)
+
+    def __init__(
+        self,
+        result: SavingsGoalAccountProgress,
+        history: tuple[SavingsGoalDay, ...],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Цель накоплений · История прогресса")
+        _size(self, 780, 600)
+        self.days = history[::-1]
+        target = result.projection.scenario.target
+        layout = QVBoxLayout(self)
+        layout.addWidget(
+            _label(
+                f"Счёт «{result.account.name}» · Цель "
+                f"{format_report_amount(target.minor, target.currency)} "
+                f"{target.currency.code}. Остатки на конец дня."
+            )
+        )
+        self.table = _view("История прогресса по счёту")
+        replace_table(
+            self.table,
+            ["Дата", "Остаток · " + target.currency.code, "Прогресс"],
+            [
+                [
+                    f"{row.day:%d.%m.%Y}",
+                    format_report_amount(row.balance_minor, target.currency),
+                    _percent(row.progress_basis_points),
+                ]
+                for row in self.days
+            ],
+            right_columns=(1, 2),
+        )
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.button(QDialogButtonBox.StandardButton.Close).setText("К расчёту")
+        buttons.rejected.connect(self.reject)
+        self.sources = buttons.addButton("Движения за день", QDialogButtonBox.ButtonRole.ActionRole)
+        self.sources.clicked.connect(self._request)
+        self.table.doubleClicked.connect(lambda _: self._request())
+        self.table.selectionModel().selectionChanged.connect(self._update_actions)
+        layout.addWidget(buttons)
+        if self.days:
+            self.table.selectRow(0)
+        self._update_actions()
+
+    def _selected(self) -> int | None:
+        index = self.table.currentIndex()
+        row = index.row()
+        if not index.isValid() or not self.table.selectionModel().hasSelection():
+            return None
+        return row if self.days[row].sources else None
+
+    def _update_actions(self) -> None:
+        self.sources.setEnabled(self._selected() is not None)
+
+    def _request(self) -> None:
+        if (index := self._selected()) is not None:
+            self.sourcesRequested.emit(index)

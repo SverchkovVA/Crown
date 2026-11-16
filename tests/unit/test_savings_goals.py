@@ -134,3 +134,51 @@ def test_goal_account_progress_distinguishes_empty_account_and_currency_mismatch
     assert result.projection.progress_basis_points == 0 and scenario.current == Money(100)
     with pytest.raises(ValidationError, match="валюте цели"):
         savings_goal_account_progress(scenario, replace(account, currency="USD"), ())
+
+
+def test_goal_history_uses_daily_net_positions_and_adds_the_report_cutoff():
+    from uuid import UUID
+
+    from personal_finance.domain.ledger import Operation, OperationDraft, OperationKind
+    from personal_finance.domain.models import Account, AccountKind
+    from personal_finance.domain.savings_goals import (
+        savings_goal_account_progress,
+        savings_goal_history,
+    )
+
+    end = date(2026, 1, 31)
+    scenario = SavingsGoalScenario(end, Money(0), Money(200), Money(10))
+    account = Account(str(UUID(int=1)), "Учебный счёт", AccountKind.CASH, None)
+    peer = str(UUID(int=2))
+    first, second = end - timedelta(days=3), end - timedelta(days=2)
+    operations = [
+        Operation(
+            str(UUID(int=20)),
+            str(UUID(int=21)),
+            OperationDraft(
+                OperationKind.TRANSFER, second, peer, Money(450), destination_account_id=account.id
+            ),
+        ),
+        Operation(
+            str(UUID(int=10)),
+            str(UUID(int=11)),
+            OperationDraft(
+                OperationKind.TRANSFER, first, account.id, Money(150), destination_account_id=peer
+            ),
+        ),
+        Operation(
+            str(UUID(int=12)),
+            str(UUID(int=13)),
+            OperationDraft(
+                OperationKind.TRANSFER, second, account.id, Money(50), destination_account_id=peer
+            ),
+        ),
+    ]
+    progress = savings_goal_account_progress(scenario, account, operations)
+    days = savings_goal_history(progress)
+    assert [(row.day, row.balance_minor, row.progress_basis_points) for row in days] == [
+        (first, -150, 0),
+        (second, 250, 10000),
+        (end, 250, 10000),
+    ]
+    assert len(days[1].sources) == 2 and not days[-1].sources

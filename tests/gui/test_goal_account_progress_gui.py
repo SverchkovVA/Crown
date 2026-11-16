@@ -12,7 +12,11 @@ from personal_finance.presentation.analytics import OperationSourceDialog
 from personal_finance.presentation.analytics_cashflow import CashFlowSourcesDialog
 from personal_finance.presentation.main_window import MainWindow
 from personal_finance.presentation.planning_scenarios import PlanningAction, SavedPlanningDialog
-from personal_finance.presentation.savings_goals import SavingsGoalAccountOptions, SavingsGoalDialog
+from personal_finance.presentation.savings_goals import (
+    SavingsGoalAccountOptions,
+    SavingsGoalDialog,
+    SavingsGoalHistoryDialog,
+)
 from tests.gui.test_planning_scenarios_workflow import current
 from tests.unit.test_planning_scenarios import goal
 
@@ -118,6 +122,24 @@ def test_saved_goal_uses_only_selected_account_at_date_and_shows_snapshot(sessio
         assert session.planning_scenarios.items(kind=PlanningKind.SAVINGS_GOAL) == [saved]
 
         ledger.replace(opening.id, opening.revision_id, replace(opening.draft, amount=Money(300)))
+        action(actual, "История прогресса").click()
+        qtbot.waitUntil(lambda: not window._busy)
+        history = current(window, SavingsGoalHistoryDialog)
+        assert [
+            (row.day, row.balance_minor, row.progress_basis_points) for row in history.days
+        ] == [
+            (scenario.as_of, 20900, 6966),
+            (earlier, 14000, 4666),
+        ]
+        history.table.selectRow(1)
+        history.sources.click()
+        day_sources = current(window, CashFlowSourcesDialog)
+        assert {line.operation.draft.occurred_on for line in day_sources.lines} == {earlier}
+        assert {line.operation.revision_id for line in day_sources.lines} >= {opening.revision_id}
+        day_sources.reject()
+        history.reject()
+        assert current(window, SavingsGoalDialog) is actual
+
         action(actual, "Движения счёта").click()
         sources = current(window, CashFlowSourcesDialog)
         assert len(sources.lines) == 4

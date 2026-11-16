@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date
+from itertools import groupby
 
 from personal_finance.domain.analytics import ReportPeriod, ReportScope
 from personal_finance.domain.analytics_cashflow import CashMovement, cash_flow_report
@@ -52,6 +53,10 @@ class SavingsGoalProjection:
     at_deadline_minor: int | None
 
 
+def _progress_basis_points(balance: int, target: int) -> int:
+    return min(max(balance, 0), target) * 10000 // target
+
+
 def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection:
     if not isinstance(scenario, SavingsGoalScenario):
         raise ValidationError("Укажите условия цели накоплений.")
@@ -82,7 +87,7 @@ def project_savings_goal(scenario: SavingsGoalScenario) -> SavingsGoalProjection
     return SavingsGoalProjection(
         scenario,
         remaining,
-        min(scenario.current.minor, scenario.target.minor) * 10000 // scenario.target.minor,
+        _progress_basis_points(scenario.current.minor, scenario.target.minor),
         add_calendar_months(scenario.as_of, 1),
         count,
         reached_on,
@@ -122,3 +127,35 @@ def savings_goal_account_progress(
     return SavingsGoalAccountProgress(
         account, project_savings_goal(based_on_account), report.movements
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SavingsGoalDay:
+    day: date
+    balance_minor: int
+    progress_basis_points: int
+    sources: tuple[CashMovement, ...]
+
+
+def savings_goal_history(result: SavingsGoalAccountProgress) -> tuple[SavingsGoalDay, ...]:
+    """Закрывающие остатки по датам одного снимка, от первой проводки до среза."""
+    scenario = result.projection.scenario
+    rows = []
+    balance = 0
+    for day, movements in groupby(
+        result.sources, key=lambda source: source.operation.draft.occurred_on
+    ):
+        sources = tuple(movements)
+        balance += sum(source.minor for source in sources)
+        rows.append(
+            SavingsGoalDay(
+                day, balance, _progress_basis_points(balance, scenario.target.minor), sources
+            )
+        )
+    if not rows or rows[-1].day != scenario.as_of:
+        rows.append(
+            SavingsGoalDay(
+                scenario.as_of, balance, _progress_basis_points(balance, scenario.target.minor), ()
+            )
+        )
+    return tuple(rows)
