@@ -27,7 +27,8 @@
 по 34 шага с локальным OCR. SHA-256 EXE
 `125c277c92e3b32fecbadf73524a1dbe2247282b80d71a3eaef48500126f59ca`.
 Отрисовка и кнопка «Движения за день» проверены в нативном Qt в двух темах
-при 100%, 125% и 150%. Полный локальный прогон и
-[CI](https://github.com/SverchkovVA/Crown/actions/runs/43842714052) продолжаются.
+при 100%, 125% и 150%. Локально и в [CI Windows и Linux](https://github.com/SverchkovVA/Crown/actions/runs/43842714052)
+прошло по 2847 тестов. Сверены четыре технических архива, SHA-256, исходник,
+версия, JUnit и отчёты самопроверок.
 
-Предварительный запуск — `artifacts/start-preview-goal-progress-history-dev118.cmd`.
+Проверенный запуск — `artifacts/start-checked-goal-progress-history-dev118.cmd`.
