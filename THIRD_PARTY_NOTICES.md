@@ -21,8 +21,9 @@
 SQLCipher: This product includes software developed by Zetetic LLC.
 Qt: This product uses the Qt framework and Qt for Python.
 
-Используются Qt Core, Gui и Widgets. Qt Charts, Graphs, WebEngine и сетевой модуль
-не подключаются приложением. Сборка имеет вид каталога; не вводятся ограничения
+Используются Qt Core, Gui и Widgets. Приложение не импортирует Qt Charts, Graphs, WebEngine и QtNetwork.
+В Windows-сборке dev128 исключены сетевой плагин ввода TUIO и зависимая
+Qt6Network.dll. Сборка имеет вид каталога; не вводятся ограничения
 на замену LGPL-библиотек и исследование изменений этих библиотек.
 
 Перед внешним распространением необходимо проверить лицензии именно собранных

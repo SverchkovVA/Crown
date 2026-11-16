@@ -31,6 +31,13 @@ analysis = Analysis(
     excludes=["tkinter", "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick"],
     noarchive=False,
 )
+# Хук PyInstaller для QtGui собирает плагин TUIO. Crown использует платформенный
+# ввод Windows. В закреплённой Qt только TUIO импортирует Qt6Network.dll.
+excluded_binaries = {"qtuiotouchplugin.dll", "qt6network.dll"}
+analysis.binaries = [
+    entry for entry in analysis.binaries if Path(entry[0]).name.lower() not in excluded_binaries
+]
+
 pyz = PYZ(analysis.pure)
 exe = EXE(
     pyz, analysis.scripts, [], exclude_binaries=True,
