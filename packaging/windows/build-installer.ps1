@@ -39,11 +39,13 @@ try {
     $manifest = Get-Content -LiteralPath $manifestFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $sourceBuild = Get-Content -LiteralPath (Join-Path $compilerInput 'build-result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $version = $manifest.application
+    $fileVersion = $version -replace '\.dev', '.'
+    if ($fileVersion.Split('.').Count -eq 3) { $fileVersion += '.0' }
     $name = 'Crown-' + $version + '-windows-x64-setup.exe'
     $outputFile = Join-Path $outputRoot $name
     $step = 'makensis'
     $arguments = @('/NOCONFIG', '/INPUTCHARSET', 'UTF8', '/WX',
-        "/DCROWN_VERSION=$version", "/DCROWN_OUTPUT=$outputFile",
+        "/DCROWN_VERSION=$version", "/DCROWN_FILE_VERSION=$fileVersion", "/DCROWN_OUTPUT=$outputFile",
         ('/DCROWN_BUNDLE=' + (Join-Path $compilerInput 'app/PersonalFinance')),
         ('/DCROWN_GENERATED=' + (Join-Path $outputRoot 'payload.nsh')),
         "/DCROWN_MANIFEST=$manifestFile",
@@ -62,7 +64,14 @@ try {
     if ($compilation.status -ne 'passed' -or -not (Test-Path -LiteralPath $outputFile -PathType Leaf)) {
         throw 'NSIS не собрал установщик.'
     }
+    $step = 'windows_version_resource'
+    $metadata = [Diagnostics.FileVersionInfo]::GetVersionInfo($outputFile)
+    if ($metadata.ProductName -cne 'Crown' -or $metadata.ProductVersion -cne $version -or
+        $metadata.FileVersion -cne $version) {
+        throw 'Версия файла установщика не совпадает с версией поставки.'
+    }
     $receipt.status='passed'
+    $receipt['windows_product_version']=$metadata.ProductVersion
     $receipt.installer=$name
     $receipt['application']=$version
     $receipt['nsis_archive_sha256']=$archiveHash

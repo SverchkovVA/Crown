@@ -28,6 +28,14 @@ ShowUninstDetails show
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "Russian"
 
+VIProductVersion "${CROWN_FILE_VERSION}"
+VIFileVersion "${CROWN_FILE_VERSION}"
+VIAddVersionKey /LANG=0 "ProductName" "Crown"
+VIAddVersionKey /LANG=0 "ProductVersion" "${CROWN_VERSION}"
+VIAddVersionKey /LANG=0 "FileVersion" "${CROWN_VERSION}"
+VIAddVersionKey /LANG=0 "FileDescription" "Установщик Crown"
+VIAddVersionKey /LANG=0 "LegalCopyright" "Сведения о лицензиях входят в поставку"
+
 Var Stage
 
 !macro Stop CODE MESSAGE
