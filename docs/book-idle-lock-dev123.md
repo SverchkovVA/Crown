@@ -35,5 +35,6 @@
 Нативные исходники, финальный EXE и чистая Windows Sandbox без сети,
 Python и uv прошли по 35 шагов с локальным OCR. SHA-256 EXE
 `a0c26f0c5526960a068ab8d96e134e3908673e1843af87158e952914b185ea7a`.
-Полный локальный набор и [CI](https://github.com/SverchkovVA/Crown/actions/runs/43850324838)
-выполняются. Предварительный запуск — `artifacts/start-preview-book-idle-lock-dev123.cmd`.
+Локально и в [CI Windows и Linux](https://github.com/SverchkovVA/Crown/actions/runs/43850324838)
+прошло по 2863 тестов. Сверены SHA-256, JUnit и отчёты четырёх технических
+архивов. Проверенный запуск — rtifacts/start-checked-(name)-dev123.cmd.
