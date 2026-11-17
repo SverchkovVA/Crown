@@ -26,6 +26,8 @@ import ru.crown.finance.ledger.BookSession
 import ru.crown.finance.ledger.CredentialKind
 import ru.crown.finance.ledger.DemoRepository
 import ru.crown.finance.ledger.LedgerSnapshot
+import ru.crown.finance.ledger.JournalExport
+import ru.crown.finance.ledger.JournalFormat
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ui.AccessScreen
@@ -61,13 +63,26 @@ internal sealed interface Workspace {
     ) : Workspace
 }
 
+internal enum class OutputFile(
+    val fileName: String,
+    val mime: String,
+    val success: String,
+    val preparationFailure: String,
+) {
+    Backup("Crown-Android.crowncopy", "application/octet-stream", "Зашифрованная копия сохранена", "Не удалось подготовить копию книги"),
+    Csv("Crown-Android-operations.csv", "text/csv", "CSV сохранён", "Не удалось подготовить CSV"),
+    Json("Crown-Android-operations.json", "application/json", "JSON сохранён", "Не удалось подготовить JSON"),
+}
+
+private data class PendingFile(val kind: OutputFile, val bytes: ByteArray)
+
 internal class CrownViewModel(application: Application) : AndroidViewModel(application) {
     private val documents = application.contentResolver
     private val repository = BookRepository(application)
     private val demo = DemoRepository(application)
     private var session: BookSession? = null
     private var lockRequested = false
-    private var pendingBackup: ByteArray? = null
+    private var pendingFile: PendingFile? = null
     private val mutableState = MutableStateFlow<Workspace>(Workspace.Access(repository.exists))
     val state = mutableState.asStateFlow()
 
@@ -171,45 +186,67 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    fun prepareBackup(password: CharArray, chooseDestination: () -> Boolean) {
+    fun prepareBackup(password: CharArray, chooseDestination: (OutputFile) -> Boolean) =
+        prepareFile(OutputFile.Backup, chooseDestination, clear = { password.fill(' ') }) { book ->
+            book.backup(password)
+        }
+
+    fun prepareExport(preview: JournalExport, format: JournalFormat, chooseDestination: (OutputFile) -> Boolean) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        if (current.snapshot !== preview.snapshot) return
+        val output = when (format) {
+            JournalFormat.Csv -> OutputFile.Csv
+            JournalFormat.Json -> OutputFile.Json
+        }
+        prepareFile(output, chooseDestination) { withContext(Dispatchers.IO) { preview.encode(format) } }
+    }
+
+    private fun prepareFile(
+        output: OutputFile,
+        chooseDestination: (OutputFile) -> Boolean,
+        clear: () -> Unit = {},
+        encode: suspend (BookSession) -> ByteArray,
+    ) {
         val current = mutableState.value as? Workspace.Book
         val book = session
-        if (current == null || book == null || current.busy || pendingBackup != null) {
-            password.fill(' ')
+        if (current == null || book == null || current.busy || pendingFile != null) {
+            clear()
             return
         }
         mutableState.value = current.copy(busy = true, error = null, message = null)
         lockRequested = false
         viewModelScope.launch {
             try {
-                val encrypted = book.backup(password)
+                val bytes = encode(book)
                 mutableState.value = current.copy(error = null, message = null)
                 if (lockRequested) {
-                    encrypted.fill(0)
+                    bytes.fill(0)
                 } else {
-                    pendingBackup = encrypted
-                    if (!chooseDestination()) {
-                        pendingBackup = null
-                        encrypted.fill(0)
+                    pendingFile = PendingFile(output, bytes)
+                    if (!chooseDestination(output)) {
+                        pendingFile = null
+                        bytes.fill(0)
                         mutableState.value = current.copy(error = "Файловый менеджер недоступен")
                     }
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                mutableState.value = current.copy(error = "Не удалось подготовить копию книги")
+                pendingFile?.bytes?.fill(0)
+                pendingFile = null
+                mutableState.value = current.copy(error = output.preparationFailure)
             } finally {
-                password.fill(' ')
+                clear()
                 if (lockRequested) closeBook()
             }
         }
     }
 
-    fun saveBackup(file: Uri?) {
-        val encrypted = pendingBackup ?: return
-        pendingBackup = null
+    fun saveFile(file: Uri?) {
+        val pending = pendingFile ?: return
+        pendingFile = null
         if (file?.scheme != "content") {
-            encrypted.fill(0)
+            pending.bytes.fill(0)
             return
         }
         val access = mutableState.value as? Workspace.Access
@@ -221,20 +258,21 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                     val descriptor = checkNotNull(documents.openFileDescriptor(file, "rw"))
                     ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { stream ->
                         check(descriptor.statSize == 0L)
-                        stream.write(encrypted)
+                        stream.write(pending.bytes)
                         stream.flush()
+                        descriptor.fileDescriptor.sync()
                     }
                 }
                 success = true
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                // Книга остаётся открываемой даже при сбое файлового провайдера.
+                success = false
             } finally {
-                encrypted.fill(0)
+                pending.bytes.fill(0)
             }
-            val message = "Зашифрованная копия сохранена"
-            val error = "Не удалось записать копию в выбранный файл"
+            val message = pending.kind.success
+            val error = "Не удалось записать выбранный файл"
             when (val current = mutableState.value) {
                 is Workspace.Access -> mutableState.value = current.copy(
                     busy = false, message = message.takeIf { success }, error = error.takeUnless { success },
@@ -323,8 +361,8 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     }
 
     override fun onCleared() {
-        pendingBackup?.fill(0)
-        pendingBackup = null
+        pendingFile?.bytes?.fill(0)
+        pendingFile = null
         try {
             session?.close()
         } finally {
@@ -335,8 +373,8 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
 
 class MainActivity : ComponentActivity() {
     private val model by viewModels<CrownViewModel>()
-    private val writeCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        model.saveBackup(result.data?.data.takeIf { result.resultCode == RESULT_OK })
+    private val writeDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        model.saveFile(result.data?.data.takeIf { result.resultCode == RESULT_OK })
     }
     private val readCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) model.setRestoreFile(result.data?.data)
@@ -367,7 +405,8 @@ class MainActivity : ComponentActivity() {
                                 BookCommands(
                                     workspace.busy, workspace.error, model::clearError, model::changeMonth,
                                     model::addAccount, model::addOperation, model::reviseOperation,
-                                    backup = { password -> model.prepareBackup(password, ::createCopy) },
+                                    backup = { password -> model.prepareBackup(password, ::createFile) },
+                                    export = { preview, format -> model.prepareExport(preview, format, ::createFile) },
                                     addCategory = model::addCategory,
                                 ),
                                 notice = workspace.message,
@@ -379,11 +418,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun createCopy(): Boolean {
+    private fun createFile(output: OutputFile): Boolean {
         val intent = localDocument(Intent.ACTION_CREATE_DOCUMENT)
-            .putExtra(Intent.EXTRA_TITLE, "Crown-Android.crowncopy")
+            .setType(output.mime)
+            .putExtra(Intent.EXTRA_TITLE, output.fileName)
         return try {
-            writeCopy.launch(intent)
+            writeDocument.launch(intent)
             true
         } catch (_: ActivityNotFoundException) {
             false

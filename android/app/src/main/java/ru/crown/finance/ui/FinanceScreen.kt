@@ -35,6 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -89,7 +90,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Backup, Categories }
+private enum class EditorSection { Account, Operation, Backup, Categories, Export }
 
 @Composable
 internal fun FinanceScreen(
@@ -211,7 +212,10 @@ internal fun FinanceScreen(
                         tab = Section.Operations.name
                     }
                     Section.History -> HistoryPage(state.snapshot.history) { detailsId = it.id }
-                    Section.Reports -> ReportsPage(state.snapshot, commands)
+                    Section.Reports -> ReportsPage(state.snapshot, commands) {
+                        commands?.clearError()
+                        editor = EditorSection.Export
+                    }
                     Section.Protection -> ProtectionPage(
                         startBackup = {
                             commands?.clearError()
@@ -236,6 +240,7 @@ internal fun FinanceScreen(
             )
             EditorSection.Backup -> BackupForm(commands, closeEditor)
             EditorSection.Categories -> CategoryEditor(snapshot.categories, commands, closeEditor)
+            EditorSection.Export -> JournalExportForm(snapshot, monthLabel(snapshot.month), commands, closeEditor)
             null -> Unit
         }
     }
@@ -579,7 +584,7 @@ private fun OperationDetails(
 }
 
 @Composable
-private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?) {
+private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?, export: () -> Unit) {
     val totals = remember(snapshot) { categoryTotals(snapshot) }
     LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
         item {
@@ -587,7 +592,12 @@ private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?) {
             if (commands != null) MonthActions(commands)
             Spacer(Modifier.height(12.dp))
             BalancePanel("Остаток на конец месяца", snapshot.totalMinor, snapshot)
-            Spacer(Modifier.height(20.dp))
+            if (commands != null && snapshot.operations.isNotEmpty()) {
+                OutlinedButton(export, Modifier.fillMaxWidth().padding(top = 8.dp), enabled = !commands.busy) {
+                    Text("Экспорт журнала")
+                }
+            }
+            Spacer(Modifier.height(12.dp))
             Text("По категориям", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
         }
         if (totals.isEmpty()) item { Text("За этот месяц поступлений и расходов нет") }

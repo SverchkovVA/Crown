@@ -30,6 +30,8 @@ import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
+import ru.crown.finance.ledger.JournalExport
+import ru.crown.finance.ledger.JournalFormat
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.parseMinor
 import java.math.BigDecimal
@@ -48,6 +50,7 @@ internal data class BookCommands(
     val addOperation: (Operation, () -> Unit) -> Unit,
     val reviseOperation: (Operation, Operation?, () -> Unit) -> Unit,
     val backup: (CharArray) -> Unit,
+    val export: (JournalExport, JournalFormat) -> Unit,
     val addCategory: (String, OperationKind, () -> Unit) -> Unit,
 )
 
@@ -227,7 +230,7 @@ private fun Editor(
 }
 
 @Composable
-private fun <T> Choice(
+internal fun <T> Choice(
     title: String,
     selected: T?,
     values: List<T>,
