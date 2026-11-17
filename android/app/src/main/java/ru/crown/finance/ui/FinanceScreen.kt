@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -43,7 +43,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,9 +89,9 @@ internal fun FinanceScreen(
     leave: () -> Unit,
     commands: BookCommands? = null,
 ) {
-    var tab by rememberSaveable { mutableStateOf(Section.Operations.name) }
-    var filterId by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailsId by rememberSaveable { mutableStateOf<String?>(null) }
+    var tab by remember { mutableStateOf(Section.Operations.name) }
+    var filterId by remember { mutableStateOf<String?>(null) }
+    var detailsId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf<Section?>(null) }
     val closeEditor: () -> Unit = {
         editor = null
@@ -116,38 +115,42 @@ internal fun FinanceScreen(
 
     Scaffold(
         topBar = { BookBar(bookName, leave) },
-        floatingActionButton = {
-            if (snapshot != null && commands != null) {
-                val createAccount = section == Section.Accounts || snapshot.balances.isEmpty()
-                ExtendedFloatingActionButton(
-                    text = { Text(if (createAccount) "Добавить счёт" else "Добавить операцию") },
-                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
-                    onClick = {
-                        if (!commands.busy) {
-                            commands.clearError()
-                            editor = if (createAccount) Section.Accounts else Section.Operations
-                        }
-                    },
-                )
-            }
-        },
         bottomBar = {
             if (snapshot != null) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                    for (destination in Section.entries) {
-                        NavigationBarItem(
-                            selected = section == destination,
-                            onClick = {
-                                tab = destination.name
-                                filterId = null
-                            },
-                            icon = { Icon(painterResource(destination.icon), contentDescription = null) },
-                            label = { Text(destination.title) },
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            ),
-                        )
+                Surface(color = MaterialTheme.colorScheme.surface) {
+                    Column {
+                        if (commands != null) {
+                            val createAccount = section == Section.Accounts || snapshot.balances.isEmpty()
+                            Button(
+                                onClick = {
+                                    commands.clearError()
+                                    editor = if (createAccount) Section.Accounts else Section.Operations
+                                },
+                                enabled = !commands.busy,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
+                            ) {
+                                Icon(painterResource(R.drawable.ic_add), contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(if (createAccount) "Добавить счёт" else "Добавить операцию")
+                            }
+                        }
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                            for (destination in Section.entries) {
+                                NavigationBarItem(
+                                    selected = section == destination,
+                                    onClick = {
+                                        tab = destination.name
+                                        filterId = null
+                                    },
+                                    icon = { Icon(painterResource(destination.icon), contentDescription = null) },
+                                    label = { Text(destination.title) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    ),
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -175,7 +178,7 @@ internal fun FinanceScreen(
                         showDetails = { detailsId = it.id },
                         commands = commands,
                     )
-                    Section.Accounts -> AccountsPage(state.snapshot, accountsScroll, commands != null) {
+                    Section.Accounts -> AccountsPage(state.snapshot, accountsScroll) {
                         filterId = it.account.id
                         tab = Section.Operations.name
                     }
@@ -239,7 +242,7 @@ private fun OperationsPage(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = scroll,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = if (commands == null) 24.dp else 92.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
     ) {
         item("header") {
             PageTitle("Операции", monthLabel(snapshot.month))
@@ -287,13 +290,12 @@ private fun OperationsPage(
 private fun AccountsPage(
     snapshot: LedgerSnapshot,
     scroll: LazyListState,
-    editable: Boolean,
     open: (AccountBalance) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = scroll,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = if (editable) 92.dp else 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
     ) {
         item("header") {
             PageTitle("Счета", "Остатки на ${snapshot.month.atEndOfMonth().format(DayFormat)}")
