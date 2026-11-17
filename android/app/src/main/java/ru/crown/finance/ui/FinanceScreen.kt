@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,10 +37,12 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,10 +50,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ru.crown.finance.DemoState
 import ru.crown.finance.R
@@ -59,6 +64,7 @@ import ru.crown.finance.ledger.LedgerSnapshot
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import java.math.BigDecimal
+import java.math.BigInteger
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.YearMonth
@@ -77,24 +83,54 @@ private enum class Section(val title: String, val icon: Int) {
 }
 
 @Composable
-internal fun FinanceScreen(state: DemoState, retry: () -> Unit) {
+internal fun FinanceScreen(
+    state: DemoState,
+    retry: () -> Unit,
+    bookName: String,
+    leave: () -> Unit,
+    commands: BookCommands? = null,
+) {
     var tab by rememberSaveable { mutableStateOf(Section.Operations.name) }
     var filterId by rememberSaveable { mutableStateOf<String?>(null) }
     var detailsId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editor by remember { mutableStateOf<Section?>(null) }
+    val closeEditor: () -> Unit = {
+        editor = null
+        commands?.clearError()
+    }
     val operationsScroll = rememberLazyListState()
     val accountsScroll = rememberLazyListState()
     val section = Section.valueOf(tab)
     val snapshot = (state as? DemoState.Ready)?.snapshot
     val filter = snapshot?.balances?.firstOrNull { it.account.id == filterId }
-    LaunchedEffect(filterId) { operationsScroll.scrollToItem(0) }
+    LaunchedEffect(filterId, snapshot?.month) { operationsScroll.scrollToItem(0) }
 
-    BackHandler(detailsId == null && (section != Section.Operations || filterId != null)) {
-        tab = Section.Operations.name
-        filterId = null
+    BackHandler(detailsId == null && editor == null) {
+        if (section != Section.Operations || filterId != null) {
+            tab = Section.Operations.name
+            filterId = null
+        } else {
+            leave()
+        }
     }
 
     Scaffold(
-        topBar = { BookBar() },
+        topBar = { BookBar(bookName, leave) },
+        floatingActionButton = {
+            if (snapshot != null && commands != null) {
+                val createAccount = section == Section.Accounts || snapshot.balances.isEmpty()
+                ExtendedFloatingActionButton(
+                    text = { Text(if (createAccount) "Добавить счёт" else "Добавить операцию") },
+                    icon = { Icon(painterResource(R.drawable.ic_add), contentDescription = null) },
+                    onClick = {
+                        if (!commands.busy) {
+                            commands.clearError()
+                            editor = if (createAccount) Section.Accounts else Section.Operations
+                        }
+                    },
+                )
+            }
+        },
         bottomBar = {
             if (snapshot != null) {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -137,13 +173,22 @@ internal fun FinanceScreen(state: DemoState, retry: () -> Unit) {
                         state.snapshot, filter, operationsScroll,
                         clearFilter = { filterId = null },
                         showDetails = { detailsId = it.id },
+                        commands = commands,
                     )
-                    Section.Accounts -> AccountsPage(state.snapshot, accountsScroll) {
+                    Section.Accounts -> AccountsPage(state.snapshot, accountsScroll, commands != null) {
                         filterId = it.account.id
                         tab = Section.Operations.name
                     }
                 }
             }
+        }
+    }
+
+    if (snapshot != null && commands != null) {
+        when (editor) {
+            Section.Accounts -> AccountEditor(snapshot.month, commands, closeEditor)
+            Section.Operations -> OperationEditor(snapshot.balances, snapshot.month, filterId, commands, closeEditor)
+            null -> Unit
         }
     }
 
@@ -155,7 +200,7 @@ internal fun FinanceScreen(state: DemoState, retry: () -> Unit) {
 }
 
 @Composable
-private fun BookBar() {
+private fun BookBar(name: String, leave: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.background) {
         Row(
             Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 9.dp),
@@ -169,10 +214,12 @@ private fun BookBar() {
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                "Учебная книга",
+                name, Modifier.weight(1f),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            TextButton(onClick = leave) { Text("Закрыть") }
         }
     }
 }
@@ -184,6 +231,7 @@ private fun OperationsPage(
     scroll: LazyListState,
     clearFilter: () -> Unit,
     showDetails: (Operation) -> Unit,
+    commands: BookCommands?,
 ) {
     val rows = if (filter == null) snapshot.operations else snapshot.operations.filter {
         it.accountId == filter.account.id || it.destinationId == filter.account.id
@@ -191,10 +239,14 @@ private fun OperationsPage(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = scroll,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = if (commands == null) 24.dp else 92.dp),
     ) {
         item("header") {
             PageTitle("Операции", monthLabel(snapshot.month))
+            if (commands != null) {
+                MonthActions(commands)
+                commands.error?.let { FormError(it) }
+            }
             if (filter != null) {
                 FilterChip(
                     selected = true,
@@ -235,12 +287,13 @@ private fun OperationsPage(
 private fun AccountsPage(
     snapshot: LedgerSnapshot,
     scroll: LazyListState,
+    editable: Boolean,
     open: (AccountBalance) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         state = scroll,
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = if (editable) 92.dp else 24.dp),
     ) {
         item("header") {
             PageTitle("Счета", "Остатки на ${snapshot.month.atEndOfMonth().format(DayFormat)}")
@@ -277,6 +330,20 @@ private fun AccountsPage(
 }
 
 @Composable
+private fun MonthActions(commands: BookCommands) {
+    Row {
+        TextButton(
+            onClick = { commands.changeMonth(-1) }, enabled = !commands.busy,
+            modifier = Modifier.semantics { contentDescription = "Предыдущий месяц" },
+        ) { Text("←") }
+        TextButton(
+            onClick = { commands.changeMonth(1) }, enabled = !commands.busy,
+            modifier = Modifier.semantics { contentDescription = "Следующий месяц" },
+        ) { Text("→") }
+    }
+}
+
+@Composable
 private fun PageTitle(title: String, subtitle: String) {
     Text(
         title, Modifier.semantics { heading() },
@@ -286,7 +353,7 @@ private fun PageTitle(title: String, subtitle: String) {
 }
 
 @Composable
-private fun BalancePanel(label: String, total: Long, snapshot: LedgerSnapshot? = null) {
+private fun BalancePanel(label: String, total: BigInteger, snapshot: LedgerSnapshot? = null) {
     Surface(color = MoneyPanel, contentColor = Color.White, shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Text(label, color = MoneyPanelLabel, style = MaterialTheme.typography.labelLarge)
@@ -315,7 +382,7 @@ private fun BalancePanel(label: String, total: Long, snapshot: LedgerSnapshot? =
 }
 
 @Composable
-private fun PanelMetric(label: String, minor: Long, modifier: Modifier = Modifier) {
+private fun PanelMetric(label: String, minor: BigInteger, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(label, color = MoneyPanelLabel, style = MaterialTheme.typography.labelMedium)
         Text(money(minor, signed = true), style = MaterialTheme.typography.titleMedium)
@@ -403,7 +470,7 @@ private fun OperationDetails(operation: Operation, snapshot: LedgerSnapshot, clo
     }
 }
 
-private fun OperationKind.label(): String = when (this) {
+internal fun OperationKind.label(): String = when (this) {
     OperationKind.Opening -> "Начальный остаток"
     OperationKind.Income -> "Поступление"
     OperationKind.Expense -> "Расход"
@@ -422,15 +489,17 @@ private fun Operation.displayedAmount(): Long =
 private fun monthLabel(month: YearMonth): String =
     month.format(MonthFormat).replaceFirstChar { it.titlecase(Russian) }
 
-private fun money(minor: Long, signed: Boolean = false): String {
+private fun money(minor: Long, signed: Boolean = false): String = money(minor.toBigInteger(), signed)
+
+private fun money(minor: BigInteger, signed: Boolean = false): String {
     val formatter = NumberFormat.getNumberInstance(Russian).apply {
         minimumFractionDigits = 2
         maximumFractionDigits = 2
     }
     val sign = when {
-        minor < 0 -> "−"
-        signed && minor > 0 -> "+"
+        minor.signum() < 0 -> "−"
+        signed && minor.signum() > 0 -> "+"
         else -> ""
     }
-    return sign + formatter.format(BigDecimal.valueOf(minor, 2).abs()) + "\u00A0₽"
+    return sign + formatter.format(BigDecimal(minor, 2).abs()) + "\u00A0₽"
 }

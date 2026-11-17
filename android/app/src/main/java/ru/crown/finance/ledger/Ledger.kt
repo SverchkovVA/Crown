@@ -1,5 +1,6 @@
 package ru.crown.finance.ledger
 
+import java.math.BigInteger
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -52,24 +53,24 @@ internal data class Operation(
     }
 }
 
-internal data class AccountBalance(val account: Account, val minor: Long)
+internal data class AccountBalance(val account: Account, val minor: BigInteger)
 
 internal data class LedgerSnapshot(
     val month: YearMonth,
     val balances: List<AccountBalance>,
     val operations: List<Operation>,
-    val incomeMinor: Long,
-    val expenseMinor: Long,
+    val incomeMinor: BigInteger,
+    val expenseMinor: BigInteger,
 ) {
-    val totalMinor: Long = balances.fold(0L) { sum, balance -> Math.addExact(sum, balance.minor) }
+    val totalMinor: BigInteger = balances.fold(BigInteger.ZERO) { sum, balance -> sum + balance.minor }
 
     companion object {
         fun from(month: YearMonth, accounts: List<Account>, operations: List<Operation>): LedgerSnapshot {
-            val balances = accounts.associate { it.id to 0L }.toMutableMap()
+            val balances = accounts.associate { it.id to BigInteger.ZERO }.toMutableMap()
             require(balances.size == accounts.size)
             require(operations.map { it.id }.toSet().size == operations.size)
-            var income = 0L
-            var expense = 0L
+            var income = BigInteger.ZERO
+            var expense = BigInteger.ZERO
             val monthRows = mutableListOf<Operation>()
             for (operation in operations.sortedWith(compareBy(Operation::date, Operation::id))) {
                 require(operation.accountId in balances)
@@ -77,19 +78,17 @@ internal data class LedgerSnapshot(
                 require(destination == null || destination in balances)
                 if (operation.date > month.atEndOfMonth()) continue
                 val origin = operation.accountId
-                balances[origin] = Math.addExact(balances.getValue(origin), operation.movementFor(origin))
+                balances[origin] = balances.getValue(origin) + operation.movementFor(origin).toBigInteger()
                 if (destination != null) {
-                    balances[destination] = Math.addExact(
-                        balances.getValue(destination), operation.movementFor(destination),
-                    )
+                    balances[destination] = balances.getValue(destination) + operation.movementFor(destination).toBigInteger()
                 }
                 if (YearMonth.from(operation.date) != month) continue
                 monthRows.add(operation)
                 when (operation.kind) {
                     OperationKind.Opening -> Unit
-                    OperationKind.Income -> income = Math.addExact(income, operation.amountMinor)
-                    OperationKind.Expense -> expense = Math.addExact(expense, operation.amountMinor)
-                    OperationKind.Transfer -> expense = Math.addExact(expense, operation.feeMinor)
+                    OperationKind.Income -> income += operation.amountMinor.toBigInteger()
+                    OperationKind.Expense -> expense += operation.amountMinor.toBigInteger()
+                    OperationKind.Transfer -> expense += operation.feeMinor.toBigInteger()
                 }
             }
             return LedgerSnapshot(

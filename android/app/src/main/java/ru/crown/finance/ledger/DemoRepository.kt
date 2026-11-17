@@ -19,13 +19,13 @@ import org.json.JSONObject
 import java.time.LocalDate
 import java.time.YearMonth
 
-@Entity(tableName = "demo_accounts")
+@Entity(tableName = "ledger_accounts")
 internal data class AccountRow(@PrimaryKey val id: String, val name: String, val sortOrder: Int) {
     fun toAccount() = Account(id, name)
 }
 
 @Entity(
-    tableName = "demo_operations",
+    tableName = "ledger_operations",
     foreignKeys = [
         ForeignKey(entity = AccountRow::class, parentColumns = ["id"], childColumns = ["accountId"]),
         ForeignKey(entity = AccountRow::class, parentColumns = ["id"], childColumns = ["destinationId"]),
@@ -49,11 +49,11 @@ internal data class OperationRow(
 }
 
 @Dao
-internal interface DemoDao {
-    @Query("SELECT * FROM demo_accounts ORDER BY sortOrder")
+internal interface LedgerDao {
+    @Query("SELECT * FROM ledger_accounts ORDER BY sortOrder")
     suspend fun accounts(): List<AccountRow>
 
-    @Query("SELECT * FROM demo_operations")
+    @Query("SELECT * FROM ledger_operations")
     suspend fun operations(): List<OperationRow>
 
     @Insert
@@ -65,7 +65,7 @@ internal interface DemoDao {
 
 @Database(entities = [AccountRow::class, OperationRow::class], version = 1, exportSchema = false)
 internal abstract class DemoDatabase : RoomDatabase() {
-    abstract fun dao(): DemoDao
+    abstract fun dao(): LedgerDao
 }
 
 internal class DemoRepository(context: Context) : AutoCloseable {
