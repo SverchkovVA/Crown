@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,10 +63,12 @@ import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.LedgerSnapshot
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
+import ru.crown.finance.ledger.OperationHistory
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.text.NumberFormat
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -79,6 +82,7 @@ private val MoneyPanelLabel = Color(0xFFD1E9DE)
 private enum class Section(val title: String, val icon: Int) {
     Operations("Операции", R.drawable.ic_operations),
     Accounts("Счета", R.drawable.ic_accounts),
+    History("История", R.drawable.ic_history),
 }
 
 @Composable
@@ -93,8 +97,14 @@ internal fun FinanceScreen(
     var filterId by remember { mutableStateOf<String?>(null) }
     var detailsId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf<Section?>(null) }
+    var correction by remember { mutableStateOf<Operation?>(null) }
+    val closeDetails: () -> Unit = {
+        detailsId = null
+        commands?.clearError()
+    }
     val closeEditor: () -> Unit = {
         editor = null
+        correction = null
         commands?.clearError()
     }
     val operationsScroll = rememberLazyListState()
@@ -119,7 +129,7 @@ internal fun FinanceScreen(
             if (snapshot != null) {
                 Surface(color = MaterialTheme.colorScheme.surface) {
                     Column {
-                        if (commands != null) {
+                        if (commands != null && section != Section.History) {
                             val createAccount = section == Section.Accounts || snapshot.balances.isEmpty()
                             Button(
                                 onClick = {
@@ -136,6 +146,7 @@ internal fun FinanceScreen(
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
+                                if (destination == Section.History && commands == null) continue
                                 NavigationBarItem(
                                     selected = section == destination,
                                     onClick = {
@@ -182,6 +193,7 @@ internal fun FinanceScreen(
                         filterId = it.account.id
                         tab = Section.Operations.name
                     }
+                    Section.History -> HistoryPage(state.snapshot.history) { detailsId = it.id }
                 }
             }
         }
@@ -190,14 +202,25 @@ internal fun FinanceScreen(
     if (snapshot != null && commands != null) {
         when (editor) {
             Section.Accounts -> AccountEditor(snapshot.month, commands, closeEditor)
-            Section.Operations -> OperationEditor(snapshot.balances, snapshot.month, filterId, commands, closeEditor)
-            null -> Unit
+            Section.Operations -> OperationEditor(
+                snapshot.balances, snapshot.month, filterId, commands, closeEditor, correction,
+            )
+            Section.History, null -> Unit
         }
     }
 
-    if (snapshot != null) {
-        snapshot.operations.firstOrNull { it.id == detailsId }?.let { row ->
-            OperationDetails(row, snapshot) { detailsId = null }
+    if (snapshot != null && detailsId != null) {
+        val history = snapshot.history.firstOrNull { it.id == detailsId }
+        val operation = history?.current?.value ?: snapshot.operations.firstOrNull { it.id == detailsId }
+        if (operation != null) {
+            OperationDetails(
+                operation, snapshot, history, commands, closeDetails,
+                edit = {
+                    closeDetails()
+                    correction = operation
+                    editor = Section.Operations
+                },
+            )
         }
     }
 }
@@ -451,8 +474,17 @@ private fun OperationCaption(operation: Operation, snapshot: LedgerSnapshot, mod
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OperationDetails(operation: Operation, snapshot: LedgerSnapshot, close: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = close) {
+private fun OperationDetails(
+    operation: Operation,
+    snapshot: LedgerSnapshot,
+    history: OperationHistory?,
+    commands: BookCommands?,
+    close: () -> Unit,
+    edit: () -> Unit,
+) {
+    var confirmCancellation by remember { mutableStateOf(false) }
+    val cancelled = history?.current?.cancelled == true
+    ModalBottomSheet(onDismissRequest = { if (commands?.busy != true) close() }) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
@@ -467,9 +499,87 @@ private fun OperationDetails(operation: Operation, snapshot: LedgerSnapshot, clo
             Text(operation.date.format(DayFormat), style = MaterialTheme.typography.bodyMedium)
             Text(operation.accountCaption(snapshot), style = MaterialTheme.typography.bodyMedium)
             if (operation.feeMinor != 0L) Text("Комиссия ${money(operation.feeMinor)}")
-            Button(onClick = close, modifier = Modifier.align(Alignment.End)) { Text("Готово") }
+            if (cancelled) FormError("Операция отменена")
+            if (history != null && history.revisions.size > 1) RevisionList(history, snapshot)
+            if (commands != null && !cancelled && operation.kind != OperationKind.Opening) {
+                Button(onClick = edit, enabled = !commands.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Исправить")
+                }
+                TextButton(
+                    onClick = { confirmCancellation = true }, enabled = !commands.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Отменить операцию") }
+            }
+            commands?.error?.let { FormError(it) }
+            TextButton(
+                onClick = close, enabled = commands?.busy != true,
+                modifier = Modifier.align(Alignment.End),
+            ) { Text("Готово") }
         }
     }
+    if (confirmCancellation && commands != null) {
+        AlertDialog(
+            onDismissRequest = { confirmCancellation = false },
+            title = { Text("Отменить операцию?") },
+            text = { Text("Остатки пересчитаются. Запись останется в истории.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmCancellation = false
+                    commands.reviseOperation(operation, null, close)
+                }) { Text("Подтвердить отмену") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCancellation = false }) { Text("Назад") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun HistoryPage(history: List<OperationHistory>, showDetails: (OperationHistory) -> Unit) {
+    val changed = history.filter { it.revisions.size > 1 }
+        .sortedByDescending { it.current.recordedAt }
+    LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
+        item {
+            PageTitle("История", "Исправления и отмены")
+            Spacer(Modifier.height(16.dp))
+        }
+        if (changed.isEmpty()) item { Text("Изменений пока нет") }
+        items(changed, key = { it.id }) { item ->
+            val value = item.current.value
+            Surface(
+                onClick = { showDetails(item) },
+                color = MaterialTheme.colorScheme.surface, shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(value.description, style = MaterialTheme.typography.titleSmall)
+                    Text(if (item.current.cancelled) "Отменена" else "Исправлена")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RevisionList(history: OperationHistory, snapshot: LedgerSnapshot) {
+    val stamp = DateTimeFormatter.ofPattern("dd.MM.uuuu HH:mm", Russian).withZone(ZoneId.systemDefault())
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    Text("Версии операции", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+    for (revision in history.revisions.asReversed()) {
+        val value = revision.value
+        val label = when {
+            revision.cancelled -> "Отмена"
+            revision.recordedAt == null -> "Исходная версия"
+            else -> "Исправление"
+        }
+        val time = revision.recordedAt?.let(stamp::format)
+        Text(listOfNotNull(label, time).joinToString(" · "), style = MaterialTheme.typography.labelMedium)
+        Text(value.description)
+        Text("${value.date.format(DayFormat)} · ${money(value.displayedAmount())} · ${value.accountCaption(snapshot)}")
+        if (value.feeMinor != 0L) Text("Комиссия ${money(value.feeMinor)}")
+    }
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
 }
 
 internal fun OperationKind.label(): String = when (this) {

@@ -48,6 +48,10 @@ internal data class OperationRow(
     )
 }
 
+internal fun Operation.toRow() = OperationRow(
+    id, kind.wireName, date.toString(), accountId, amountMinor, description, destinationId, feeMinor,
+)
+
 @Dao
 internal interface LedgerDao {
     @Query("SELECT * FROM ledger_accounts ORDER BY sortOrder")
@@ -55,6 +59,9 @@ internal interface LedgerDao {
 
     @Query("SELECT * FROM ledger_operations")
     suspend fun operations(): List<OperationRow>
+
+    @Query("SELECT * FROM ledger_operations WHERE id = :id LIMIT 1")
+    suspend fun original(id: String): OperationRow?
 
     @Insert
     suspend fun insertAccounts(accounts: List<AccountRow>)

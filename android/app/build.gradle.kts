@@ -13,8 +13,8 @@ android {
         applicationId = "ru.crown.finance.preview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.0-dev2"
+        versionCode = 3
+        versionName = "0.1.0-dev3"
     }
 
     buildFeatures { compose = true }

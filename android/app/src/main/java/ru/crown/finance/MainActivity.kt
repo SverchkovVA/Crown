@@ -162,6 +162,11 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     fun addOperation(operation: Operation, saved: () -> Unit) =
         change(saved) { update(YearMonth.from(operation.date)) { addOperation(operation) } }
 
+    fun reviseOperation(original: Operation, replacement: Operation?, saved: () -> Unit) {
+        val month = YearMonth.from(replacement?.date ?: original.date)
+        change(saved) { update(month) { reviseOperation(original.id, replacement) } }
+    }
+
     private fun change(saved: () -> Unit = {}, action: suspend BookSession.() -> LedgerSnapshot) {
         val current = mutableState.value as? Workspace.Book ?: return
         val book = session ?: return
@@ -218,7 +223,7 @@ class MainActivity : ComponentActivity() {
                                 DemoState.Ready(workspace.snapshot), {}, workspace.name, { model.closeBook() },
                                 BookCommands(
                                     workspace.busy, workspace.error, model::clearError, model::changeMonth,
-                                    model::addAccount, model::addOperation,
+                                    model::addAccount, model::addOperation, model::reviseOperation,
                                 ),
                             )
                         }

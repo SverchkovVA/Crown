@@ -16,6 +16,7 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.UUID
@@ -32,10 +33,15 @@ internal interface BookIdentityDao {
     suspend fun insert(book: BookRow)
 }
 
-@Database(entities = [BookRow::class, AccountRow::class, OperationRow::class], version = 1, exportSchema = true)
+@Database(
+    entities = [BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class],
+    version = 2,
+    exportSchema = true,
+)
 internal abstract class BookDatabase : RoomDatabase() {
     abstract fun identity(): BookIdentityDao
     abstract fun ledger(): LedgerDao
+    abstract fun revisions(): RevisionDao
 }
 
 internal class BookRepository(context: Context) {
@@ -114,6 +120,7 @@ internal class BookRepository(context: Context) {
             System.loadLibrary("sqlcipher")
             database = Room.databaseBuilder(app, BookDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory(material))
+                .addMigrations(historyMigration)
                 .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
                 .build()
             database.openHelper.writableDatabase.query("PRAGMA cipher_version").use { cursor ->
@@ -136,7 +143,12 @@ internal class BookSession(
     private val dao get() = db.ledger()
 
     suspend fun snapshot(month: YearMonth): LedgerSnapshot = db.withTransaction {
-        LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), dao.operations().map(OperationRow::toOperation))
+        val history = assembleHistory(
+            dao.operations().map(OperationRow::toOperation),
+            db.revisions().all().map(RevisionRow::toRevision),
+        )
+        val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
+        LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(history = history)
     }
 
     suspend fun update(month: YearMonth, change: suspend () -> Unit): LedgerSnapshot = db.withTransaction {
@@ -164,10 +176,24 @@ internal class BookSession(
 
     suspend fun addOperation(operation: Operation) = db.withTransaction {
         require(operation.kind != OperationKind.Opening)
-        dao.insertOperations(listOf(OperationRow(
-            operation.id, operation.kind.wireName, operation.date.toString(), operation.accountId,
-            operation.amountMinor, operation.description, operation.destinationId, operation.feeMinor,
-        )))
+        dao.insertOperations(listOf(operation.toRow()))
+    }
+
+    suspend fun reviseOperation(id: String, replacement: Operation?) = db.withTransaction {
+        val original = requireNotNull(dao.original(id)) { "Операция не найдена" }
+        val revision = db.revisions().latest(id)
+        require(revision?.cancelled != true) { "Операция уже отменена" }
+        val current = revision?.value?.toOperation() ?: original.toOperation()
+        val next = replacement ?: current
+        require(next.id == id && current.kind != OperationKind.Opening && next.kind != OperationKind.Opening)
+        val ids = dao.accounts().map(AccountRow::id).toSet()
+        require(next.accountId in ids && (next.destinationId == null || next.destinationId in ids)) {
+            "Выберите счета из открытой книги"
+        }
+        require(replacement == null || replacement != current) { "Поля операции не изменились" }
+        db.revisions().insert(
+            RevisionRow(recordedAt = Instant.now().toEpochMilli(), cancelled = replacement == null, value = next.toRow()),
+        )
     }
 
     override fun close() {

@@ -15,6 +15,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +29,7 @@ import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.parseMinor
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -41,6 +43,7 @@ internal data class BookCommands(
     val changeMonth: (Int) -> Unit,
     val addAccount: (String, Long, LocalDate, () -> Unit) -> Unit,
     val addOperation: (Operation, () -> Unit) -> Unit,
+    val reviseOperation: (Operation, Operation?, () -> Unit) -> Unit,
 )
 
 private val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
@@ -54,27 +57,25 @@ internal fun AccountEditor(month: YearMonth, commands: BookCommands, close: () -
     var opening by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(defaultDate(month)) }
     var error by remember { mutableStateOf<String?>(null) }
-    Editor("Новый счёт", commands, error, close) {
+    Editor(
+        "Новый счёт", commands, error, close, "Сохранить счёт",
+        submit = {
+            val amount = if (opening.isBlank()) 0L else parseMinor(opening, signed = true)
+            val day = dateValue(date)
+            error = when {
+                name.isBlank() -> "Введите название счёта"
+                amount == null -> "Проверьте начальный остаток"
+                day == null -> "Введите дату в формате ДД.ММ.ГГГГ"
+                else -> null
+            }
+            if (error == null && amount != null && day != null) {
+                commands.addAccount(name, amount, day, close)
+            }
+        },
+    ) {
         Entry(name, { name = it.take(100) }, "Название счёта", commands.busy)
         Entry(opening, { opening = it.take(24) }, "Начальный остаток, ₽", commands.busy, KeyboardType.Decimal)
         Entry(date, { date = it.take(10) }, "Дата остатка · ДД.ММ.ГГГГ", commands.busy)
-        Button(
-            onClick = {
-                val amount = if (opening.isBlank()) 0L else parseMinor(opening, signed = true)
-                val day = dateValue(date)
-                val problem = when {
-                    name.isBlank() -> "Введите название счёта"
-                    amount == null -> "Проверьте начальный остаток"
-                    day == null -> "Введите дату в формате ДД.ММ.ГГГГ"
-                    else -> null
-                }
-                error = problem
-                if (problem == null && amount != null && day != null) {
-                    commands.addAccount(name, amount, day, close)
-                }
-            },
-            enabled = !commands.busy, modifier = Modifier.fillMaxWidth(),
-        ) { Text("Сохранить счёт") }
     }
 }
 
@@ -85,21 +86,50 @@ internal fun OperationEditor(
     preferredAccount: String?,
     commands: BookCommands,
     close: () -> Unit,
+    existing: Operation? = null,
 ) {
     val kinds = remember(accounts.size) {
         if (accounts.size >= 2) listOf(OperationKind.Expense, OperationKind.Income, OperationKind.Transfer)
         else listOf(OperationKind.Expense, OperationKind.Income)
     }
-    var kind by remember { mutableStateOf(OperationKind.Expense) }
-    var origin by remember { mutableStateOf(preferredAccount ?: accounts.first().account.id) }
-    var destination by remember { mutableStateOf<String?>(null) }
-    var amount by remember { mutableStateOf("") }
-    var fee by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf(defaultDate(month)) }
-    var description by remember { mutableStateOf("") }
+    var kind by remember { mutableStateOf(existing?.kind ?: OperationKind.Expense) }
+    var origin by remember { mutableStateOf(existing?.accountId ?: preferredAccount ?: accounts.first().account.id) }
+    var destination by remember { mutableStateOf(existing?.destinationId) }
+    var amount by remember { mutableStateOf(existing?.let { amountText(it.amountMinor) }.orEmpty()) }
+    var fee by remember { mutableStateOf(existing?.feeMinor?.takeIf { it > 0 }?.let(::amountText).orEmpty()) }
+    var date by remember { mutableStateOf(existing?.date?.format(datePattern) ?: defaultDate(month)) }
+    var description by remember { mutableStateOf(existing?.description.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     val transfer = kind == OperationKind.Transfer
-    Editor("Новая операция", commands, error, close) {
+    Editor(
+        if (existing == null) "Новая операция" else "Исправление операции",
+        commands, error, close, "Сохранить операцию",
+        submit = {
+            val minor = parseMinor(amount)
+            val commission = if (!transfer || fee.isBlank()) 0L else parseMinor(fee)
+            val day = dateValue(date)
+            error = when {
+                minor == null || minor <= 0 -> "Введите положительную сумму"
+                commission == null -> "Проверьте сумму комиссии"
+                transfer && commission > Long.MAX_VALUE - minor -> "Сумма с комиссией слишком велика"
+                day == null -> "Введите дату в формате ДД.ММ.ГГГГ"
+                transfer && destination == null -> "Выберите счёт зачисления"
+                else -> null
+            }
+            if (error == null && minor != null && commission != null && day != null) {
+                val operation = Operation(
+                    existing?.id ?: UUID.randomUUID().toString(), kind, day, origin,
+                    minor, description.trim().ifBlank { kind.label() },
+                    destination.takeIf { transfer }, commission,
+                )
+                if (existing == null) {
+                    commands.addOperation(operation, close)
+                } else {
+                    commands.reviseOperation(existing, operation, close)
+                }
+            }
+        },
+    ) {
         Choice("Вид операции", kind, kinds, OperationKind::label, !commands.busy) { kind = it }
         Choice(
             if (transfer) "Со счёта" else "Счёт", origin,
@@ -119,33 +149,6 @@ internal fun OperationEditor(
         if (transfer) Entry(fee, { fee = it.take(24) }, "Комиссия, ₽", commands.busy, KeyboardType.Decimal)
         Entry(date, { date = it.take(10) }, "Дата · ДД.ММ.ГГГГ", commands.busy)
         Entry(description, { description = it.take(200) }, "Описание", commands.busy)
-        Button(
-            onClick = {
-                val minor = parseMinor(amount)
-                val commission = if (!transfer || fee.isBlank()) 0L else parseMinor(fee)
-                val day = dateValue(date)
-                val problem = when {
-                    minor == null || minor <= 0 -> "Введите положительную сумму"
-                    commission == null -> "Проверьте сумму комиссии"
-                    transfer && commission > Long.MAX_VALUE - minor -> "Сумма с комиссией слишком велика"
-                    day == null -> "Введите дату в формате ДД.ММ.ГГГГ"
-                    transfer && destination == null -> "Выберите счёт зачисления"
-                    else -> null
-                }
-                error = problem
-                if (problem == null && minor != null && commission != null && day != null) {
-                    commands.addOperation(
-                        Operation(
-                            UUID.randomUUID().toString(), kind, day, origin,
-                            minor, description.trim().ifBlank { kind.label() },
-                            destination.takeIf { transfer }, commission,
-                        ),
-                        close,
-                    )
-                }
-            },
-            enabled = !commands.busy, modifier = Modifier.fillMaxWidth(),
-        ) { Text("Сохранить операцию") }
     }
 }
 
@@ -156,18 +159,26 @@ private fun Editor(
     commands: BookCommands,
     error: String?,
     close: () -> Unit,
+    submitLabel: String,
+    submit: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = { if (!commands.busy) close() }) {
+    ModalBottomSheet(
+        onDismissRequest = { if (!commands.busy) close() },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
-            Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 24.dp),
+            Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             WorkspaceTitle(title)
-            content()
+            Column(
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) { content() }
             (error ?: commands.error)?.let { FormError(it) }
             if (commands.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            Button(submit, Modifier.fillMaxWidth(), enabled = !commands.busy) { Text(submitLabel) }
         }
     }
 }
@@ -197,6 +208,8 @@ private fun <T> Choice(
         }
     }
 }
+
+private fun amountText(minor: Long): String = BigDecimal.valueOf(minor, 2).toPlainString()
 
 private fun defaultDate(month: YearMonth): String {
     val today = LocalDate.now()
