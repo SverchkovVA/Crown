@@ -1,16 +1,23 @@
 package ru.crown.finance
 
 import android.app.Application
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -35,7 +42,13 @@ internal sealed interface DemoState {
 }
 
 internal sealed interface Workspace {
-    data class Access(val exists: Boolean, val busy: Boolean = false, val error: String? = null) : Workspace
+    data class Access(
+        val exists: Boolean,
+        val busy: Boolean = false,
+        val error: String? = null,
+        val message: String? = null,
+        val restoreFile: Uri? = null,
+    ) : Workspace
     data class Demo(val content: DemoState) : Workspace
     data class Book(
         val name: String,
@@ -43,14 +56,17 @@ internal sealed interface Workspace {
         val recoveryCode: String? = null,
         val busy: Boolean = false,
         val error: String? = null,
+        val message: String? = null,
     ) : Workspace
 }
 
 internal class CrownViewModel(application: Application) : AndroidViewModel(application) {
+    private val documents = application.contentResolver
     private val repository = BookRepository(application)
     private val demo = DemoRepository(application)
     private var session: BookSession? = null
     private var lockRequested = false
+    private var pendingBackup: ByteArray? = null
     private val mutableState = MutableStateFlow<Workspace>(Workspace.Access(repository.exists))
     val state = mutableState.asStateFlow()
 
@@ -94,7 +110,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
             credential.fill(' ')
             return
         }
-        mutableState.value = access.copy(busy = true, error = null)
+        mutableState.value = access.copy(busy = true, error = null, message = null)
         lockRequested = false
         viewModelScope.launch {
             var candidate: BookSession? = null
@@ -112,12 +128,120 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                mutableState.value = Workspace.Access(repository.exists, error = failure)
+                val bookExists = repository.exists
+                mutableState.value = access.copy(
+                    exists = bookExists, busy = false, error = failure,
+                    restoreFile = access.restoreFile.takeUnless { bookExists },
+                )
             } catch (_: LinkageError) {
                 mutableState.value = Workspace.Access(repository.exists, error = "Недоступно шифрованное хранилище")
             } finally {
                 candidate?.close()
                 credential.fill(' ')
+            }
+        }
+    }
+
+    fun fileManagerError(error: String) {
+        val current = mutableState.value as? Workspace.Access ?: return
+        mutableState.value = current.copy(error = error)
+    }
+
+    fun setRestoreFile(file: Uri?) {
+        val state = mutableState.value as? Workspace.Access ?: return
+        if (state.busy || state.exists || (file != null && file.scheme != "content")) return
+        mutableState.value = state.copy(restoreFile = file, error = null, message = null)
+    }
+
+    fun restore(backupPassword: CharArray, newPassword: CharArray) {
+        val current = mutableState.value as? Workspace.Access
+        val file = current?.restoreFile
+        if (file == null || current.exists || current.busy) {
+            backupPassword.fill(' ')
+            newPassword.fill(' ')
+            return
+        }
+        access(newPassword, "Не удалось восстановить книгу. Проверьте файл и пароль копии.") {
+            try {
+                repository.restore(newPassword, backupPassword) { checkNotNull(documents.openInputStream(file)) }
+            } finally {
+                backupPassword.fill(' ')
+            }
+        }
+    }
+
+    fun prepareBackup(password: CharArray, chooseDestination: () -> Boolean) {
+        val current = mutableState.value as? Workspace.Book
+        val book = session
+        if (current == null || book == null || current.busy || pendingBackup != null) {
+            password.fill(' ')
+            return
+        }
+        mutableState.value = current.copy(busy = true, error = null, message = null)
+        lockRequested = false
+        viewModelScope.launch {
+            try {
+                val encrypted = book.backup(password)
+                mutableState.value = current.copy(error = null, message = null)
+                if (lockRequested) {
+                    encrypted.fill(0)
+                } else {
+                    pendingBackup = encrypted
+                    if (!chooseDestination()) {
+                        pendingBackup = null
+                        encrypted.fill(0)
+                        mutableState.value = current.copy(error = "Файловый менеджер недоступен")
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.value = current.copy(error = "Не удалось подготовить копию книги")
+            } finally {
+                password.fill(' ')
+                if (lockRequested) closeBook()
+            }
+        }
+    }
+
+    fun saveBackup(file: Uri?) {
+        val encrypted = pendingBackup ?: return
+        pendingBackup = null
+        if (file?.scheme != "content") {
+            encrypted.fill(0)
+            return
+        }
+        val access = mutableState.value as? Workspace.Access
+        if (access != null) mutableState.value = access.copy(busy = true, error = null, message = null)
+        viewModelScope.launch {
+            var success = false
+            try {
+                withContext(Dispatchers.IO) {
+                    val descriptor = checkNotNull(documents.openFileDescriptor(file, "rw"))
+                    ParcelFileDescriptor.AutoCloseOutputStream(descriptor).use { stream ->
+                        check(descriptor.statSize == 0L)
+                        stream.write(encrypted)
+                        stream.flush()
+                    }
+                }
+                success = true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // Книга остаётся открываемой даже при сбое файлового провайдера.
+            } finally {
+                encrypted.fill(0)
+            }
+            val message = "Зашифрованная копия сохранена"
+            val error = "Не удалось записать копию в выбранный файл"
+            when (val current = mutableState.value) {
+                is Workspace.Access -> mutableState.value = current.copy(
+                    busy = false, message = message.takeIf { success }, error = error.takeUnless { success },
+                )
+                is Workspace.Book -> mutableState.value = current.copy(
+                    message = message.takeIf { success }, error = error.takeUnless { success },
+                )
+                else -> Unit
             }
         }
     }
@@ -193,6 +317,8 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     }
 
     override fun onCleared() {
+        pendingBackup?.fill(0)
+        pendingBackup = null
         try {
             session?.close()
         } finally {
@@ -203,6 +329,12 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
 
 class MainActivity : ComponentActivity() {
     private val model by viewModels<CrownViewModel>()
+    private val writeCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        model.saveBackup(result.data?.data.takeIf { result.resultCode == RESULT_OK })
+    }
+    private val readCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) model.setRestoreFile(result.data?.data)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -212,7 +344,12 @@ class MainActivity : ComponentActivity() {
             val workspace = model.state.collectAsStateWithLifecycle().value
             CrownTheme {
                 when (workspace) {
-                    is Workspace.Access -> AccessScreen(workspace, model::create, model::open, model::showDemo)
+                    is Workspace.Access -> AccessScreen(
+                        workspace, model::create, model::open, model::showDemo,
+                        chooseBackup = ::chooseCopy,
+                        cancelRestore = { model.setRestoreFile(null) },
+                        restore = model::restore,
+                    )
                     is Workspace.Demo -> FinanceScreen(workspace.content, model::showDemo, "Учебная книга", { model.closeBook() })
                     is Workspace.Book -> {
                         val code = workspace.recoveryCode
@@ -224,7 +361,9 @@ class MainActivity : ComponentActivity() {
                                 BookCommands(
                                     workspace.busy, workspace.error, model::clearError, model::changeMonth,
                                     model::addAccount, model::addOperation, model::reviseOperation,
+                                    backup = { password -> model.prepareBackup(password, ::createCopy) },
                                 ),
+                                notice = workspace.message,
                             )
                         }
                     }
@@ -232,6 +371,35 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private fun createCopy(): Boolean {
+        val intent = localDocument(Intent.ACTION_CREATE_DOCUMENT)
+            .putExtra(Intent.EXTRA_TITLE, "Crown-Android.crowncopy")
+        return try {
+            writeCopy.launch(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
+    private fun chooseCopy() {
+        val error = "Не удалось открыть файловый менеджер"
+        try {
+            readCopy.launch(localDocument(Intent.ACTION_OPEN_DOCUMENT))
+        } catch (_: ActivityNotFoundException) {
+            model.fileManagerError(error)
+        } catch (_: SecurityException) {
+            model.fileManagerError(error)
+        }
+    }
+
+    private fun localDocument(action: String) = Intent(action)
+        .addCategory(Intent.CATEGORY_OPENABLE)
+        .setType("application/octet-stream")
+        .putExtra(Intent.EXTRA_LOCAL_ONLY, true)
 
     override fun onStop() {
         super.onStop()

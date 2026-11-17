@@ -39,7 +39,14 @@ internal fun AccessScreen(
     create: (String, CharArray) -> Unit,
     open: (CharArray, Boolean) -> Unit,
     demo: () -> Unit,
+    chooseBackup: () -> Unit,
+    cancelRestore: () -> Unit,
+    restore: (CharArray, CharArray) -> Unit,
 ) {
+    if (state.restoreFile != null) {
+        RestoreForm(state, cancelRestore, restore)
+        return
+    }
     var title by remember { mutableStateOf("") }
     var secret by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
@@ -70,6 +77,7 @@ internal fun AccessScreen(
         }
         if (mismatch) FormError("Парольные фразы различаются")
         state.error?.let { FormError(it) }
+        state.message?.let { StatusText(it) }
         Button(
             onClick = {
                 if (!state.exists && secret != confirmation) {
@@ -96,8 +104,57 @@ internal fun AccessScreen(
                 Text(if (recovery) "Ввести парольную фразу" else "Войти по коду восстановления")
             }
         }
+        if (!state.exists) {
+            TextButton(chooseBackup, enabled = !state.busy) { Text("Восстановить книгу из копии") }
+        }
         OutlinedButton(demo, Modifier.fillMaxWidth(), enabled = !state.busy) { Text("Учебная книга") }
     }
+}
+
+@Composable
+private fun RestoreForm(
+    state: Workspace.Access,
+    cancel: () -> Unit,
+    restore: (CharArray, CharArray) -> Unit,
+) {
+    var backup by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    var mismatch by remember { mutableStateOf(false) }
+    WorkspaceSurface {
+        WorkspaceTitle("Восстановление книги")
+        SecretField(backup, { backup = it }, "Пароль копии", state.busy)
+        SecretField(password, { password = it }, "Новая парольная фраза", state.busy)
+        SecretField(confirmation, { confirmation = it }, "Повторите новую фразу", state.busy)
+        if (mismatch && password != confirmation) FormError("Парольные фразы различаются")
+        state.error?.let { FormError(it) }
+        Button(
+            onClick = {
+                if (password != confirmation) {
+                    mismatch = true
+                } else {
+                    val backupSecret = backup.toCharArray()
+                    val newSecret = password.toCharArray()
+                    backup = ""
+                    password = ""
+                    confirmation = ""
+                    restore(backupSecret, newSecret)
+                }
+            },
+            enabled = !state.busy && backup.isNotEmpty() && password.isNotEmpty() && confirmation.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Восстановить книгу") }
+        if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        TextButton(cancel, enabled = !state.busy) { Text("Назад") }
+    }
+}
+
+@Composable
+internal fun StatusText(message: String) {
+    Text(
+        message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium,
+    )
 }
 
 @Composable
@@ -155,7 +212,7 @@ internal fun Entry(
 }
 
 @Composable
-private fun SecretField(value: String, change: (String) -> Unit, label: String, busy: Boolean) {
+internal fun SecretField(value: String, change: (String) -> Unit, label: String, busy: Boolean) {
     OutlinedTextField(
         value, { change(it.take(1024)) }, Modifier.fillMaxWidth(),
         label = { Text(label) }, enabled = !busy, singleLine = true,

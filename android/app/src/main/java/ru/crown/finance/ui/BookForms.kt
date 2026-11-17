@@ -44,6 +44,7 @@ internal data class BookCommands(
     val addAccount: (String, Long, LocalDate, () -> Unit) -> Unit,
     val addOperation: (Operation, () -> Unit) -> Unit,
     val reviseOperation: (Operation, Operation?, () -> Unit) -> Unit,
+    val backup: (CharArray) -> Unit,
 )
 
 private val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

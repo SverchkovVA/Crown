@@ -35,6 +35,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +84,7 @@ private enum class Section(val title: String, val icon: Int) {
     Operations("Операции", R.drawable.ic_operations),
     Accounts("Счета", R.drawable.ic_accounts),
     History("История", R.drawable.ic_history),
+    Protection("Настройки", R.drawable.ic_protection),
 }
 
 @Composable
@@ -92,6 +94,7 @@ internal fun FinanceScreen(
     bookName: String,
     leave: () -> Unit,
     commands: BookCommands? = null,
+    notice: String? = null,
 ) {
     var tab by remember { mutableStateOf(Section.Operations.name) }
     var filterId by remember { mutableStateOf<String?>(null) }
@@ -124,12 +127,19 @@ internal fun FinanceScreen(
     }
 
     Scaffold(
-        topBar = { BookBar(bookName, leave) },
+        topBar = {
+            Column {
+                BookBar(bookName, leave)
+                if (notice != null) {
+                    Box(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) { StatusText(notice) }
+                }
+            }
+        },
         bottomBar = {
             if (snapshot != null) {
                 Surface(color = MaterialTheme.colorScheme.surface) {
                     Column {
-                        if (commands != null && section != Section.History) {
+                        if (commands != null && (section == Section.Accounts || section == Section.Operations)) {
                             val createAccount = section == Section.Accounts || snapshot.balances.isEmpty()
                             Button(
                                 onClick = {
@@ -146,7 +156,7 @@ internal fun FinanceScreen(
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
-                                if (destination == Section.History && commands == null) continue
+                                if (commands == null && (destination == Section.History || destination == Section.Protection)) continue
                                 NavigationBarItem(
                                     selected = section == destination,
                                     onClick = {
@@ -194,6 +204,10 @@ internal fun FinanceScreen(
                         tab = Section.Operations.name
                     }
                     Section.History -> HistoryPage(state.snapshot.history) { detailsId = it.id }
+                    Section.Protection -> ProtectionPage {
+                        commands?.clearError()
+                        editor = Section.Protection
+                    }
                 }
             }
         }
@@ -205,6 +219,7 @@ internal fun FinanceScreen(
             Section.Operations -> OperationEditor(
                 snapshot.balances, snapshot.month, filterId, commands, closeEditor, correction,
             )
+            Section.Protection -> BackupForm(commands, closeEditor)
             Section.History, null -> Unit
         }
     }
@@ -484,23 +499,34 @@ private fun OperationDetails(
 ) {
     var confirmCancellation by remember { mutableStateOf(false) }
     val cancelled = history?.current?.cancelled == true
-    ModalBottomSheet(onDismissRequest = { if (commands?.busy != true) close() }) {
+    ModalBottomSheet(
+        onDismissRequest = { if (commands?.busy != true) close() },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(start = 24.dp, end = 24.dp, bottom = 28.dp),
+            Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(operation.kind.label(), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-            Text(operation.description, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
-            Text(
-                money(operation.displayedAmount(), signed = operation.kind != OperationKind.Transfer),
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(operation.date.format(DayFormat), style = MaterialTheme.typography.bodyMedium)
-            Text(operation.accountCaption(snapshot), style = MaterialTheme.typography.bodyMedium)
-            if (operation.feeMinor != 0L) Text("Комиссия ${money(operation.feeMinor)}")
-            if (cancelled) FormError("Операция отменена")
-            if (history != null && history.revisions.size > 1) RevisionList(history, snapshot)
+            Column(
+                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    operation.kind.label(),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(operation.description, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    money(operation.displayedAmount(), signed = operation.kind != OperationKind.Transfer),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(operation.date.format(DayFormat), style = MaterialTheme.typography.bodyMedium)
+                Text(operation.accountCaption(snapshot), style = MaterialTheme.typography.bodyMedium)
+                if (operation.feeMinor != 0L) Text("Комиссия ${money(operation.feeMinor)}")
+                if (cancelled) FormError("Операция отменена")
+                if (history != null && history.revisions.size > 1) RevisionList(history, snapshot)
+            }
             if (commands != null && !cancelled && operation.kind != OperationKind.Opening) {
                 Button(onClick = edit, enabled = !commands.busy, modifier = Modifier.fillMaxWidth()) {
                     Text("Исправить")

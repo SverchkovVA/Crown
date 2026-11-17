@@ -3,8 +3,6 @@ package ru.crown.finance.ledger
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import org.bouncycastle.crypto.generators.Argon2BytesGenerator
-import org.bouncycastle.crypto.params.Argon2Parameters
 import org.json.JSONObject
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -36,7 +34,7 @@ internal class BookKeys {
         val recovery = randomBytes(KEY_SIZE)
         val database = randomBytes(KEY_SIZE)
         try {
-            val derived = derive(password, salt)
+            val derived = derivePasswordKey(password, salt)
             val passwordWrap = try {
                 seal(aesKey(derived), database, bookPurpose(id, CredentialKind.Password))
             } finally {
@@ -83,7 +81,7 @@ internal class BookKeys {
                 require(credential.isNotEmpty() && credential.size <= 1024)
                 val salt = decode(inner.getString("salt"))
                 require(salt.size == 16)
-                derive(credential, salt)
+                derivePasswordKey(credential, salt)
             }
             CredentialKind.Recovery -> {
                 require(credential.size <= 64)
@@ -109,19 +107,6 @@ internal class BookKeys {
         } finally {
             secret.fill(0)
         }
-    }
-
-    private fun derive(password: CharArray, salt: ByteArray): ByteArray {
-        val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
-            .withVersion(Argon2Parameters.ARGON2_VERSION_13)
-            .withMemoryAsKB(64 * 1024)
-            .withIterations(3)
-            .withParallelism(1)
-            .withSalt(salt)
-            .build()
-        val generator = Argon2BytesGenerator()
-        generator.init(params)
-        return ByteArray(KEY_SIZE).also { generator.generateBytes(password, it) }
     }
 }
 

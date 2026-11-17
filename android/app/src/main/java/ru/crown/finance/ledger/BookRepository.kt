@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import java.io.File
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.time.Instant
@@ -50,14 +51,31 @@ internal class BookRepository(context: Context) {
     private val keys = BookKeys()
     val exists get() = path.exists()
 
-    suspend fun create(name: String, password: CharArray): Pair<BookSession, String> = withContext(Dispatchers.IO) {
+    suspend fun create(name: String, password: CharArray): Pair<BookSession, String> =
+        create(name, password, null)
+
+    suspend fun restore(
+        newPassword: CharArray,
+        backupPassword: CharArray,
+        read: () -> InputStream,
+    ): Pair<BookSession, String> {
+        check(!exists)
+        val backup = withContext(Dispatchers.IO) { read().use { PortableBackup.open(it, backupPassword) } }
+        return create(backup.title, newPassword, backup)
+    }
+
+    private suspend fun create(
+        name: String,
+        password: CharArray,
+        backup: BackupLedger?,
+    ): Pair<BookSession, String> = withContext(Dispatchers.IO) {
         check(!exists)
         require(name.trim().length in 1..100)
         val staging = Files.createTempDirectory(path.parentFile!!.toPath(), "book-stage-").toFile()
         try {
             val prepared = keys.create(password)
             try {
-                publish(staging, name.trim(), prepared)
+                publish(staging, name.trim(), prepared, backup)
                 openDatabase(prepared.id, prepared.key) to prepared.recoveryCode
             } finally {
                 prepared.key.fill(0)
@@ -67,11 +85,19 @@ internal class BookRepository(context: Context) {
         }
     }
 
-    private suspend fun publish(staging: File, title: String, prepared: BookKeys.Creation) {
+    private suspend fun publish(
+        staging: File,
+        title: String,
+        prepared: BookKeys.Creation,
+        backup: BackupLedger?,
+    ) {
         val material = prepared.key.copyOf()
         val database = connect(File(staging, "ledger.db"), material)
         try {
-            database.identity().insert(BookRow(prepared.id, title))
+            database.withTransaction {
+                database.identity().insert(BookRow(prepared.id, title))
+                if (backup != null) restoreLedger(database, backup)
+            }
         } finally {
             try {
                 database.close()
@@ -85,6 +111,22 @@ internal class BookRepository(context: Context) {
         }
         check(!exists)
         Files.move(staging.toPath(), path.toPath(), StandardCopyOption.ATOMIC_MOVE)
+    }
+
+    private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
+        database.ledger().insertAccounts(backup.accounts.mapIndexed { index, account ->
+            AccountRow(account.id, account.name, index)
+        })
+        database.ledger().insertOperations(backup.operations.map(Operation::toRow))
+        for (revision in backup.revisions) {
+            database.revisions().insert(
+                RevisionRow(
+                    recordedAt = requireNotNull(revision.recordedAt).toEpochMilli(),
+                    cancelled = revision.cancelled,
+                    value = revision.value.toRow(),
+                ),
+            )
+        }
     }
 
     suspend fun open(credential: CharArray, kind: CredentialKind): BookSession = withContext(Dispatchers.IO) {
@@ -149,6 +191,17 @@ internal class BookSession(
         )
         val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(history = history)
+    }
+
+    suspend fun backup(password: CharArray): ByteArray = withContext(Dispatchers.IO) {
+        val ledger = db.withTransaction {
+            BackupLedger(
+                identity.name, dao.accounts().map(AccountRow::toAccount),
+                dao.operations().map(OperationRow::toOperation),
+                db.revisions().all().map(RevisionRow::toRevision),
+            )
+        }
+        PortableBackup.seal(ledger, password)
     }
 
     suspend fun update(month: YearMonth, change: suspend () -> Unit): LedgerSnapshot = db.withTransaction {
