@@ -35,14 +35,15 @@ internal interface BookIdentityDao {
 }
 
 @Database(
-    entities = [BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class],
-    version = 2,
+    entities = [BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class],
+    version = 3,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
     abstract fun identity(): BookIdentityDao
     abstract fun ledger(): LedgerDao
     abstract fun revisions(): RevisionDao
+    abstract fun categories(): CategoryDao
 }
 
 internal class BookRepository(context: Context) {
@@ -117,6 +118,7 @@ internal class BookRepository(context: Context) {
         database.ledger().insertAccounts(backup.accounts.mapIndexed { index, account ->
             AccountRow(account.id, account.name, index)
         })
+        for (category in backup.categories) database.categories().insert(category.toRow())
         database.ledger().insertOperations(backup.operations.map(Operation::toRow))
         for (revision in backup.revisions) {
             database.revisions().insert(
@@ -162,7 +164,7 @@ internal class BookRepository(context: Context) {
             System.loadLibrary("sqlcipher")
             database = Room.databaseBuilder(app, BookDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory(material))
-                .addMigrations(historyMigration)
+                .addMigrations(historyMigration, categoriesMigration)
                 .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
                 .build()
             database.openHelper.writableDatabase.query("PRAGMA cipher_version").use { cursor ->
@@ -190,7 +192,9 @@ internal class BookSession(
             db.revisions().all().map(RevisionRow::toRevision),
         )
         val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
-        LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(history = history)
+        LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
+            history = history, categories = db.categories().all().map(CategoryRow::toCategory),
+        )
     }
 
     suspend fun backup(password: CharArray): ByteArray = withContext(Dispatchers.IO) {
@@ -199,6 +203,7 @@ internal class BookSession(
                 identity.name, dao.accounts().map(AccountRow::toAccount),
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
+                db.categories().all().map(CategoryRow::toCategory),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -229,6 +234,7 @@ internal class BookSession(
 
     suspend fun addOperation(operation: Operation) = db.withTransaction {
         require(operation.kind != OperationKind.Opening)
+        validateCategory(operation)
         dao.insertOperations(listOf(operation.toRow()))
     }
 
@@ -243,10 +249,27 @@ internal class BookSession(
         require(next.accountId in ids && (next.destinationId == null || next.destinationId in ids)) {
             "Выберите счета из открытой книги"
         }
+        validateCategory(next)
         require(replacement == null || replacement != current) { "Поля операции не изменились" }
         db.revisions().insert(
             RevisionRow(recordedAt = Instant.now().toEpochMilli(), cancelled = replacement == null, value = next.toRow()),
         )
+    }
+
+    suspend fun addCategory(name: String, kind: OperationKind) = db.withTransaction {
+        val title = name.trim()
+        require(title.length in 1..80) { "Введите название категории" }
+        require(db.categories().all().none { it.kind == kind.wireName && it.name.equals(title, ignoreCase = true) }) {
+            "Категория с таким названием уже есть"
+        }
+        db.categories().insert(Category(UUID.randomUUID().toString(), title, kind).toRow())
+    }
+
+    private suspend fun validateCategory(operation: Operation) {
+        val id = operation.categoryId ?: return
+        require(db.categories().find(id)?.kind == operation.kind.wireName) {
+            "Категория должна соответствовать виду операции"
+        }
     }
 
     override fun close() {

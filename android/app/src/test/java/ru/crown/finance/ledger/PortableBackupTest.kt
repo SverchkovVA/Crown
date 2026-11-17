@@ -11,7 +11,8 @@ import javax.crypto.AEADBadTagException
 class PortableBackupTest {
     private val expense = Operation("op", OperationKind.Expense, LocalDate.of(2026, 10, 15), "one", 725, "Учебная покупка")
     private val correct = "УчебныйПароль"
-    private val changed = expense.copy(amountMinor = 995)
+    private val category = Category("food", "Учебная категория", OperationKind.Expense)
+    private val changed = expense.copy(amountMinor = 995, categoryId = category.id)
     private val ledger = BackupLedger(
         "Учебная книга",
         listOf(Account("one", "Учебный счёт")),
@@ -20,6 +21,7 @@ class PortableBackupTest {
             Revision(changed, Instant.parse("2026-10-16T09:15:00Z")),
             Revision(changed, Instant.parse("2026-10-17T10:05:00Z"), cancelled = true),
         ),
+        listOf(category),
     )
 
     @Test
@@ -47,6 +49,9 @@ class PortableBackupTest {
     fun rejectsUnknownAccountsAndRevisionAfterCancellation() {
         assertThrows(IllegalArgumentException::class.java) {
             ledger.copy(accounts = emptyList()).validate()
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            ledger.copy(categories = emptyList()).validate()
         }
         assertThrows(IllegalArgumentException::class.java) {
             ledger.copy(

@@ -13,13 +13,14 @@ import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-private val signature = "CROWN-ANDROID-BACKUP\u0001".toByteArray(Charsets.US_ASCII)
+private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
+private const val CURRENT_VERSION: Byte = 2
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
 private const val MAX_ROWS = 100_000
 private const val MAX_PAYLOAD = 8 * 1024 * 1024
-private val headerBytes = signature.size + SALT_BYTES + IV_BYTES
+private val headerBytes = signature.size + 1 + SALT_BYTES + IV_BYTES
 private val random = SecureRandom()
 
 internal data class BackupLedger(
@@ -27,10 +28,15 @@ internal data class BackupLedger(
     val accounts: List<Account>,
     val operations: List<Operation>,
     val revisions: List<Revision>,
+    val categories: List<Category> = emptyList(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
         require(accounts.size <= MAX_ROWS && operations.size <= MAX_ROWS && revisions.size <= MAX_ROWS)
+        require(categories.size <= MAX_ROWS)
+        val kinds = categories.associate { it.id to it.kind }
+        require(kinds.size == categories.size)
+        require(categories.map { it.kind to it.name.lowercase() }.distinct().size == categories.size)
         val ids = accounts.map(Account::id).toSet()
         require(ids.size == accounts.size)
         require(accounts.all { it.id.length in 1..64 && it.name.isNotBlank() && it.name.length <= 100 })
@@ -38,7 +44,7 @@ internal data class BackupLedger(
         val current = mutableMapOf<String, Operation>()
         val cancelled = mutableSetOf<String>()
         for (operation in operations) {
-            operation.validate(ids)
+            operation.validate(ids, kinds)
             require(current.put(operation.id, operation) == null)
         }
         for (revision in revisions) {
@@ -46,7 +52,7 @@ internal data class BackupLedger(
             require(revision.recordedAt != null && value.id !in cancelled)
             val previous = requireNotNull(current[value.id])
             require(previous.kind != OperationKind.Opening && value.kind != OperationKind.Opening)
-            value.validate(ids)
+            value.validate(ids, kinds)
             if (revision.cancelled) {
                 require(value == previous)
                 cancelled.add(value.id)
@@ -57,10 +63,11 @@ internal data class BackupLedger(
         }
     }
 
-    private fun Operation.validate(knownAccounts: Set<String>) {
+    private fun Operation.validate(knownAccounts: Set<String>, kinds: Map<String, OperationKind>) {
         require(id.length in 1..64 && date.year in 1900..9999)
         require(description.isNotBlank() && description.length <= 200)
         require(accountId in knownAccounts && (destinationId == null || destinationId in knownAccounts))
+        require(categoryId == null || kinds[categoryId] == kind)
     }
 }
 
@@ -69,7 +76,7 @@ internal object PortableBackup {
         data.validate()
         val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
         val iv = ByteArray(IV_BYTES).also(random::nextBytes)
-        val header = signature + salt + iv
+        val header = signature + CURRENT_VERSION + salt + iv
         val bytes = encode(data)
         try {
             return header + crypt(Cipher.ENCRYPT_MODE, bytes, password, salt, iv, header)
@@ -83,13 +90,16 @@ internal object PortableBackup {
         val header = ByteArray(headerBytes)
         inFile.readFully(header)
         require(header.copyOfRange(0, signature.size).contentEquals(signature)) { "Неизвестный формат копии" }
-        val salt = header.copyOfRange(signature.size, signature.size + SALT_BYTES)
-        val iv = header.copyOfRange(signature.size + SALT_BYTES, headerBytes)
+        val version = header[signature.size].toInt()
+        require(version in 1..CURRENT_VERSION.toInt()) { "Неподдерживаемая версия копии" }
+        val saltStart = signature.size + 1
+        val salt = header.copyOfRange(saltStart, saltStart + SALT_BYTES)
+        val iv = header.copyOfRange(saltStart + SALT_BYTES, headerBytes)
         val encrypted = readBounded(inFile, MAX_PAYLOAD + TAG_BYTES)
         require(encrypted.size > TAG_BYTES)
         val bytes = crypt(Cipher.DECRYPT_MODE, encrypted, password, salt, iv, header)
         try {
-            return decode(bytes).also(BackupLedger::validate)
+            return decode(bytes, version).also(BackupLedger::validate)
         } finally {
             bytes.fill(0)
         }
@@ -125,6 +135,12 @@ internal object PortableBackup {
                     out.text(account.id)
                     out.text(account.name)
                 }
+                out.writeInt(data.categories.size)
+                for (category in data.categories) {
+                    out.text(category.id)
+                    out.text(category.name)
+                    out.text(category.kind.wireName)
+                }
                 out.writeInt(data.operations.size)
                 data.operations.forEach { out.operation(it) }
                 out.writeInt(data.revisions.size)
@@ -140,17 +156,22 @@ internal object PortableBackup {
         }
     }
 
-    private fun decode(bytes: ByteArray): BackupLedger = DataInputStream(ByteArrayInputStream(bytes)).use { data ->
+    private fun decode(bytes: ByteArray, version: Int): BackupLedger = DataInputStream(ByteArrayInputStream(bytes)).use { data ->
         val title = data.text()
         val accounts = List(data.count()) { Account(data.text(), data.text()) }
-        val operations = List(data.count()) { data.operation() }
+        val categories = if (version >= 2) {
+            List(data.count()) { Category(data.text(), data.text(), OperationKind.fromWireName(data.text())) }
+        } else {
+            emptyList()
+        }
+        val operations = List(data.count()) { data.operation(version) }
         val revisions = List(data.count()) {
             val recordedAt = Instant.ofEpochMilli(data.readLong())
             val cancelled = data.readBoolean()
-            Revision(data.operation(), recordedAt, cancelled)
+            Revision(data.operation(version), recordedAt, cancelled)
         }
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions)
+        BackupLedger(title, accounts, operations, revisions, categories)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {
@@ -177,11 +198,15 @@ private fun DataOutputStream.operation(value: Operation) {
     writeBoolean(destination != null)
     if (destination != null) text(destination)
     writeLong(value.feeMinor)
+    val category = value.categoryId
+    writeBoolean(category != null)
+    if (category != null) text(category)
 }
 
-private fun DataInputStream.operation() = Operation(
+private fun DataInputStream.operation(version: Int) = Operation(
     text(), OperationKind.fromWireName(text()), LocalDate.ofEpochDay(readLong()),
     text(), readLong(), text(), if (readBoolean()) text() else null, readLong(),
+    if (version >= 2 && readBoolean()) text() else null,
 )
 
 private fun DataInputStream.count(): Int = readInt().also { require(it in 0..MAX_ROWS) }

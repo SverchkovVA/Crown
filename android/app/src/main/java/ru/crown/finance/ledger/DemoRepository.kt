@@ -41,15 +41,16 @@ internal data class OperationRow(
     val description: String,
     val destinationId: String?,
     val feeMinor: Long,
+    val categoryId: String? = null,
 ) {
     fun toOperation() = Operation(
         id, OperationKind.fromWireName(kind), LocalDate.parse(date), accountId, amountMinor,
-        description, destinationId, feeMinor,
+        description, destinationId, feeMinor, categoryId,
     )
 }
 
 internal fun Operation.toRow() = OperationRow(
-    id, kind.wireName, date.toString(), accountId, amountMinor, description, destinationId, feeMinor,
+    id, kind.wireName, date.toString(), accountId, amountMinor, description, destinationId, feeMinor, categoryId,
 )
 
 @Dao

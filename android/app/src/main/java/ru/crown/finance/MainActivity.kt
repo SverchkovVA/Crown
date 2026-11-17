@@ -27,6 +27,7 @@ import ru.crown.finance.ledger.CredentialKind
 import ru.crown.finance.ledger.DemoRepository
 import ru.crown.finance.ledger.LedgerSnapshot
 import ru.crown.finance.ledger.Operation
+import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ui.AccessScreen
 import ru.crown.finance.ui.BookCommands
 import ru.crown.finance.ui.CrownTheme
@@ -291,6 +292,11 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         change(saved) { update(month) { reviseOperation(original.id, replacement) } }
     }
 
+    fun addCategory(name: String, kind: OperationKind, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { addCategory(name, kind) } }
+    }
+
     private fun change(saved: () -> Unit = {}, action: suspend BookSession.() -> LedgerSnapshot) {
         val current = mutableState.value as? Workspace.Book ?: return
         val book = session ?: return
@@ -362,6 +368,7 @@ class MainActivity : ComponentActivity() {
                                     workspace.busy, workspace.error, model::clearError, model::changeMonth,
                                     model::addAccount, model::addOperation, model::reviseOperation,
                                     backup = { password -> model.prepareBackup(password, ::createCopy) },
+                                    addCategory = model::addCategory,
                                 ),
                                 notice = workspace.message,
                             )

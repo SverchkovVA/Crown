@@ -10,6 +10,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,15 +20,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import ru.crown.finance.R
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun ProtectionPage(startBackup: () -> Unit) {
+internal fun ProtectionPage(startBackup: () -> Unit, openHistory: () -> Unit, openCategories: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         WorkspaceTitle("Настройки")
+        OutlinedButton(openCategories) { Text("Категории") }
+        OutlinedButton(openHistory) {
+            Icon(painterResource(R.drawable.ic_history), contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text("История изменений")
+        }
         Text("Защита и копии", style = MaterialTheme.typography.titleLarge)
         Text("Зашифрованную копию можно перенести на другой телефон и открыть с паролем копии.")
         Button(startBackup) { Text("Создать резервную копию") }

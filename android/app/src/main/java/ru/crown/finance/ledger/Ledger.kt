@@ -26,6 +26,7 @@ internal data class Operation(
     val description: String,
     val destinationId: String? = null,
     val feeMinor: Long = 0,
+    val categoryId: String? = null,
 ) {
     init {
         if (kind == OperationKind.Opening) {
@@ -34,6 +35,7 @@ internal data class Operation(
             require(amountMinor > 0)
         }
         require(feeMinor >= 0)
+        require(categoryId == null || (categoryId.length in 1..64 && kind in categoryKinds))
         if (kind == OperationKind.Transfer) {
             require(destinationId != null && destinationId != accountId)
             Math.addExact(amountMinor, feeMinor)
@@ -62,6 +64,7 @@ internal data class LedgerSnapshot(
     val incomeMinor: BigInteger,
     val expenseMinor: BigInteger,
     val history: List<OperationHistory> = emptyList(),
+    val categories: List<Category> = emptyList(),
 ) {
     val totalMinor: BigInteger = balances.fold(BigInteger.ZERO) { sum, balance -> sum + balance.minor }
 

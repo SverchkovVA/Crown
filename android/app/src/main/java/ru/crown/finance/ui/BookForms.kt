@@ -13,6 +13,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -26,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ru.crown.finance.ledger.AccountBalance
+import ru.crown.finance.ledger.Category
+import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.parseMinor
@@ -45,6 +48,7 @@ internal data class BookCommands(
     val addOperation: (Operation, () -> Unit) -> Unit,
     val reviseOperation: (Operation, Operation?, () -> Unit) -> Unit,
     val backup: (CharArray) -> Unit,
+    val addCategory: (String, OperationKind, () -> Unit) -> Unit,
 )
 
 private val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
@@ -83,6 +87,7 @@ internal fun AccountEditor(month: YearMonth, commands: BookCommands, close: () -
 @Composable
 internal fun OperationEditor(
     accounts: List<AccountBalance>,
+    categories: List<Category>,
     month: YearMonth,
     preferredAccount: String?,
     commands: BookCommands,
@@ -98,10 +103,12 @@ internal fun OperationEditor(
     var destination by remember { mutableStateOf(existing?.destinationId) }
     var amount by remember { mutableStateOf(existing?.let { amountText(it.amountMinor) }.orEmpty()) }
     var fee by remember { mutableStateOf(existing?.feeMinor?.takeIf { it > 0 }?.let(::amountText).orEmpty()) }
+    var category by remember { mutableStateOf(existing?.categoryId) }
     var date by remember { mutableStateOf(existing?.date?.format(datePattern) ?: defaultDate(month)) }
     var description by remember { mutableStateOf(existing?.description.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     val transfer = kind == OperationKind.Transfer
+    val availableCategories = categories.filter { it.kind == kind }
     Editor(
         if (existing == null) "Новая операция" else "Исправление операции",
         commands, error, close, "Сохранить операцию",
@@ -121,7 +128,7 @@ internal fun OperationEditor(
                 val operation = Operation(
                     existing?.id ?: UUID.randomUUID().toString(), kind, day, origin,
                     minor, description.trim().ifBlank { kind.label() },
-                    destination.takeIf { transfer }, commission,
+                    destination.takeIf { transfer }, commission, category,
                 )
                 if (existing == null) {
                     commands.addOperation(operation, close)
@@ -131,7 +138,10 @@ internal fun OperationEditor(
             }
         },
     ) {
-        Choice("Вид операции", kind, kinds, OperationKind::label, !commands.busy) { kind = it }
+        Choice("Вид операции", kind, kinds, OperationKind::label, !commands.busy) {
+            if (kind != it) category = null
+            kind = it
+        }
         Choice(
             if (transfer) "Со счёта" else "Счёт", origin,
             accounts.map { it.account.id }, { id -> accounts.first { it.account.id == id }.account.name },
@@ -150,6 +160,38 @@ internal fun OperationEditor(
         if (transfer) Entry(fee, { fee = it.take(24) }, "Комиссия, ₽", commands.busy, KeyboardType.Decimal)
         Entry(date, { date = it.take(10) }, "Дата · ДД.ММ.ГГГГ", commands.busy)
         Entry(description, { description = it.take(200) }, "Описание", commands.busy)
+        if (availableCategories.isNotEmpty()) {
+            val names = availableCategories.associate { it.id to it.name }
+            Choice("Категория", category, listOf(null) + names.keys, { names[it] ?: "Без категории" }, !commands.busy) {
+                category = it
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, close: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var kind by remember { mutableStateOf(OperationKind.Expense) }
+    var error by remember { mutableStateOf<String?>(null) }
+    Editor(
+        "Категории", commands, error, close, "Создать категорию",
+        submit = {
+            error = if (name.isBlank()) "Введите название категории" else null
+            if (error == null) commands.addCategory(name, kind) { name = "" }
+        },
+    ) {
+        Entry(name, { name = it.take(80) }, "Название новой категории", commands.busy)
+        Choice("Вид категории", kind, categoryKinds, OperationKind::label, !commands.busy) { kind = it }
+        if (categories.isNotEmpty()) {
+            for (type in categoryKinds) {
+                val names = categories.filter { it.kind == type }
+                if (names.isNotEmpty()) {
+                    Text(type.label(), style = MaterialTheme.typography.titleMedium)
+                    for (entry in names) Text(entry.name)
+                }
+            }
+        }
     }
 }
 

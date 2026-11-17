@@ -65,6 +65,7 @@ import ru.crown.finance.ledger.LedgerSnapshot
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.OperationHistory
+import ru.crown.finance.ledger.categoryTotals
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.text.NumberFormat
@@ -83,9 +84,12 @@ private val MoneyPanelLabel = Color(0xFFD1E9DE)
 private enum class Section(val title: String, val icon: Int) {
     Operations("Операции", R.drawable.ic_operations),
     Accounts("Счета", R.drawable.ic_accounts),
+    Reports("Отчёты", R.drawable.ic_reports),
     History("История", R.drawable.ic_history),
     Protection("Настройки", R.drawable.ic_protection),
 }
+
+private enum class EditorSection { Account, Operation, Backup, Categories }
 
 @Composable
 internal fun FinanceScreen(
@@ -99,7 +103,7 @@ internal fun FinanceScreen(
     var tab by remember { mutableStateOf(Section.Operations.name) }
     var filterId by remember { mutableStateOf<String?>(null) }
     var detailsId by remember { mutableStateOf<String?>(null) }
-    var editor by remember { mutableStateOf<Section?>(null) }
+    var editor by remember { mutableStateOf<EditorSection?>(null) }
     var correction by remember { mutableStateOf<Operation?>(null) }
     val closeDetails: () -> Unit = {
         detailsId = null
@@ -118,7 +122,9 @@ internal fun FinanceScreen(
     LaunchedEffect(filterId, snapshot?.month) { operationsScroll.scrollToItem(0) }
 
     BackHandler(detailsId == null && editor == null) {
-        if (section != Section.Operations || filterId != null) {
+        if (section == Section.History) {
+            tab = Section.Protection.name
+        } else if (section != Section.Operations || filterId != null) {
             tab = Section.Operations.name
             filterId = null
         } else {
@@ -144,7 +150,7 @@ internal fun FinanceScreen(
                             Button(
                                 onClick = {
                                     commands.clearError()
-                                    editor = if (createAccount) Section.Accounts else Section.Operations
+                                    editor = if (createAccount) EditorSection.Account else EditorSection.Operation
                                 },
                                 enabled = !commands.busy,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
@@ -156,7 +162,8 @@ internal fun FinanceScreen(
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
-                                if (commands == null && (destination == Section.History || destination == Section.Protection)) continue
+                                if (destination == Section.History) continue
+                                if (commands == null && destination in listOf(Section.Reports, Section.Protection)) continue
                                 NavigationBarItem(
                                     selected = section == destination,
                                     onClick = {
@@ -204,10 +211,18 @@ internal fun FinanceScreen(
                         tab = Section.Operations.name
                     }
                     Section.History -> HistoryPage(state.snapshot.history) { detailsId = it.id }
-                    Section.Protection -> ProtectionPage {
-                        commands?.clearError()
-                        editor = Section.Protection
-                    }
+                    Section.Reports -> ReportsPage(state.snapshot, commands)
+                    Section.Protection -> ProtectionPage(
+                        startBackup = {
+                            commands?.clearError()
+                            editor = EditorSection.Backup
+                        },
+                        openHistory = { tab = Section.History.name },
+                        openCategories = {
+                            commands?.clearError()
+                            editor = EditorSection.Categories
+                        },
+                    )
                 }
             }
         }
@@ -215,12 +230,13 @@ internal fun FinanceScreen(
 
     if (snapshot != null && commands != null) {
         when (editor) {
-            Section.Accounts -> AccountEditor(snapshot.month, commands, closeEditor)
-            Section.Operations -> OperationEditor(
-                snapshot.balances, snapshot.month, filterId, commands, closeEditor, correction,
+            EditorSection.Account -> AccountEditor(snapshot.month, commands, closeEditor)
+            EditorSection.Operation -> OperationEditor(
+                snapshot.balances, snapshot.categories, snapshot.month, filterId, commands, closeEditor, correction,
             )
-            Section.Protection -> BackupForm(commands, closeEditor)
-            Section.History, null -> Unit
+            EditorSection.Backup -> BackupForm(commands, closeEditor)
+            EditorSection.Categories -> CategoryEditor(snapshot.categories, commands, closeEditor)
+            null -> Unit
         }
     }
 
@@ -233,7 +249,7 @@ internal fun FinanceScreen(
                 edit = {
                     closeDetails()
                     correction = operation
-                    editor = Section.Operations
+                    editor = EditorSection.Operation
                 },
             )
         }
@@ -523,6 +539,7 @@ private fun OperationDetails(
                 )
                 Text(operation.date.format(DayFormat), style = MaterialTheme.typography.bodyMedium)
                 Text(operation.accountCaption(snapshot), style = MaterialTheme.typography.bodyMedium)
+                snapshot.categories.firstOrNull { it.id == operation.categoryId }?.let { Text(it.name) }
                 if (operation.feeMinor != 0L) Text("Комиссия ${money(operation.feeMinor)}")
                 if (cancelled) FormError("Операция отменена")
                 if (history != null && history.revisions.size > 1) RevisionList(history, snapshot)
@@ -558,6 +575,39 @@ private fun OperationDetails(
                 TextButton(onClick = { confirmCancellation = false }) { Text("Назад") }
             },
         )
+    }
+}
+
+@Composable
+private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?) {
+    val totals = remember(snapshot) { categoryTotals(snapshot) }
+    LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
+        item {
+            PageTitle("Отчёты", monthLabel(snapshot.month))
+            if (commands != null) MonthActions(commands)
+            Spacer(Modifier.height(12.dp))
+            BalancePanel("Остаток на конец месяца", snapshot.totalMinor, snapshot)
+            Spacer(Modifier.height(20.dp))
+            Text("По категориям", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge)
+        }
+        if (totals.isEmpty()) item { Text("За этот месяц поступлений и расходов нет") }
+        for ((kind, group) in totals.groupBy { it.kind }) {
+            item {
+                Text(
+                    if (kind == OperationKind.Income) "Поступления" else "Расходы",
+                    Modifier.padding(top = 12.dp, bottom = 4.dp).semantics { heading() },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            items(group) { row ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                    Text(row.name, style = MaterialTheme.typography.titleSmall)
+                    Text(money(row.minor), style = MaterialTheme.typography.bodyLarge)
+                }
+                HorizontalDivider()
+            }
+        }
     }
 }
 
@@ -602,6 +652,7 @@ private fun RevisionList(history: OperationHistory, snapshot: LedgerSnapshot) {
         val time = revision.recordedAt?.let(stamp::format)
         Text(listOfNotNull(label, time).joinToString(" · "), style = MaterialTheme.typography.labelMedium)
         Text(value.description)
+        snapshot.categories.firstOrNull { it.id == value.categoryId }?.let { Text(it.name) }
         Text("${value.date.format(DayFormat)} · ${money(value.displayedAmount())} · ${value.accountCaption(snapshot)}")
         if (value.feeMinor != 0L) Text("Комиссия ${money(value.feeMinor)}")
     }
