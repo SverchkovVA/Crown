@@ -61,9 +61,12 @@ internal class BookRepository(context: Context) {
         read: () -> InputStream,
     ): Pair<BookSession, String> {
         check(!exists)
-        val backup = withContext(Dispatchers.IO) { read().use { PortableBackup.open(it, backupPassword) } }
+        val backup = inspectBackup(backupPassword, read)
         return create(backup.title, newPassword, backup)
     }
+
+    suspend fun inspectBackup(password: CharArray, read: () -> InputStream): BackupLedger =
+        withContext(Dispatchers.IO) { read().use { PortableBackup.open(it, password) } }
 
     private suspend fun create(
         name: String,

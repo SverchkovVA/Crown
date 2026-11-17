@@ -226,6 +226,7 @@ internal fun FinanceScreen(
                             commands?.clearError()
                             editor = EditorSection.Categories
                         },
+                        inspectBackup = { commands?.inspectBackup?.invoke() },
                     )
                 }
             }

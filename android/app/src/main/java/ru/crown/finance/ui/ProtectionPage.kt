@@ -25,7 +25,12 @@ import ru.crown.finance.R
 import androidx.compose.ui.unit.dp
 
 @Composable
-internal fun ProtectionPage(startBackup: () -> Unit, openHistory: () -> Unit, openCategories: () -> Unit) {
+internal fun ProtectionPage(
+    startBackup: () -> Unit,
+    openHistory: () -> Unit,
+    openCategories: () -> Unit,
+    inspectBackup: () -> Unit,
+) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -39,6 +44,7 @@ internal fun ProtectionPage(startBackup: () -> Unit, openHistory: () -> Unit, op
         Text("Защита и копии", style = MaterialTheme.typography.titleLarge)
         Text("Зашифрованную копию можно перенести на другой телефон и открыть с паролем копии.")
         Button(startBackup) { Text("Создать резервную копию") }
+        OutlinedButton(inspectBackup) { Text("Проверить резервную копию") }
     }
 }
 

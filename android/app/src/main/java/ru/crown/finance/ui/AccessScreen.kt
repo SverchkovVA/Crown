@@ -42,7 +42,13 @@ internal fun AccessScreen(
     chooseBackup: () -> Unit,
     cancelRestore: () -> Unit,
     restore: (CharArray, CharArray) -> Unit,
+    cancelInspect: () -> Unit,
+    inspect: (CharArray) -> Unit,
 ) {
+    if (state.inspectFile != null) {
+        InspectCopyForm(state, cancelInspect, inspect)
+        return
+    }
     if (state.restoreFile != null) {
         RestoreForm(state, cancelRestore, restore)
         return
@@ -108,6 +114,32 @@ internal fun AccessScreen(
             TextButton(chooseBackup, enabled = !state.busy) { Text("Восстановить книгу из копии") }
         }
         OutlinedButton(demo, Modifier.fillMaxWidth(), enabled = !state.busy) { Text("Учебная книга") }
+    }
+}
+
+@Composable
+private fun InspectCopyForm(state: Workspace.Access, close: () -> Unit, inspect: (CharArray) -> Unit) {
+    var secret by remember { mutableStateOf("") }
+    WorkspaceSurface {
+        WorkspaceTitle("Проверка резервной копии")
+        if (state.message != null) {
+            StatusText(state.message)
+            Button(close, Modifier.fillMaxWidth()) { Text("Готово") }
+        } else {
+            SecretField(secret, { secret = it }, "Пароль копии", state.busy)
+            state.error?.let { FormError(it) }
+            Button(
+                onClick = {
+                    val password = secret.toCharArray()
+                    secret = ""
+                    inspect(password)
+                },
+                enabled = !state.busy && secret.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Проверить копию") }
+            if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            TextButton(close, enabled = !state.busy) { Text("Назад") }
+        }
     }
 }
 

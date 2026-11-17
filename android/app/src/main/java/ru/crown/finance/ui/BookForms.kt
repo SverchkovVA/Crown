@@ -52,6 +52,7 @@ internal data class BookCommands(
     val backup: (CharArray) -> Unit,
     val export: (JournalExport, JournalFormat) -> Unit,
     val addCategory: (String, OperationKind, () -> Unit) -> Unit,
+    val inspectBackup: () -> Unit,
 )
 
 private val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

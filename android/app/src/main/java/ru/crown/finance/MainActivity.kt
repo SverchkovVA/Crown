@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +52,7 @@ internal sealed interface Workspace {
         val error: String? = null,
         val message: String? = null,
         val restoreFile: Uri? = null,
+        val inspectFile: Uri? = null,
     ) : Workspace
     data class Demo(val content: DemoState) : Workspace
     data class Book(
@@ -182,6 +184,38 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 repository.restore(newPassword, backupPassword) { checkNotNull(documents.openInputStream(file)) }
             } finally {
                 backupPassword.fill(' ')
+            }
+        }
+    }
+
+    fun setInspectFile(file: Uri?) {
+        if (file != null && file.scheme != "content") return
+        if (file != null && mutableState.value is Workspace.Book) closeBook()
+        val current = mutableState.value as? Workspace.Access ?: return
+        if (current.busy) return
+        mutableState.value = current.copy(inspectFile = file, error = null, message = null)
+    }
+
+    fun inspectBackup(password: CharArray) {
+        val current = mutableState.value as? Workspace.Access
+        val file = current?.inspectFile
+        if (file == null || current.busy) {
+            password.fill(' ')
+            return
+        }
+        mutableState.value = current.copy(busy = true, error = null, message = null)
+        viewModelScope.launch {
+            try {
+                val copy = repository.inspectBackup(password) { checkNotNull(documents.openInputStream(file)) }
+                val totals = "Счета — ${copy.accounts.size}, операции — ${copy.operations.size}, " +
+                    "версии изменений — ${copy.revisions.size}, категории — ${copy.categories.size}."
+                mutableState.value = current.copy(message = "Копия проверена. $totals", error = null)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                mutableState.value = current.copy(message = null, error = "Не удалось проверить копию. Проверьте файл и пароль.")
+            } finally {
+                password.fill(' ')
             }
         }
     }
@@ -380,6 +414,10 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) model.setRestoreFile(result.data?.data)
     }
 
+    private val verifyCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) model.setInspectFile(result.data?.data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -393,6 +431,8 @@ class MainActivity : ComponentActivity() {
                         chooseBackup = ::chooseCopy,
                         cancelRestore = { model.setRestoreFile(null) },
                         restore = model::restore,
+                        cancelInspect = { model.setInspectFile(null) },
+                        inspect = model::inspectBackup,
                     )
                     is Workspace.Demo -> FinanceScreen(workspace.content, model::showDemo, "Учебная книга", { model.closeBook() })
                     is Workspace.Book -> {
@@ -408,6 +448,7 @@ class MainActivity : ComponentActivity() {
                                     backup = { password -> model.prepareBackup(password, ::createFile) },
                                     export = { preview, format -> model.prepareExport(preview, format, ::createFile) },
                                     addCategory = model::addCategory,
+                                    inspectBackup = { openCopy(verifyCopy) },
                                 ),
                                 notice = workspace.message,
                             )
@@ -432,10 +473,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun chooseCopy() {
+    private fun chooseCopy() = openCopy(readCopy)
+
+    private fun openCopy(launcher: ActivityResultLauncher<Intent>) {
         val error = "Не удалось открыть файловый менеджер"
         try {
-            readCopy.launch(localDocument(Intent.ACTION_OPEN_DOCUMENT))
+            launcher.launch(localDocument(Intent.ACTION_OPEN_DOCUMENT))
         } catch (_: ActivityNotFoundException) {
             model.fileManagerError(error)
         } catch (_: SecurityException) {
