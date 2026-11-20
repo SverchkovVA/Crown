@@ -21,7 +21,8 @@ docs/roadmap.md. Не объявлять готовность по наличи�
 
 Windows 11 x64; Python 3.13, PySide6 Widgets, SQLAlchemy/Alembic, SQLCipher.
 Согласованные архитектурные решения: docs/architecture.md и docs/adr/.
-Android: Kotlin/Compose/Room в будущем. Котировки российских акций, облигаций и
+Android: Kotlin/Compose/Room; текущее состояние — docs/stage-10-android-ledger.md.
+Котировки российских акций, облигаций и
 фондов — только по явной кнопке «Обновить цены» на соответствующем этапе.
 Самостоятельно стек не менять. Не расширять функциональность без согласования.
 
