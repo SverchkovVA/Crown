@@ -283,6 +283,37 @@ class JournalUiTest {
         rule.runOnIdle { assertEquals(LocalDate.of(2024, 2, 29), savedDate) }
     }
 
+    @Test
+    fun journalSearchAndCategoryFilterCanBeCleared() {
+        val opening = Operation("opening", OperationKind.Opening, date.withDayOfMonth(1), "main", -500, "Начальный долг")
+        val searchSnapshot = LedgerSnapshot.from(
+            snapshot.month, snapshot.balances.map { it.account }, listOf(purchase, opening),
+        ).copy(categories = snapshot.categories)
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                FinanceScreen(DemoState.Ready(searchSnapshot), {}, "Учебная", {}, commands())
+            } }
+        }
+        rule.onNodeWithText("Поиск и фильтры").performClick()
+        rule.onNode(hasText("Поиск по описанию, счёту или категории") and hasSetTextAction())
+            .performTextReplacement("Ничего похожего")
+        rule.onNodeWithTag("operations-list").performScrollToNode(hasText("По выбранным условиям операций нет"))
+        rule.onNodeWithText("По выбранным условиям операций нет").assertIsDisplayed()
+        rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Сбросить поиск и фильтры"))
+        rule.onNodeWithText("Сбросить поиск и фильтры").performClick()
+        rule.onNodeWithText("Выбрать: категория").performClick()
+        rule.onNodeWithText("Продукты").performClick()
+        rule.onNodeWithText("Найдено операций: 1 из 2").assertIsDisplayed()
+        saveImage("journal-filters", editor = false)
+        rule.onNodeWithText("Сбросить поиск и фильтры").performClick()
+        rule.onNodeWithText("Поиск и фильтры").assertIsDisplayed()
+        rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Начальный долг"))
+        rule.onNodeWithText("Начальный долг").assertIsDisplayed()
+        rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Учебная покупка"))
+        rule.onNodeWithText("Учебная покупка").assertIsDisplayed()
+    }
+
     private fun saveImage(name: String, editor: Boolean = true) {
         rule.waitForIdle()
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }

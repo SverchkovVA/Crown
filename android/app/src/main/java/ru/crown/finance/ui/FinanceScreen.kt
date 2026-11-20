@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ru.crown.finance.DemoState
 import ru.crown.finance.R
+import ru.crown.finance.ledger.JournalQuery
 import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.AccountKind
 import ru.crown.finance.ledger.LedgerSnapshot
@@ -330,8 +331,13 @@ private fun OperationsPage(
     showDetails: (Operation) -> Unit,
     commands: BookCommands?,
 ) {
-    val rows = if (filter == null) snapshot.operations else snapshot.operations.filter {
+    var query by remember(snapshot.month) { mutableStateOf(JournalQuery()) }
+    var expanded by remember { mutableStateOf(false) }
+    val accountRows = if (filter == null) snapshot.operations else snapshot.operations.filter {
         it.accountId == filter.account.id || it.destinationId == filter.account.id
+    }
+    val rows = remember(accountRows, query, snapshot.categories, snapshot.balances) {
+        query.apply(accountRows, snapshot.balances.map { it.account }, snapshot.categories)
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("operations-list"),
@@ -348,6 +354,8 @@ private fun OperationsPage(
                 commands.error?.let { FormError(it) }
                 if (snapshot.month in closedMonths(snapshot.periods)) Text("Месяц закрыт")
             }
+            JournalFilters(query, snapshot.categories, expanded, { expanded = !expanded }) { query = it }
+            if (query.count > 0) Text("Найдено операций: ${rows.size} из ${accountRows.size}")
             if (filter != null) {
                 FilterChip(
                     selected = true,
@@ -375,7 +383,7 @@ private fun OperationsPage(
         if (rows.isEmpty()) {
             item("empty") {
                 Text(
-                    "За этот месяц операций нет",
+                    if (query.count > 0) "По выбранным условиям операций нет" else "За этот месяц операций нет",
                     modifier = Modifier.padding(vertical = 20.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
