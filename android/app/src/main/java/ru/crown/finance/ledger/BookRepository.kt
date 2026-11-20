@@ -36,7 +36,7 @@ internal interface BookIdentityDao {
 
 @Database(
     entities = [BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -46,9 +46,11 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun categories(): CategoryDao
 }
 
-internal class BookRepository(context: Context) {
+internal class BookRepository(
+    context: Context,
+    private val path: File = File(context.noBackupFilesDir, "mobile-book-v1"),
+) {
     private val app = context.applicationContext
-    private val path = File(app.noBackupFilesDir, "mobile-book-v1")
     private val keys = BookKeys()
     val exists get() = path.exists()
 
@@ -167,7 +169,7 @@ internal class BookRepository(context: Context) {
             System.loadLibrary("sqlcipher")
             database = Room.databaseBuilder(app, BookDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory(material))
-                .addMigrations(historyMigration, categoriesMigration)
+                .addMigrations(historyMigration, categoriesMigration, detailsMigration)
                 .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
                 .build()
             database.openHelper.writableDatabase.query("PRAGMA cipher_version").use { cursor ->
@@ -189,11 +191,13 @@ internal class BookSession(
 ) : AutoCloseable {
     private val dao get() = db.ledger()
 
+    private suspend fun history() = assembleHistory(
+        dao.operations().map(OperationRow::toOperation),
+        db.revisions().all().map(RevisionRow::toRevision),
+    )
+
     suspend fun snapshot(month: YearMonth): LedgerSnapshot = db.withTransaction {
-        val history = assembleHistory(
-            dao.operations().map(OperationRow::toOperation),
-            db.revisions().all().map(RevisionRow::toRevision),
-        )
+        val history = history()
         val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
@@ -238,15 +242,20 @@ internal class BookSession(
     suspend fun addOperation(operation: Operation) = db.withTransaction {
         require(operation.kind != OperationKind.Opening)
         validateCategory(operation)
+        checkRefundSource(operation)
         dao.insertOperations(listOf(operation.toRow()))
+        validateRefunds(history())
     }
 
-    suspend fun reviseOperation(id: String, replacement: Operation?) = db.withTransaction {
+    suspend fun reviseOperation(expected: Operation, replacement: Operation?) = db.withTransaction {
+        val id = expected.id
         val original = requireNotNull(dao.original(id)) { "Операция не найдена" }
         val revision = db.revisions().latest(id)
         require(revision?.cancelled != true) { "Операция уже отменена" }
         val current = revision?.value?.toOperation() ?: original.toOperation()
+        require(current == expected) { "Операция изменилась. Откройте её заново" }
         val next = replacement ?: current
+        if (replacement != null) checkRefundSource(next)
         require(next.id == id && current.kind != OperationKind.Opening && next.kind != OperationKind.Opening)
         val ids = dao.accounts().map(AccountRow::id).toSet()
         require(next.accountId in ids && (next.destinationId == null || next.destinationId in ids)) {
@@ -257,6 +266,7 @@ internal class BookSession(
         db.revisions().insert(
             RevisionRow(recordedAt = Instant.now().toEpochMilli(), cancelled = replacement == null, value = next.toRow()),
         )
+        validateRefunds(history())
     }
 
     suspend fun addCategory(name: String, kind: OperationKind) = db.withTransaction {
@@ -268,10 +278,20 @@ internal class BookSession(
         db.categories().insert(Category(UUID.randomUUID().toString(), title, kind).toRow())
     }
 
+    private suspend fun checkRefundSource(operation: Operation) {
+        if (operation.kind != OperationKind.Refund) return
+        val source = history().firstOrNull { it.id == operation.refundOf }?.current
+        require(source != null && !source.cancelled && source.value.kind == OperationKind.Expense &&
+            source.value.fingerprint() == operation.refundVersion) { "Покупка изменилась. Оформите возврат заново" }
+    }
+
     private suspend fun validateCategory(operation: Operation) {
-        val id = operation.categoryId ?: return
-        require(db.categories().find(id)?.kind == operation.kind.wireName) {
-            "Категория должна соответствовать виду операции"
+        val expectedKind = if (operation.kind == OperationKind.Refund) OperationKind.Expense else operation.kind
+        val selected = operation.parts.map(Allocation::categoryId) + operation.categoryId
+        for (id in selected.filterNotNull()) {
+            require(db.categories().find(id)?.kind == expectedKind.wireName) {
+                "Категория должна соответствовать виду операции"
+            }
         }
     }
 

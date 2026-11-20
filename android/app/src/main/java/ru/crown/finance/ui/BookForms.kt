@@ -2,6 +2,7 @@ package ru.crown.finance.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -17,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,9 +26,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ru.crown.finance.ledger.AccountBalance
+import ru.crown.finance.ledger.Allocation
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
@@ -55,9 +61,9 @@ internal data class BookCommands(
     val inspectBackup: () -> Unit,
 )
 
-private val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
+internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
 
-private fun dateValue(text: String): LocalDate? =
+internal fun dateValue(text: String): LocalDate? =
     runCatching { LocalDate.parse(text.trim(), datePattern) }.getOrNull()?.takeIf { it.year in 1900..9999 }
 
 @Composable
@@ -108,6 +114,11 @@ internal fun OperationEditor(
     var amount by remember { mutableStateOf(existing?.let { amountText(it.amountMinor) }.orEmpty()) }
     var fee by remember { mutableStateOf(existing?.feeMinor?.takeIf { it > 0 }?.let(::amountText).orEmpty()) }
     var category by remember { mutableStateOf(existing?.categoryId) }
+    var split by remember { mutableStateOf(existing?.parts?.isNotEmpty() == true) }
+    var allocations by remember {
+        mutableStateOf(existing?.parts?.map { DraftAllocation(it.categoryId, amountText(it.amountMinor)) }
+            ?.takeIf { it.isNotEmpty() } ?: listOf(DraftAllocation(null, ""), DraftAllocation(null, "")))
+    }
     var date by remember { mutableStateOf(existing?.date?.format(datePattern) ?: defaultDate(month)) }
     var description by remember { mutableStateOf(existing?.description.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -120,10 +131,15 @@ internal fun OperationEditor(
             val minor = parseMinor(amount)
             val commission = if (!transfer || fee.isBlank()) 0L else parseMinor(fee)
             val day = dateValue(date)
+            val partValues = if (split) allocations.map { parseMinor(it.amount) } else emptyList()
+            val partTotal = partValues.filterNotNull().fold(java.math.BigInteger.ZERO) { sum, value -> sum + value.toBigInteger() }
             error = when {
                 minor == null || minor <= 0 -> "Введите положительную сумму"
                 commission == null -> "Проверьте сумму комиссии"
                 transfer && commission > Long.MAX_VALUE - minor -> "Сумма с комиссией слишком велика"
+                split && partValues.any { it == null || it <= 0L } -> "Введите положительные суммы частей"
+                split && allocations.map { it.categoryId }.distinct().size != allocations.size -> "Объедините части одной категории"
+                split && partTotal != minor.toBigInteger() -> "Сумма частей должна равняться сумме операции"
                 day == null -> "Введите дату в формате ДД.ММ.ГГГГ"
                 transfer && destination == null -> "Выберите счёт зачисления"
                 else -> null
@@ -132,7 +148,8 @@ internal fun OperationEditor(
                 val operation = Operation(
                     existing?.id ?: UUID.randomUUID().toString(), kind, day, origin,
                     minor, description.trim().ifBlank { kind.label() },
-                    destination.takeIf { transfer }, commission, category,
+                    destination.takeIf { transfer }, commission, category.takeUnless { split },
+                    if (split) allocations.mapIndexed { index, row -> Allocation(row.categoryId, requireNotNull(partValues[index])) } else emptyList(),
                 )
                 if (existing == null) {
                     commands.addOperation(operation, close)
@@ -143,7 +160,11 @@ internal fun OperationEditor(
         },
     ) {
         Choice("Вид операции", kind, kinds, OperationKind::label, !commands.busy) {
-            if (kind != it) category = null
+            if (kind != it) {
+                category = null
+                split = false
+                allocations = listOf(DraftAllocation(null, ""), DraftAllocation(null, ""))
+            }
             kind = it
         }
         Choice(
@@ -164,7 +185,18 @@ internal fun OperationEditor(
         if (transfer) Entry(fee, { fee = it.take(24) }, "Комиссия, ₽", commands.busy, KeyboardType.Decimal)
         Entry(date, { date = it.take(10) }, "Дата · ДД.ММ.ГГГГ", commands.busy)
         Entry(description, { description = it.take(200) }, "Описание", commands.busy)
-        if (availableCategories.isNotEmpty()) {
+        if (!transfer) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Разделить по категориям", Modifier.weight(1f))
+                Switch(
+                    checked = split, onCheckedChange = { split = it }, enabled = !commands.busy,
+                    modifier = Modifier.semantics { contentDescription = "Разделить по категориям" },
+                )
+            }
+        }
+        if (split) {
+            AllocationFields(allocations, availableCategories, commands.busy) { allocations = it }
+        } else if (availableCategories.isNotEmpty()) {
             val names = availableCategories.associate { it.id to it.name }
             Choice("Категория", category, listOf(null) + names.keys, { names[it] ?: "Без категории" }, !commands.busy) {
                 category = it
@@ -201,7 +233,7 @@ internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Editor(
+internal fun Editor(
     title: String,
     commands: BookCommands,
     error: String?,
@@ -215,7 +247,8 @@ private fun Editor(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Column(
-            Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
+            Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
+                .testTag("operation-editor"),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             WorkspaceTitle(title)
@@ -256,9 +289,9 @@ internal fun <T> Choice(
     }
 }
 
-private fun amountText(minor: Long): String = BigDecimal.valueOf(minor, 2).toPlainString()
+internal fun amountText(minor: Long): String = BigDecimal.valueOf(minor, 2).toPlainString()
 
-private fun defaultDate(month: YearMonth): String {
+internal fun defaultDate(month: YearMonth): String {
     val today = LocalDate.now()
     return (if (month == YearMonth.from(today)) today else month.atEndOfMonth()).format(datePattern)
 }

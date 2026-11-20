@@ -13,12 +13,14 @@ android {
         applicationId = "ru.crown.finance.preview"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.1.0-dev7"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        versionCode = 8
+        versionName = "0.1.0-dev8"
     }
 
     buildFeatures { compose = true }
     sourceSets["main"].assets.srcDir(rootProject.file("../shared/android-fixtures"))
+    sourceSets["androidTest"].assets.srcDir(layout.projectDirectory.dir("schemas"))
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -46,4 +48,9 @@ dependencies {
     implementation("net.zetetic:sqlcipher-android:4.13.0")
     implementation("org.bouncycastle:bcprov-jdk18on:1.83")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20250517")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2025.12.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }

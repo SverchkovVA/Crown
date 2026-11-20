@@ -67,6 +67,7 @@ import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.OperationHistory
 import ru.crown.finance.ledger.categoryTotals
+import ru.crown.finance.ledger.fingerprint
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.text.NumberFormat
@@ -90,7 +91,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Backup, Categories, Export }
+private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export }
 
 @Composable
 internal fun FinanceScreen(
@@ -106,6 +107,7 @@ internal fun FinanceScreen(
     var detailsId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf<EditorSection?>(null) }
     var correction by remember { mutableStateOf<Operation?>(null) }
+    var refundPurchase by remember { mutableStateOf<Operation?>(null) }
     val closeDetails: () -> Unit = {
         detailsId = null
         commands?.clearError()
@@ -113,6 +115,7 @@ internal fun FinanceScreen(
     val closeEditor: () -> Unit = {
         editor = null
         correction = null
+        refundPurchase = null
         commands?.clearError()
     }
     val operationsScroll = rememberLazyListState()
@@ -239,6 +242,9 @@ internal fun FinanceScreen(
             EditorSection.Operation -> OperationEditor(
                 snapshot.balances, snapshot.categories, snapshot.month, filterId, commands, closeEditor, correction,
             )
+            EditorSection.Refund -> refundPurchase?.let { purchase ->
+                RefundEditor(purchase, snapshot, commands, closeEditor, correction)
+            }
             EditorSection.Backup -> BackupForm(commands, closeEditor)
             EditorSection.Categories -> CategoryEditor(snapshot.categories, commands, closeEditor)
             EditorSection.Export -> JournalExportForm(snapshot, monthLabel(snapshot.month), commands, closeEditor)
@@ -255,7 +261,17 @@ internal fun FinanceScreen(
                 edit = {
                     closeDetails()
                     correction = operation
-                    editor = EditorSection.Operation
+                    if (operation.kind == OperationKind.Refund) {
+                        refundPurchase = snapshot.history.first { it.id == operation.refundOf }.current.value
+                        editor = EditorSection.Refund
+                    } else {
+                        editor = EditorSection.Operation
+                    }
+                },
+                refund = {
+                    closeDetails()
+                    refundPurchase = operation
+                    editor = EditorSection.Refund
                 },
             )
         }
@@ -518,6 +534,7 @@ private fun OperationDetails(
     commands: BookCommands?,
     close: () -> Unit,
     edit: () -> Unit,
+    refund: () -> Unit,
 ) {
     var confirmCancellation by remember { mutableStateOf(false) }
     val cancelled = history?.current?.cancelled == true
@@ -545,10 +562,24 @@ private fun OperationDetails(
                 )
                 Text(operation.date.format(DayFormat), style = MaterialTheme.typography.bodyMedium)
                 Text(operation.accountCaption(snapshot), style = MaterialTheme.typography.bodyMedium)
-                snapshot.categories.firstOrNull { it.id == operation.categoryId }?.let { Text(it.name) }
+                AllocationSummary(operation, snapshot)
+                if (operation.kind == OperationKind.Refund) {
+                    val source = snapshot.history.firstOrNull { it.id == operation.refundOf }?.revisions
+                        ?.firstOrNull { it.value.fingerprint() == operation.refundVersion }?.value
+                    if (source != null) {
+                        Text("Исходная покупка", style = MaterialTheme.typography.labelLarge)
+                        Text(source.description)
+                        Text("${source.date.format(DayFormat)} · ${money(source.amountMinor)}")
+                        AllocationSummary(source, snapshot)
+                    }
+                }
                 if (operation.feeMinor != 0L) Text("Комиссия ${money(operation.feeMinor)}")
                 if (cancelled) FormError("Операция отменена")
                 if (history != null && history.revisions.size > 1) RevisionList(history, snapshot)
+            }
+            if (commands != null && !cancelled && operation.kind == OperationKind.Expense &&
+                availableRefund(operation, snapshot).isNotEmpty()) {
+                OutlinedButton(refund, Modifier.fillMaxWidth(), enabled = !commands.busy) { Text("Оформить возврат") }
             }
             if (commands != null && !cancelled && operation.kind != OperationKind.Opening) {
                 Button(onClick = edit, enabled = !commands.busy, modifier = Modifier.fillMaxWidth()) {
@@ -649,6 +680,19 @@ private fun HistoryPage(history: List<OperationHistory>, showDetails: (Operation
 }
 
 @Composable
+private fun AllocationSummary(operation: Operation, snapshot: LedgerSnapshot) {
+    if (operation.parts.isEmpty()) {
+        snapshot.categories.firstOrNull { it.id == operation.categoryId }?.let { Text(it.name) }
+    } else {
+        Text("По категориям", style = MaterialTheme.typography.labelLarge)
+        for (part in operation.parts) {
+            val name = snapshot.categories.firstOrNull { it.id == part.categoryId }?.name ?: "Без категории"
+            Text("$name · ${money(part.amountMinor)}", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
 private fun RevisionList(history: OperationHistory, snapshot: LedgerSnapshot) {
     val stamp = DateTimeFormatter.ofPattern("dd.MM.uuuu HH:mm", Russian).withZone(ZoneId.systemDefault())
     HorizontalDivider(Modifier.padding(vertical = 4.dp))
@@ -663,7 +707,7 @@ private fun RevisionList(history: OperationHistory, snapshot: LedgerSnapshot) {
         val time = revision.recordedAt?.let(stamp::format)
         Text(listOfNotNull(label, time).joinToString(" · "), style = MaterialTheme.typography.labelMedium)
         Text(value.description)
-        snapshot.categories.firstOrNull { it.id == value.categoryId }?.let { Text(it.name) }
+        AllocationSummary(value, snapshot)
         Text("${value.date.format(DayFormat)} · ${money(value.displayedAmount())} · ${value.accountCaption(snapshot)}")
         if (value.feeMinor != 0L) Text("Комиссия ${money(value.feeMinor)}")
     }
@@ -675,6 +719,7 @@ internal fun OperationKind.label(): String = when (this) {
     OperationKind.Income -> "Поступление"
     OperationKind.Expense -> "Расход"
     OperationKind.Transfer -> "Между своими счетами"
+    OperationKind.Refund -> "Возврат"
 }
 
 private fun Operation.accountCaption(snapshot: LedgerSnapshot): String {
@@ -689,9 +734,9 @@ private fun Operation.displayedAmount(): Long =
 private fun monthLabel(month: YearMonth): String =
     month.format(MonthFormat).replaceFirstChar { it.titlecase(Russian) }
 
-private fun money(minor: Long, signed: Boolean = false): String = money(minor.toBigInteger(), signed)
+internal fun money(minor: Long, signed: Boolean = false): String = money(minor.toBigInteger(), signed)
 
-private fun money(minor: BigInteger, signed: Boolean = false): String {
+internal fun money(minor: BigInteger, signed: Boolean = false): String {
     val formatter = NumberFormat.getNumberInstance(Russian).apply {
         minimumFractionDigits = 2
         maximumFractionDigits = 2

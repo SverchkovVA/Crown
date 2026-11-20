@@ -42,15 +42,19 @@ internal data class OperationRow(
     val destinationId: String?,
     val feeMinor: Long,
     val categoryId: String? = null,
+    val details: ByteArray? = null,
 ) {
-    fun toOperation() = Operation(
-        id, OperationKind.fromWireName(kind), LocalDate.parse(date), accountId, amountMinor,
-        description, destinationId, feeMinor, categoryId,
-    )
+    fun toOperation(): Operation {
+        val extra = decodeOperationDetails(details)
+        return Operation(
+            id, OperationKind.fromWireName(kind), LocalDate.parse(date), accountId, amountMinor,
+            description, destinationId, feeMinor, categoryId, extra.parts, extra.refundOf, extra.refundVersion,
+        )
+    }
 }
 
 internal fun Operation.toRow() = OperationRow(
-    id, kind.wireName, date.toString(), accountId, amountMinor, description, destinationId, feeMinor, categoryId,
+    id, kind.wireName, date.toString(), accountId, amountMinor, description, destinationId, feeMinor, categoryId, encodeOperationDetails(),
 )
 
 @Dao

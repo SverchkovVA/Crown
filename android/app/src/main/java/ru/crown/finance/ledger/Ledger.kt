@@ -8,7 +8,8 @@ internal enum class OperationKind(val wireName: String) {
     Opening("opening"),
     Income("income"),
     Expense("expense"),
-    Transfer("transfer");
+    Transfer("transfer"),
+    Refund("refund");
 
     companion object {
         fun fromWireName(name: String): OperationKind = entries.single { it.wireName == name }
@@ -27,6 +28,9 @@ internal data class Operation(
     val destinationId: String? = null,
     val feeMinor: Long = 0,
     val categoryId: String? = null,
+    val parts: List<Allocation> = emptyList(),
+    val refundOf: String? = null,
+    val refundVersion: String? = null,
 ) {
     init {
         if (kind == OperationKind.Opening) {
@@ -35,7 +39,17 @@ internal data class Operation(
             require(amountMinor > 0)
         }
         require(feeMinor >= 0)
-        require(categoryId == null || (categoryId.length in 1..64 && kind in categoryKinds))
+        val classified = kind in categoryKinds || kind == OperationKind.Refund
+        require(categoryId == null || (categoryId.length in 1..64 && classified))
+        require(parts.isEmpty() || (classified && categoryId == null && parts.size in 2..100))
+        require(parts.map(Allocation::categoryId).distinct().size == parts.size)
+        require(parts.isEmpty() || parts.fold(BigInteger.ZERO) { sum, part -> sum + part.amountMinor.toBigInteger() } == amountMinor.toBigInteger())
+        if (kind == OperationKind.Refund) {
+            require(!refundOf.isNullOrBlank() && refundOf.length <= 64 && refundOf != id)
+            require(refundVersion?.matches(Regex("[0-9a-f]{64}")) == true)
+        } else {
+            require(refundOf == null && refundVersion == null)
+        }
         if (kind == OperationKind.Transfer) {
             require(destinationId != null && destinationId != accountId)
             Math.addExact(amountMinor, feeMinor)
@@ -46,7 +60,7 @@ internal data class Operation(
 
     fun movementFor(accountId: String): Long = when (accountId) {
         this.accountId -> when (kind) {
-            OperationKind.Opening, OperationKind.Income -> amountMinor
+            OperationKind.Opening, OperationKind.Income, OperationKind.Refund -> amountMinor
             OperationKind.Expense -> -amountMinor
             OperationKind.Transfer -> -Math.addExact(amountMinor, feeMinor)
         }
@@ -92,6 +106,7 @@ internal data class LedgerSnapshot(
                     OperationKind.Opening -> Unit
                     OperationKind.Income -> income += operation.amountMinor.toBigInteger()
                     OperationKind.Expense -> expense += operation.amountMinor.toBigInteger()
+                    OperationKind.Refund -> expense -= operation.amountMinor.toBigInteger()
                     OperationKind.Transfer -> expense += operation.feeMinor.toBigInteger()
                 }
             }

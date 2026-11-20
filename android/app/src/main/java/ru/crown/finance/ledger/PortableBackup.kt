@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 2
+private const val CURRENT_VERSION: Byte = 3
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -61,13 +61,16 @@ internal data class BackupLedger(
             }
             current[value.id] = value
         }
+        validateRefunds(assembleHistory(operations, revisions))
     }
 
     private fun Operation.validate(knownAccounts: Set<String>, kinds: Map<String, OperationKind>) {
         require(id.length in 1..64 && date.year in 1900..9999)
         require(description.isNotBlank() && description.length <= 200)
         require(accountId in knownAccounts && (destinationId == null || destinationId in knownAccounts))
-        require(categoryId == null || kinds[categoryId] == kind)
+        val expected = if (kind == OperationKind.Refund) OperationKind.Expense else kind
+        require(categoryId == null || kinds[categoryId] == expected)
+        require(parts.all { it.categoryId == null || kinds[it.categoryId] == expected })
     }
 }
 
@@ -201,12 +204,32 @@ private fun DataOutputStream.operation(value: Operation) {
     val category = value.categoryId
     writeBoolean(category != null)
     if (category != null) text(category)
+    val extra = value.encodeOperationDetails()
+    writeInt(extra?.size ?: 0)
+    if (extra != null) write(extra)
 }
 
-private fun DataInputStream.operation(version: Int) = Operation(
-    text(), OperationKind.fromWireName(text()), LocalDate.ofEpochDay(readLong()),
-    text(), readLong(), text(), if (readBoolean()) text() else null, readLong(),
-    if (version >= 2 && readBoolean()) text() else null,
+private fun DataInputStream.operation(version: Int): Operation {
+    val base = OperationBase(
+        text(), OperationKind.fromWireName(text()), LocalDate.ofEpochDay(readLong()),
+        text(), readLong(), text(), if (readBoolean()) text() else null, readLong(),
+        if (version >= 2 && readBoolean()) text() else null,
+    )
+    val bytes = if (version >= 3) {
+        val size = readInt()
+        require(size in 0..20_000)
+        if (size == 0) null else ByteArray(size).also(::readFully)
+    } else null
+    val extra = decodeOperationDetails(bytes)
+    return Operation(
+        base.id, base.kind, base.date, base.account, base.amount, base.description, base.destination,
+        base.fee, base.category, extra.parts, extra.refundOf, extra.refundVersion,
+    )
+}
+
+private data class OperationBase(
+    val id: String, val kind: OperationKind, val date: LocalDate, val account: String,
+    val amount: Long, val description: String, val destination: String?, val fee: Long, val category: String?,
 )
 
 private fun DataInputStream.count(): Int = readInt().also { require(it in 0..MAX_ROWS) }

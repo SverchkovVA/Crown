@@ -34,6 +34,21 @@ class PortableBackupTest {
     }
 
     @Test
+    fun splitAndLinkedRefundRoundTripWithImmutableSourceVersion() {
+        val purchase = expense.copy(
+            categoryId = null,
+            parts = listOf(Allocation(category.id, 500), Allocation(null, 225)),
+        )
+        val returned = Operation(
+            "return", OperationKind.Refund, purchase.date.plusDays(1), "one", 200, "Возврат",
+            categoryId = category.id, refundOf = purchase.id, refundVersion = purchase.fingerprint(),
+        )
+        val data = ledger.copy(operations = listOf(purchase, returned), revisions = emptyList())
+        val copy = PortableBackup.seal(data, correct.toCharArray())
+        assertEquals(data, PortableBackup.open(copy.inputStream(), correct.toCharArray()))
+    }
+
+    @Test
     fun authenticationRejectsWrongPasswordAndAlteredBytes() {
         val copy = PortableBackup.seal(ledger, correct.toCharArray())
         assertThrows(AEADBadTagException::class.java) {

@@ -48,12 +48,19 @@ internal data class CategoryTotal(val name: String, val kind: OperationKind, val
 
 internal fun categoryTotals(snapshot: LedgerSnapshot): List<CategoryTotal> {
     val names = snapshot.categories.associate { it.id to it.name }
-    val grouped = snapshot.operations.filter { it.kind in categoryKinds }
-        .groupBy { it.kind to it.categoryId }
-    val rows = grouped.map { (key, operations) ->
-        val (kind, id) = key
-        val name = names[id] ?: "Без категории"
-        CategoryTotal(name, kind, operations.fold(BigInteger.ZERO) { sum, row -> sum + row.amountMinor.toBigInteger() })
+    val totals = linkedMapOf<Pair<OperationKind, String?>, BigInteger>()
+    for (operation in snapshot.operations) {
+        if (operation.kind !in categoryKinds && operation.kind != OperationKind.Refund) continue
+        val refund = operation.kind == OperationKind.Refund
+        val kind = if (refund) OperationKind.Expense else operation.kind
+        for (part in operation.allocations()) {
+            val key = kind to part.categoryId
+            val amount = part.amountMinor.toBigInteger().let { if (refund) -it else it }
+            totals[key] = totals.getOrDefault(key, BigInteger.ZERO) + amount
+        }
+    }
+    val rows = totals.map { (key, minor) ->
+        CategoryTotal(names[key.second] ?: "Без категории", key.first, minor)
     }
     val fees = snapshot.operations.filter { it.kind == OperationKind.Transfer }
         .fold(BigInteger.ZERO) { total, row -> total + row.feeMinor.toBigInteger() }

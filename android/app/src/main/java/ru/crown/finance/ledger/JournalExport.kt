@@ -26,7 +26,7 @@ internal data class JournalExport(
         if (includeNames) heading.addAll(listOf("Счёт", "Второй счёт", "Категория"))
         if (includeDescription) heading.add("Описание")
         heading.addAll(
-            listOf("Точность валюты", "Сумма, мин. ед.", "Комиссия, мин. ед.", "ID операции", "ID счёта", "ID второго счёта", "ID категории"),
+            listOf("Точность валюты", "Сумма, мин. ед.", "Комиссия, мин. ед.", "ID операции", "ID счёта", "ID второго счёта", "ID категории", "Части, копейки", "ID покупки возврата", "Версия покупки возврата"),
         )
         csvLine(heading)
         for (operation in snapshot.operations) {
@@ -44,10 +44,22 @@ internal data class JournalExport(
                 listOf(
                     "2", operation.amountMinor.toString(), operation.feeMinor.toString(), operation.id,
                     operation.accountId, operation.destinationId.orEmpty(), operation.categoryId.orEmpty(),
+                    partsJson(operation).toString(), operation.refundOf.orEmpty(), operation.refundVersion.orEmpty(),
                 ),
             )
             csvLine(fields)
         }
+    }
+
+    private fun partsJson(operation: Operation): JSONArray {
+        val result = JSONArray()
+        for (part in operation.parts) {
+            val row = JSONObject().put("amount_minor", part.amountMinor.toString())
+                .put("category_id", part.categoryId ?: JSONObject.NULL)
+            if (includeNames) row.put("category_name", categories[part.categoryId] ?: JSONObject.NULL)
+            result.put(row)
+        }
+        return result
     }
 
     private fun json(): String {
@@ -65,6 +77,9 @@ internal data class JournalExport(
                     "category_id" to operation.categoryId,
                     "amount_minor" to operation.amountMinor.toString(),
                     "fee_minor" to operation.feeMinor.toString(),
+                    "refund_of" to operation.refundOf,
+                    "refund_version" to operation.refundVersion,
+                    "parts" to partsJson(operation),
                 ),
             )
             if (includeNames) {
@@ -90,6 +105,7 @@ private fun OperationKind.russianTitle() = when (this) {
     OperationKind.Income -> "Поступление"
     OperationKind.Expense -> "Расход"
     OperationKind.Transfer -> "Перевод"
+    OperationKind.Refund -> "Возврат"
 }
 
 private fun decimalRubles(minor: Long) = BigDecimal.valueOf(minor, 2).toPlainString().replace('.', ',')

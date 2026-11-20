@@ -361,7 +361,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
 
     fun reviseOperation(original: Operation, replacement: Operation?, saved: () -> Unit) {
         val month = YearMonth.from(replacement?.date ?: original.date)
-        change(saved) { update(month) { reviseOperation(original.id, replacement) } }
+        change(saved) { update(month) { reviseOperation(original, replacement) } }
     }
 
     fun addCategory(name: String, kind: OperationKind, saved: () -> Unit) {
