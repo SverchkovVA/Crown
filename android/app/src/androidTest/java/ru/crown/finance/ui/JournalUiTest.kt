@@ -319,7 +319,7 @@ class JournalUiTest {
         rule.onNodeWithContentDescription("Счета").performClick()
         rule.onNodeWithText("Сверка остатков").assertIsDisplayed()
         rule.onNodeWithContentDescription("Отчёты").performClick()
-        rule.onNodeWithText("По категориям").assertIsDisplayed()
+        rule.onNodeWithText("По категориям").performScrollTo().assertIsDisplayed()
         rule.onNodeWithContentDescription("Настройки").performClick()
         rule.onNodeWithText("Защита и копии").performScrollTo().assertIsDisplayed()
         rule.onNodeWithContentDescription("Операции").performClick()
