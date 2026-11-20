@@ -172,24 +172,28 @@ internal fun FinanceScreen(
                                 Text(if (createAccount) "Добавить счёт" else "Добавить операцию")
                             }
                         }
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val compactNavigation = maxWidth < 400.dp && LocalDensity.current.fontScale > 1.2f
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
                                 if (destination in listOf(Section.History, Section.Periods, Section.Reconciliations)) continue
                                 if (commands == null && destination in listOf(Section.Reports, Section.Protection)) continue
                                 NavigationBarItem(
+                                    modifier = Modifier.semantics { contentDescription = destination.title },
                                     selected = section == destination,
                                     onClick = {
                                         tab = destination.name
                                         filterId = null
                                     },
                                     icon = { Icon(painterResource(destination.icon), contentDescription = null) },
-                                    label = { Text(destination.title) },
+                                    label = if (compactNavigation) null else ({ Text(destination.title) }),
                                     colors = NavigationBarItemDefaults.colors(
                                         indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                                         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                     ),
                                 )
                             }
+                        }
                         }
                     }
                 }

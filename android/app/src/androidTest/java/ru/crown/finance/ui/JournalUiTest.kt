@@ -316,6 +316,15 @@ class JournalUiTest {
         rule.onNodeWithText("Начальный долг").assertIsDisplayed()
         rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Учебная покупка"))
         rule.onNodeWithText("Учебная покупка").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Счета").performClick()
+        rule.onNodeWithText("Сверка остатков").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Отчёты").performClick()
+        rule.onNodeWithText("По категориям").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Настройки").performClick()
+        rule.onNodeWithText("Защита и копии").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("Операции").performClick()
+        rule.onNodeWithText("Поиск и фильтры").assertIsDisplayed()
+        saveImage("journal-navigation", editor = false)
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {
