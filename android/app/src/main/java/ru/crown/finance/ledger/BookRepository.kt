@@ -306,8 +306,8 @@ internal class BookSession(
                 require(candidate.status != ImportStatus.PossibleDuplicate || choice.reviewed) {
                     "Для возможного повтора выберите существующую операцию или проверьте новую"
                 }
-                require(!row.transferHint || choice.reviewed || operation.kind == OperationKind.Transfer) {
-                    "Проверьте вид перевода из выписки"
+                require(!row.needsReview || choice.reviewed || operation.kind == OperationKind.Transfer) {
+                    "Проверьте вид перевода или возврата из выписки"
                 }
                 require(operation.kind != OperationKind.Opening && (operation.accountId == accountId || operation.destinationId == accountId))
                 val movement = operation.movementFor(accountId)

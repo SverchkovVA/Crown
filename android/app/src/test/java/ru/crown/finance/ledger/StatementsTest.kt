@@ -19,6 +19,20 @@ class StatementsTest {
     }
 
     @Test
+    fun refundHintRetainsPreviouslyRecordedPayloadIdentity() {
+        val document = parseStatement("date;amount;description;id\n2026-11-20;2.00;Возврат покупки;return-one".toByteArray())
+        val row = document.rows.single()
+        assertTrue(row.needsReview)
+        assertTrue(row.refundHint)
+        assertEquals(row.copy(refundHint = false).payloadHash, row.payloadHash)
+        val value = row.proposal(account.id, document.key(account.id, row))
+        val receipt = StatementReceipt(document.key(account.id, row), row.payloadHash, value.id, value.fingerprint())
+        assertEquals(ImportStatus.Duplicate, previewStatement(
+            document, empty.copy(statementReceipts = listOf(receipt)), account.id,
+        ).single().status)
+    }
+
+    @Test
     fun csvSupportsQuotedLinesAndWindows1251() {
         val text = "\uFEFFdate,amount,description\r\n2026-11-20,-2.55,\"Строка, с \"\"кавычкой\"\"\nпродолжение\"\r\n"
         val row = parseStatement(text.toByteArray()).rows.single()

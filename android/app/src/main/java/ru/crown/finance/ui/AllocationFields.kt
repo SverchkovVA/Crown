@@ -81,16 +81,21 @@ internal fun RefundEditor(
     commands: BookCommands,
     close: () -> Unit,
     existing: Operation? = null,
+    suggestedAmount: Long? = null,
+    suggestedDate: java.time.LocalDate? = null,
 ) {
     val available = remember(purchase, snapshot, existing) { availableRefund(purchase, snapshot, existing?.id) }
     val initial = existing?.allocations()?.associate { it.categoryId to it.amountMinor }
+        ?: suggestedAmount?.let { amount ->
+            if (available.size == 1) mapOf(available.single().categoryId to amount) else emptyMap()
+        }
     var rows by remember {
         mutableStateOf(available.map { part ->
-            DraftAllocation(part.categoryId, amountText(initial?.get(part.categoryId) ?: part.amountMinor))
+            DraftAllocation(part.categoryId, amountText(initial?.get(part.categoryId) ?: if (suggestedAmount != null) 0L else part.amountMinor))
         })
     }
     var account by remember { mutableStateOf(existing?.accountId ?: purchase.accountId) }
-    var date by remember { mutableStateOf(existing?.date?.format(datePattern) ?: defaultDate(snapshot.month)) }
+    var date by remember { mutableStateOf(existing?.date?.format(datePattern) ?: suggestedDate?.format(datePattern) ?: defaultDate(snapshot.month)) }
     var description by remember { mutableStateOf(existing?.description ?: "Возврат · ${purchase.description}") }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(rows, account, date, description) {

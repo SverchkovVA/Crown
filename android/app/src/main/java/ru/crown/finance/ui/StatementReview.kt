@@ -45,7 +45,7 @@ internal fun StatementReview(
         account?.let { previewStatement(document, snapshot, it) }.orEmpty()
     }
     var choices by remember(document, account) {
-        mutableStateOf(candidates.filter { it.status == ImportStatus.New && !it.row.transferHint }.associate { candidate ->
+        mutableStateOf(candidates.filter { it.status == ImportStatus.New && !it.row.needsReview }.associate { candidate ->
             val target = requireNotNull(account)
             candidate.row.position to ImportChoice(candidate.row.position, candidate.row.proposal(target, document.key(target, candidate.row)))
         })
@@ -53,11 +53,13 @@ internal fun StatementReview(
     var reviewedChoices by remember(document, account) { mutableStateOf<Map<Int, ImportChoice>>(emptyMap()) }
     var editing by remember(document, account) { mutableStateOf<StatementCandidate?>(null) }
     var confirm by remember { mutableStateOf(false) }
-    BackHandler(editing == null && !commands.busy) { close() }
+    var refundCandidate by remember(document, account) { mutableStateOf<StatementCandidate?>(null) }
+    var refundSource by remember(document, account) { mutableStateOf<Operation?>(null) }
+    BackHandler(editing == null && refundCandidate == null && !commands.busy) { close() }
     val ready = choices.isNotEmpty() && choices.values.all { choice ->
         val row = candidates.first { it.row.position == choice.position }
-        choice.linkExisting || choice.reviewed ||
-            (row.status == ImportStatus.New && !row.row.transferHint)
+        (choice.operation.accountId == account || choice.operation.destinationId == account) &&
+            (choice.linkExisting || choice.reviewed || (row.status == ImportStatus.New && !row.row.needsReview))
     }
     Scaffold(
         topBar = {
@@ -73,7 +75,7 @@ internal fun StatementReview(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     commands.error?.let { FormError(it) }
-                    if (choices.isNotEmpty() && !ready) Text("Проверьте возможные повторы и вид переводов")
+                    if (choices.isNotEmpty() && !ready) Text("Проверьте возможные повторы, переводы и возвраты")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             confirm, { confirm = it }, enabled = !commands.busy,
@@ -133,12 +135,37 @@ internal fun StatementReview(
                     val chosen = choices[row.position] ?: reviewedChoices[row.position]
                     if (chosen != null && (chosen.reviewed || chosen.linkExisting)) {
                         Text(
-                            if (chosen.linkExisting) "Связана с записанной операцией" else "Проверено · ${chosen.operation.kind.label()}",
+                            if (chosen.linkExisting) "Связана с записанной операцией" else "К записи · ${chosen.operation.kind.label()}",
                             style = MaterialTheme.typography.labelMedium,
                         )
+                        val prepared = chosen.operation
+                        val target = account
+                        if (target == prepared.accountId || target == prepared.destinationId) {
+                            Text("${prepared.date.format(datePattern)} · ${money(prepared.movementFor(requireNotNull(target)), signed = true)}")
+                        } else {
+                            FormError("Выберите счёт выписки в подготовленной операции")
+                        }
+                        if (prepared.description != row.description) Text(prepared.description)
                     }
                     if (valid) {
-                        TextButton({ editing = candidate; commands.clearError() }, enabled = !commands.busy) { Text("Настроить строку ${row.position}") }
+                        TextButton({
+                            val refund = chosen?.takeUnless { it.linkExisting }?.operation
+                                ?.takeIf { it.kind == OperationKind.Refund }
+                            if (refund != null) {
+                                refundCandidate = candidate
+                                refundSource = snapshot.history.firstOrNull { it.id == refund.refundOf }?.current?.value
+                            } else {
+                                editing = candidate
+                            }
+                            commands.clearError()
+                        }, enabled = !commands.busy) { Text("Настроить строку ${row.position}") }
+                        if (row.signedMinor > 0) {
+                            TextButton({
+                                refundCandidate = candidate
+                                refundSource = null
+                                commands.clearError()
+                            }, enabled = !commands.busy) { Text("Оформить возврат строки ${row.position}") }
+                        }
                         if (candidate.matching.isNotEmpty()) {
                             Choice(
                                 "Записанная операция", chosen?.operation?.id.takeIf { chosen?.linkExisting == true },
@@ -158,6 +185,31 @@ internal fun StatementReview(
             items(document.issues, key = { "issue-${it.position}" }) {
                 Text("Строка ${it.position} исключена · ${it.message}", color = MaterialTheme.colorScheme.error)
             }
+        }
+    }
+    refundCandidate?.let { candidate ->
+        val source = refundSource
+        val accept: (Operation) -> Unit = { operation ->
+            val value = ImportChoice(candidate.row.position, operation, reviewed = true)
+            reviewedChoices = reviewedChoices + (candidate.row.position to value)
+            choices = choices + (candidate.row.position to value)
+            confirm = false
+            refundCandidate = null
+            refundSource = null
+        }
+        val local = commands.copy(
+            error = null, addOperation = { operation, _ -> accept(operation) },
+            reviseOperation = { _, operation, _ -> if (operation != null) accept(operation) },
+        )
+        if (source == null) {
+            RefundSourcePicker(candidate.row, snapshot, local, { refundCandidate = null }) { refundSource = it }
+        } else {
+            RefundEditor(
+                source, snapshot, local, { refundCandidate = null },
+                existing = reviewedChoices[candidate.row.position]?.takeUnless { it.linkExisting }?.operation
+                    ?.takeIf { it.kind == OperationKind.Refund && it.refundOf == source.id },
+                suggestedAmount = candidate.row.signedMinor, suggestedDate = candidate.row.date,
+            )
         }
     }
     editing?.let { candidate ->

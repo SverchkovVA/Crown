@@ -169,6 +169,44 @@ class JournalUiTest {
         }
     }
 
+    @Test
+    fun statementRefundIsLinkedToPurchaseBeforeTheBatchIsWritten() {
+        var written: List<ImportChoice>? = null
+        val document = parseStatement(
+            "date;amount;description;id\n2026-11-20;2.00;Возврат покупки;return-one".toByteArray(),
+        )
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent {
+                CrownTheme { StatementReview(document, snapshot, commands(importAction = { _, rows -> written = rows }), {}) }
+            }
+        }
+        rule.onNodeWithText("Добавить операции (0)").assertIsNotEnabled()
+        rule.onNodeWithText("Оформить возврат строки 1").performClick()
+        rule.onNodeWithText("Выбрать: покупка").performClick()
+        rule.onNodeWithText("Учебная покупка", substring = true).performClick()
+        rule.onNodeWithText("Продолжить").performClick()
+        rule.onNode(hasText("Возврат части 1, ₽") and hasSetTextAction()).performTextReplacement("2.00")
+        rule.onNodeWithText("Сохранить возврат").performClick()
+        rule.onNodeWithText("Добавить операции (1)").assertIsNotEnabled()
+        assertNull(written)
+        rule.onNodeWithText("Настроить строку 1").performClick()
+        rule.onNode(hasText("Возврат части 1, ₽") and hasSetTextAction()).performTextReplacement("1.50")
+        rule.onNodeWithText("Сохранить возврат").performClick()
+        assertNull(written)
+        rule.onNodeWithText("20.11.2026 · +1,50\u00A0₽").assertIsDisplayed()
+        saveImage("statement-refund", editor = false)
+        rule.onNodeWithContentDescription("Подтвердить строки выписки").performClick()
+        rule.onNodeWithText("Добавить операции (1)").performClick()
+        rule.runOnIdle {
+            val refund = written!!.single().operation
+            assertEquals(OperationKind.Refund, refund.kind)
+            assertEquals(150L, refund.amountMinor)
+            assertEquals(purchase.id, refund.refundOf)
+            assertEquals(purchase.fingerprint(), refund.refundVersion)
+        }
+    }
+
     private fun saveImage(name: String, editor: Boolean = true) {
         rule.waitForIdle()
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }

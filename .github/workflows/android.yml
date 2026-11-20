@@ -39,7 +39,7 @@ jobs:
           fi
       - name: Сборка, тесты и lint
         working-directory: android
-        run: ./gradlew --no-daemon --stacktrace --info :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug
+        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:testDebugUnitTest :app:lintDebug
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

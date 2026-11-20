@@ -20,7 +20,9 @@ internal data class StatementRow(
     val description: String,
     val externalId: String?,
     val transferHint: Boolean = false,
+    val refundHint: Boolean = false,
 ) {
+    val needsReview: Boolean get() = transferHint || refundHint
     init {
         require(position > 0 && date.year in 1900..9999)
         require(signedMinor != 0L && signedMinor != Long.MIN_VALUE)
@@ -107,7 +109,7 @@ private fun parseCsv(text: String, hash: String): StatementDocument {
             require(amount != 0L) { "Нулевая сумма исключена" }
             require(cell("currency").uppercase(Locale.ROOT) in setOf("", "RUB", "RUR")) { "В этом срезе импорт поддерживает RUB" }
             val description = cell("description").ifBlank { "Операция из выписки" }
-            rows += StatementRow(position, date, amount, description, cell("id").ifEmpty { null }, ownTransferHint(description))
+            rows += StatementRow(position, date, amount, description, cell("id").ifEmpty { null }, ownTransferHint(description), refundHint(description))
         } catch (error: IllegalArgumentException) {
             issues += StatementIssue(position, error.message ?: "Проверьте поля строки")
         }
@@ -204,7 +206,7 @@ private fun parseOfx(text: String, hash: String): StatementDocument {
             val name = ofxField(block, "NAME")
             val memo = ofxField(block, "MEMO")
             val description = listOf(name, memo).filter(String::isNotBlank).distinct().joinToString(" · ").ifBlank { "Операция из выписки" }
-            rows += StatementRow(position, date, amount, description, id, ofxField(block, "TRNTYPE").equals("XFER", true) || ownTransferHint(description))
+            rows += StatementRow(position, date, amount, description, id, ofxField(block, "TRNTYPE").equals("XFER", true) || ownTransferHint(description), refundHint(description))
         } catch (error: IllegalArgumentException) {
             issues += StatementIssue(position, error.message ?: "Проверьте поля OFX")
         }
@@ -220,6 +222,9 @@ private fun ofxField(text: String, name: String): String {
     require(value.length <= 1000 && !value.contains(Regex("&(?!amp;|lt;|gt;|quot;|apos;)"))) { "Неподдерживаемое поле OFX" }
     return value.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'").replace("&amp;", "&")
 }
+
+private fun refundHint(text: String): Boolean =
+    Regex("возврат|refund", RegexOption.IGNORE_CASE).containsMatchIn(text)
 
 private fun ownTransferHint(text: String): Boolean =
     Regex("перевод\\s+себе|между\\s+(своими\\s+)?счетами", RegexOption.IGNORE_CASE).containsMatchIn(text)
