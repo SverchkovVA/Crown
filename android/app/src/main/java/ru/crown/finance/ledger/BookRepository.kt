@@ -37,9 +37,9 @@ internal interface BookIdentityDao {
 @Database(
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
-        PeriodEvent::class, Reconciliation::class,
+        PeriodEvent::class, Reconciliation::class, StatementReceipt::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -48,9 +48,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun revisions(): RevisionDao
     abstract fun categories(): CategoryDao
     abstract fun control(): ControlDao
+    abstract fun statements(): StatementDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration)
 
 internal class BookRepository(
     context: Context,
@@ -133,6 +134,7 @@ internal class BookRepository(
         database.ledger().insertOperations(backup.operations.map(Operation::toRow))
         for (event in backup.periods) database.control().insert(event.copy(sequence = 0))
         for (result in backup.reconciliations) database.control().insert(result)
+        for (receipt in backup.statementReceipts) database.statements().insert(receipt)
         for (revision in backup.revisions) {
             database.revisions().insert(
                 RevisionRow(
@@ -210,6 +212,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
+            statementReceipts = db.statements().all(),
         )
     }
 
@@ -220,7 +223,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -280,6 +283,44 @@ internal class BookSession(
             RevisionRow(recordedAt = Instant.now().toEpochMilli(), cancelled = replacement == null, value = next.toRow()),
         )
         validateRefunds(history())
+    }
+
+    suspend fun importStatement(
+        document: StatementDocument,
+        accountId: String,
+        choices: List<ImportChoice>,
+    ) = db.withTransaction {
+        require(document.rows.size <= MAX_STATEMENT_ROWS && choices.isNotEmpty())
+        require(choices.map(ImportChoice::position).distinct().size == choices.size)
+        val snapshot = snapshot(YearMonth.now())
+        val candidates = previewStatement(document, snapshot, accountId).associateBy { it.row.position }
+        for (choice in choices) {
+            val candidate = requireNotNull(candidates[choice.position]) { "Строка выписки не найдена" }
+            val row = candidate.row
+            if (candidate.status == ImportStatus.Duplicate) continue
+            require(candidate.status != ImportStatus.Conflict) { "Внешний ID уже записан с другими данными" }
+            val operation = choice.operation
+            if (choice.linkExisting) {
+                require(candidate.matching.any { it == operation }) { "Выберите совпадающую текущую операцию" }
+            } else {
+                require(candidate.status != ImportStatus.PossibleDuplicate || choice.reviewed) {
+                    "Для возможного повтора выберите существующую операцию или проверьте новую"
+                }
+                require(!row.transferHint || choice.reviewed || operation.kind == OperationKind.Transfer) {
+                    "Проверьте вид перевода из выписки"
+                }
+                require(operation.kind != OperationKind.Opening && (operation.accountId == accountId || operation.destinationId == accountId))
+                val movement = operation.movementFor(accountId)
+                require((movement > 0) == (row.signedMinor > 0)) { "Движение по счёту не совпадает со знаком в выписке" }
+                require(choice.reviewed || operation.matchesStatement(accountId, row)) {
+                    "Исправленную строку нужно проверить перед записью"
+                }
+                addOperation(operation)
+            }
+            db.statements().insert(StatementReceipt(
+                document.key(accountId, row), row.payloadHash, operation.id, operation.fingerprint(),
+            ))
+        }
     }
 
     suspend fun setPeriodClosed(month: YearMonth, closed: Boolean, reason: String) = db.withTransaction {

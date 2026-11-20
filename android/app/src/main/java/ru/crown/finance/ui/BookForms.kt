@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.Allocation
 import ru.crown.finance.ledger.ReconciliationPreview
+import ru.crown.finance.ledger.ImportChoice
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
@@ -63,6 +64,8 @@ internal data class BookCommands(
     val inspectBackup: () -> Unit,
     val setPeriodClosed: (YearMonth, Boolean, String) -> Unit,
     val reconcile: (ReconciliationPreview, Long, () -> Unit) -> Unit,
+    val chooseStatement: () -> Unit,
+    val importStatement: (String, List<ImportChoice>) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

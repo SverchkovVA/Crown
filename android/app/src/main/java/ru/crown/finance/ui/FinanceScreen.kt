@@ -339,6 +339,9 @@ private fun OperationsPage(
             PageTitle("Операции", monthLabel(snapshot.month))
             if (commands != null) {
                 MonthActions(commands)
+                if (snapshot.balances.isNotEmpty()) {
+                    TextButton(commands.chooseStatement, enabled = !commands.busy) { Text("Импорт выписки") }
+                }
                 commands.error?.let { FormError(it) }
                 if (snapshot.month in closedMonths(snapshot.periods)) Text("Месяц закрыт")
             }

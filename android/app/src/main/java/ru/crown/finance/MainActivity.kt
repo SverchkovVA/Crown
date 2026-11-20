@@ -32,6 +32,9 @@ import ru.crown.finance.ledger.JournalFormat
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.ReconciliationPreview
+import ru.crown.finance.ledger.StatementDocument
+import ru.crown.finance.ledger.ImportChoice
+import ru.crown.finance.ledger.readStatement
 import ru.crown.finance.ui.AccessScreen
 import ru.crown.finance.ui.BookCommands
 import ru.crown.finance.ui.CrownTheme
@@ -63,6 +66,7 @@ internal sealed interface Workspace {
         val busy: Boolean = false,
         val error: String? = null,
         val message: String? = null,
+        val statement: StatementDocument? = null,
     ) : Workspace
 }
 
@@ -86,6 +90,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     private var session: BookSession? = null
     private var lockRequested = false
     private var pendingFile: PendingFile? = null
+    private var pendingStatement: StatementDocument? = null
     private val mutableState = MutableStateFlow<Workspace>(Workspace.Access(repository.exists))
     val state = mutableState.asStateFlow()
 
@@ -142,7 +147,8 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 } else {
                     session = book
                     candidate = null
-                    mutableState.value = Workspace.Book(book.identity.name, snapshot, recoveryCode)
+                    mutableState.value = Workspace.Book(book.identity.name, snapshot, recoveryCode, statement = pendingStatement)
+                    pendingStatement = null
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -162,8 +168,11 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun fileManagerError(error: String) {
-        val current = mutableState.value as? Workspace.Access ?: return
-        mutableState.value = current.copy(error = error)
+        when (val current = mutableState.value) {
+            is Workspace.Access -> mutableState.value = current.copy(error = error)
+            is Workspace.Book -> mutableState.value = current.copy(error = error)
+            else -> Unit
+        }
     }
 
     fun setRestoreFile(file: Uri?) {
@@ -187,6 +196,44 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 backupPassword.fill(' ')
             }
         }
+    }
+
+    fun setStatementFile(file: Uri?) {
+        if (file == null || file.scheme != "content") return
+        closeBook()
+        val current = mutableState.value as? Workspace.Access ?: return
+        if (current.busy) return
+        pendingStatement = null
+        mutableState.value = current.copy(busy = true, message = null, error = null)
+        viewModelScope.launch {
+            try {
+                pendingStatement = withContext(Dispatchers.IO) {
+                    checkNotNull(documents.openInputStream(file)).use(::readStatement)
+                }
+                mutableState.value = current.copy(message = "Выписка загружена. Откройте книгу для проверки строк.", error = null)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: IllegalArgumentException) {
+                mutableState.value = current.copy(error = error.message ?: "Проверьте формат выписки")
+            } catch (_: Exception) {
+                mutableState.value = current.copy(error = "Не удалось прочитать выписку")
+            }
+        }
+    }
+
+    fun dismissStatement() {
+        val current = mutableState.value as? Workspace.Book ?: return
+        if (!current.busy) mutableState.value = current.copy(statement = null, error = null)
+    }
+
+    fun importStatement(account: String, choices: List<ImportChoice>) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        val document = current.statement ?: return
+        val month = choices.maxOfOrNull { YearMonth.from(it.operation.date) } ?: current.snapshot.month
+        change(saved = {
+            val saved = mutableState.value as? Workspace.Book
+            if (saved != null) mutableState.value = saved.copy(statement = null, message = "Выбранные строки выписки обработаны")
+        }) { update(month) { importStatement(document, account, choices) } }
     }
 
     fun setInspectFile(file: Uri?) {
@@ -404,6 +451,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     override fun onCleared() {
         pendingFile?.bytes?.fill(0)
         pendingFile = null
+        pendingStatement = null
         try {
             session?.close()
         } finally {
@@ -421,6 +469,9 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == RESULT_OK) model.setRestoreFile(result.data?.data)
     }
 
+    private val readStatement = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) model.setStatementFile(result.data?.data)
+    }
     private val verifyCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) model.setInspectFile(result.data?.data)
     }
@@ -447,9 +498,7 @@ class MainActivity : ComponentActivity() {
                         if (code != null) {
                             RecoveryScreen(code, model::acknowledgeRecovery)
                         } else {
-                            FinanceScreen(
-                                DemoState.Ready(workspace.snapshot), {}, workspace.name, { model.closeBook() },
-                                BookCommands(
+                            val commands = BookCommands(
                                     workspace.busy, workspace.error, model::clearError, model::changeMonth,
                                     model::addAccount, model::addOperation, model::reviseOperation,
                                     backup = { password -> model.prepareBackup(password, ::createFile) },
@@ -458,9 +507,19 @@ class MainActivity : ComponentActivity() {
                                     inspectBackup = { openCopy(verifyCopy) },
                                     setPeriodClosed = model::setPeriodClosed,
                                     reconcile = model::reconcile,
-                                ),
-                                notice = workspace.message,
-                            )
+                                    chooseStatement = { openStatement() },
+                                    importStatement = model::importStatement,
+                                )
+                            if (workspace.statement != null) {
+                                ru.crown.finance.ui.StatementReview(
+                                    workspace.statement, workspace.snapshot, commands, model::dismissStatement,
+                                )
+                            } else {
+                                FinanceScreen(
+                                    DemoState.Ready(workspace.snapshot), {}, workspace.name, { model.closeBook() },
+                                    commands, notice = workspace.message,
+                                )
+                            }
                         }
                     }
                 }
@@ -479,6 +538,16 @@ class MainActivity : ComponentActivity() {
             false
         } catch (_: SecurityException) {
             false
+        }
+    }
+
+    private fun openStatement() {
+        try {
+            readStatement.launch(localDocument(Intent.ACTION_OPEN_DOCUMENT).setType("*/*"))
+        } catch (_: ActivityNotFoundException) {
+            model.fileManagerError("Не удалось открыть файловый менеджер")
+        } catch (_: SecurityException) {
+            model.fileManagerError("Не удалось открыть файловый менеджер")
         }
     }
 

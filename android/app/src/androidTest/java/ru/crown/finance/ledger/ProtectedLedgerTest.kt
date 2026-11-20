@@ -130,10 +130,83 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun statementIsAtomicRepeatSafeAndLinksBothSidesOfTransfer() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Синтетика", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) {
+                    book.addAccount("Основной", 0, day)
+                    book.addAccount("Резерв", 0, day)
+                }
+                val accounts = book.snapshot(month).balances.map { it.account }
+                val main = accounts.first().id
+                val reserve = accounts.last().id
+                val document = parseStatement(
+                    "date;amount;id\n2026-11-20;120.00;one\n2026-11-20;-200.00;two\n2026-11-31;2.00;bad"
+                        .toByteArray(),
+                )
+                val choices = document.rows.map { row -> ImportChoice(row.position, row.proposal(main, document.key(main, row))) }
+                val accepted = book.update(month) { book.importStatement(document, main, choices) }
+                assertEquals((-8_000).toBigInteger(), accepted.totalMinor)
+                assertEquals(2, accepted.statementReceipts.size)
+                book.update(month) { book.importStatement(document, main, choices) }
+                assertEquals(accepted, book.snapshot(month))
+                val changed = parseStatement(
+                    "date;amount;id\n2026-11-20;130.00;one".toByteArray(),
+                )
+                reject {
+                    book.update(month) { book.importStatement(changed, main, changed.rows.map {
+                        ImportChoice(it.position, it.proposal(main, changed.key(main, it)))
+                    }) }
+                }
+                book.update(month) { book.setPeriodClosed(month, true, "") }
+                val locked = book.snapshot(month)
+                val mixed = parseStatement(
+                    "date;amount;id\n2026-12-20;10.00;future\n2026-11-20;10.00;locked".toByteArray(),
+                )
+                reject {
+                    book.update(month) { book.importStatement(mixed, main, mixed.rows.map {
+                        ImportChoice(it.position, it.proposal(main, mixed.key(main, it)))
+                    }) }
+                }
+                assertEquals(locked, book.snapshot(month))
+                book.update(month) { book.setPeriodClosed(month, false, "Проверка связей перевода") }
+                val transfer = Operation("transfer", OperationKind.Transfer, day, main, 2500, "Между счетами", reserve)
+                book.update(month) { book.addOperation(transfer) }
+                for ((account, amount) in listOf(main to "-25.00", reserve to "25.00")) {
+                    val incoming = parseStatement(
+                        ("date;amount;id\n2026-11-15;" + amount + ";transfer-side").toByteArray(),
+                    )
+                    val row = incoming.rows.single()
+                    book.update(month) { book.importStatement(
+                        incoming, account, listOf(ImportChoice(row.position, transfer, linkExisting = true)),
+                    ) }
+                }
+                val linked = book.snapshot(month)
+                assertEquals(4, linked.statementReceipts.size)
+                assertEquals(3, linked.history.size)
+                assertEquals((-8_000).toBigInteger(), linked.totalMinor)
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore(
+                    "new-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() },
+                )
+                restored = copy
+                assertEquals(linked.statementReceipts.toSet(), copy.snapshot(month).statementReceipts.toSet())
+                copy.update(month) { copy.importStatement(document, main, choices) }
+                assertEquals(linked.operations, copy.snapshot(month).operations)
+            } finally {
+                restored?.close()
+                book.close()
+            }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..4) {
+            for (version in 1..5) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets

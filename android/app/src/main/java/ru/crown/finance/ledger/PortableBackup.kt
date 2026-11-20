@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 4
+private const val CURRENT_VERSION: Byte = 5
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -31,6 +31,7 @@ internal data class BackupLedger(
     val categories: List<Category> = emptyList(),
     val periods: List<PeriodEvent> = emptyList(),
     val reconciliations: List<Reconciliation> = emptyList(),
+    val statementReceipts: List<StatementReceipt> = emptyList(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
@@ -63,7 +64,15 @@ internal data class BackupLedger(
             }
             current[value.id] = value
         }
-        validateRefunds(assembleHistory(operations, revisions))
+        val history = assembleHistory(operations, revisions)
+        validateRefunds(history)
+        require(statementReceipts.size <= MAX_ROWS)
+        require(statementReceipts.map(StatementReceipt::sourceKey).distinct().size == statementReceipts.size)
+        val versions = history.associate { it.id to it.revisions.map { revision -> revision.value.fingerprint() }.toSet() }
+        for (receipt in statementReceipts) {
+            require(receipt.sourceKey.matches(Regex("[0-9a-f]{64}")) && receipt.payloadHash.matches(Regex("[0-9a-f]{64}")))
+            require(receipt.operationVersion in versions[receipt.operationId].orEmpty())
+        }
         require(periods.size <= MAX_ROWS && reconciliations.size <= MAX_ROWS)
         closedMonths(periods)
         require(reconciliations.map(Reconciliation::id).distinct().size == reconciliations.size)
@@ -181,6 +190,13 @@ internal object PortableBackup {
                     out.text(result.fingerprint)
                     out.writeLong(result.recordedAt)
                 }
+                out.writeInt(data.statementReceipts.size)
+                for (receipt in data.statementReceipts) {
+                    out.text(receipt.sourceKey)
+                    out.text(receipt.payloadHash)
+                    out.text(receipt.operationId)
+                    out.text(receipt.operationVersion)
+                }
             }
             return content.toByteArray()
         } finally {
@@ -208,8 +224,11 @@ internal object PortableBackup {
         val reconciliations = if (version >= 4) List(data.count()) {
             Reconciliation(data.text(), data.text(), data.text(), data.readLong(), data.text(), data.text(), data.readLong())
         } else emptyList()
+        val receipts = if (version >= 5) List(data.count()) {
+            StatementReceipt(data.text(), data.text(), data.text(), data.text())
+        } else emptyList()
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations)
+        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {

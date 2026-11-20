@@ -34,6 +34,7 @@ class JournalUiTest {
 
     private fun commands(
         reconcileAction: (ReconciliationPreview, Long, () -> Unit) -> Unit = { _, _, _ -> },
+        importAction: (String, List<ImportChoice>) -> Unit = { _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
         accept: (Operation) -> Unit = {},
     ) = BookCommands(
@@ -41,6 +42,7 @@ class JournalUiTest {
         addOperation = { value, _ -> accept(value) }, reviseOperation = { _, _, _ -> },
         backup = {}, export = { _, _ -> }, addCategory = { _, _, _ -> }, inspectBackup = {},
         setPeriodClosed = closeAction, reconcile = reconcileAction,
+        chooseStatement = {}, importStatement = importAction,
     )
 
     @Test
@@ -143,11 +145,36 @@ class JournalUiTest {
         rule.runOnIdle { assertTrue(opened) }
     }
 
-    private fun saveImage(name: String) {
+    @Test
+    fun statementPreviewExcludesBadDateAndRequiresConfirmation() {
+        var selected: List<ImportChoice>? = null
+        val document = parseStatement(
+            "date;amount;id\n2026-11-20;120.00;one\n2026-11-20;-200.00;two\n2026-11-31;5;bad".toByteArray(),
+        )
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent {
+                CrownTheme { StatementReview(document, snapshot, commands(importAction = { _, values -> selected = values }), {}) }
+            }
+        }
+        rule.onNodeWithText("Добавить операции (2)").assertIsNotEnabled()
+        rule.onNodeWithTag("statement-rows").performScrollToNode(hasText("Строка 3 исключена", substring = true))
+        rule.onNodeWithText("Строка 3 исключена", substring = true).assertIsDisplayed()
+        saveImage("statement-preview", editor = false)
+        rule.onNodeWithContentDescription("Подтвердить строки выписки").performClick()
+        rule.onNodeWithText("Добавить операции (2)").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(2, selected?.size)
+            assertEquals(setOf(OperationKind.Income, OperationKind.Expense), selected?.map { it.operation.kind }?.toSet())
+        }
+    }
+
+    private fun saveImage(name: String, editor: Boolean = true) {
         rule.waitForIdle()
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }
         val file = File(directory, "$name.png")
-        val bitmap = rule.onNodeWithTag("operation-editor").captureToImage().asAndroidBitmap()
+        val node = if (editor) rule.onNodeWithTag("operation-editor") else rule.onRoot()
+        val bitmap = node.captureToImage().asAndroidBitmap()
         file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
 }
