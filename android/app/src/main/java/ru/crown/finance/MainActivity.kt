@@ -31,6 +31,7 @@ import ru.crown.finance.ledger.JournalExport
 import ru.crown.finance.ledger.JournalFormat
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
+import ru.crown.finance.ledger.ReconciliationPreview
 import ru.crown.finance.ui.AccessScreen
 import ru.crown.finance.ui.BookCommands
 import ru.crown.finance.ui.CrownTheme
@@ -369,6 +370,12 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         change(saved) { update(current.snapshot.month) { addCategory(name, kind) } }
     }
 
+    fun setPeriodClosed(month: YearMonth, closed: Boolean, reason: String) =
+        change { update(month) { setPeriodClosed(month, closed, reason) } }
+
+    fun reconcile(preview: ReconciliationPreview, actualMinor: Long, saved: () -> Unit) =
+        change(saved) { update(YearMonth.from(preview.date)) { reconcile(preview, actualMinor) } }
+
     private fun change(saved: () -> Unit = {}, action: suspend BookSession.() -> LedgerSnapshot) {
         val current = mutableState.value as? Workspace.Book ?: return
         val book = session ?: return
@@ -449,6 +456,8 @@ class MainActivity : ComponentActivity() {
                                     export = { preview, format -> model.prepareExport(preview, format, ::createFile) },
                                     addCategory = model::addCategory,
                                     inspectBackup = { openCopy(verifyCopy) },
+                                    setPeriodClosed = model::setPeriodClosed,
+                                    reconcile = model::reconcile,
                                 ),
                                 notice = workspace.message,
                             )

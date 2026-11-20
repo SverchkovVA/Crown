@@ -49,6 +49,19 @@ class PortableBackupTest {
     }
 
     @Test
+    fun periodsAndReconciliationRemainPartOfProtectedCopy() {
+        val checked = Reconciliation(
+            "check", "one", "2026-10-18", 500, "510", "a".repeat(64), 17,
+        )
+        val data = ledger.copy(
+            periods = listOf(PeriodEvent(1, "2026-10", true, "", 18)),
+            reconciliations = listOf(checked),
+        )
+        val bytes = PortableBackup.seal(data, correct.toCharArray())
+        assertEquals(data, PortableBackup.open(bytes.inputStream(), correct.toCharArray()))
+    }
+
+    @Test
     fun authenticationRejectsWrongPasswordAndAlteredBytes() {
         val copy = PortableBackup.seal(ledger, correct.toCharArray())
         assertThrows(AEADBadTagException::class.java) {

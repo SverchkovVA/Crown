@@ -184,7 +184,7 @@ private fun RestoreForm(
 @Composable
 internal fun StatusText(message: String) {
     Text(
-        message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        message, Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
         color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium,
     )
 }
@@ -224,7 +224,7 @@ internal fun WorkspaceTitle(title: String) {
 @Composable
 internal fun FormError(message: String) {
     Text(
-        message, Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        message, Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium,
     )
 }

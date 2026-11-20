@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,10 @@ internal fun RefundEditor(
     var date by remember { mutableStateOf(existing?.date?.format(datePattern) ?: defaultDate(snapshot.month)) }
     var description by remember { mutableStateOf(existing?.description ?: "Возврат · ${purchase.description}") }
     var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(rows, account, date, description) {
+        error = null
+        commands.clearError()
+    }
     Editor("Возврат покупки", commands, error, close, "Сохранить возврат", submit = {
         val values = rows.map { parseMinor(it.amount) }
         val selected = rows.zip(values).mapNotNull { (row, amount) ->

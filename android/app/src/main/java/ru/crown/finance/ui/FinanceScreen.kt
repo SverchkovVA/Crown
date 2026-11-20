@@ -68,6 +68,7 @@ import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.OperationHistory
 import ru.crown.finance.ledger.categoryTotals
 import ru.crown.finance.ledger.fingerprint
+import ru.crown.finance.ledger.closedMonths
 import java.math.BigDecimal
 import java.math.BigInteger
 import java.text.NumberFormat
@@ -88,10 +89,12 @@ private enum class Section(val title: String, val icon: Int) {
     Accounts("Счета", R.drawable.ic_accounts),
     Reports("Отчёты", R.drawable.ic_reports),
     History("История", R.drawable.ic_history),
+    Periods("Периоды", R.drawable.ic_history),
+    Reconciliations("Сверка остатков", R.drawable.ic_accounts),
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export }
+private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation }
 
 @Composable
 internal fun FinanceScreen(
@@ -126,8 +129,10 @@ internal fun FinanceScreen(
     LaunchedEffect(filterId, snapshot?.month) { operationsScroll.scrollToItem(0) }
 
     BackHandler(detailsId == null && editor == null) {
-        if (section == Section.History) {
+        if (section == Section.History || section == Section.Periods) {
             tab = Section.Protection.name
+        } else if (section == Section.Reconciliations) {
+            tab = Section.Accounts.name
         } else if (section != Section.Operations || filterId != null) {
             tab = Section.Operations.name
             filterId = null
@@ -156,7 +161,7 @@ internal fun FinanceScreen(
                                     commands.clearError()
                                     editor = if (createAccount) EditorSection.Account else EditorSection.Operation
                                 },
-                                enabled = !commands.busy,
+                                enabled = !commands.busy && (createAccount || snapshot.month !in closedMonths(snapshot.periods)),
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
                             ) {
                                 Icon(painterResource(R.drawable.ic_add), contentDescription = null)
@@ -166,7 +171,7 @@ internal fun FinanceScreen(
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
-                                if (destination == Section.History) continue
+                                if (destination in listOf(Section.History, Section.Periods, Section.Reconciliations)) continue
                                 if (commands == null && destination in listOf(Section.Reports, Section.Protection)) continue
                                 NavigationBarItem(
                                     selected = section == destination,
@@ -210,11 +215,18 @@ internal fun FinanceScreen(
                         showDetails = { detailsId = it.id },
                         commands = commands,
                     )
-                    Section.Accounts -> AccountsPage(state.snapshot, accountsScroll) {
+                    Section.Accounts -> AccountsPage(
+                        state.snapshot, accountsScroll,
+                        reconcile = { tab = Section.Reconciliations.name }.takeIf { commands != null },
+                    ) {
                         filterId = it.account.id
                         tab = Section.Operations.name
                     }
                     Section.History -> HistoryPage(state.snapshot.history) { detailsId = it.id }
+                    Section.Periods -> commands?.let { PeriodsPage(state.snapshot, it) }
+                    Section.Reconciliations -> commands?.let {
+                        ReconciliationsPage(state.snapshot, it) { editor = EditorSection.Reconciliation }
+                    }
                     Section.Reports -> ReportsPage(state.snapshot, commands) {
                         commands?.clearError()
                         editor = EditorSection.Export
@@ -230,6 +242,7 @@ internal fun FinanceScreen(
                             editor = EditorSection.Categories
                         },
                         inspectBackup = { commands?.inspectBackup?.invoke() },
+                        openPeriods = { tab = Section.Periods.name },
                     )
                 }
             }
@@ -245,6 +258,7 @@ internal fun FinanceScreen(
             EditorSection.Refund -> refundPurchase?.let { purchase ->
                 RefundEditor(purchase, snapshot, commands, closeEditor, correction)
             }
+            EditorSection.Reconciliation -> ReconciliationEditor(snapshot, commands, closeEditor)
             EditorSection.Backup -> BackupForm(commands, closeEditor)
             EditorSection.Categories -> CategoryEditor(snapshot.categories, commands, closeEditor)
             EditorSection.Export -> JournalExportForm(snapshot, monthLabel(snapshot.month), commands, closeEditor)
@@ -325,6 +339,7 @@ private fun OperationsPage(
             if (commands != null) {
                 MonthActions(commands)
                 commands.error?.let { FormError(it) }
+                if (snapshot.month in closedMonths(snapshot.periods)) Text("Месяц закрыт")
             }
             if (filter != null) {
                 FilterChip(
@@ -366,6 +381,7 @@ private fun OperationsPage(
 private fun AccountsPage(
     snapshot: LedgerSnapshot,
     scroll: LazyListState,
+    reconcile: (() -> Unit)?,
     open: (AccountBalance) -> Unit,
 ) {
     LazyColumn(
@@ -377,6 +393,7 @@ private fun AccountsPage(
             PageTitle("Счета", "Остатки на ${snapshot.month.atEndOfMonth().format(DayFormat)}")
             Spacer(Modifier.height(16.dp))
             BalancePanel("Всего на счетах", snapshot.totalMinor)
+            if (reconcile != null) OutlinedButton(reconcile, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Сверка остатков") }
             Spacer(Modifier.height(20.dp))
         }
         items(snapshot.balances, key = { it.account.id }) { balance ->
@@ -408,7 +425,7 @@ private fun AccountsPage(
 }
 
 @Composable
-private fun MonthActions(commands: BookCommands) {
+internal fun MonthActions(commands: BookCommands) {
     Row {
         TextButton(
             onClick = { commands.changeMonth(-1) }, enabled = !commands.busy,
@@ -538,6 +555,7 @@ private fun OperationDetails(
 ) {
     var confirmCancellation by remember { mutableStateOf(false) }
     val cancelled = history?.current?.cancelled == true
+    val locked = java.time.YearMonth.from(operation.date) in closedMonths(snapshot.periods)
     ModalBottomSheet(
         onDismissRequest = { if (commands?.busy != true) close() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -581,7 +599,8 @@ private fun OperationDetails(
                 availableRefund(operation, snapshot).isNotEmpty()) {
                 OutlinedButton(refund, Modifier.fillMaxWidth(), enabled = !commands.busy) { Text("Оформить возврат") }
             }
-            if (commands != null && !cancelled && operation.kind != OperationKind.Opening) {
+            if (locked && !cancelled) Text("Для исправления или отмены откройте месяц в разделе «Периоды»")
+            if (commands != null && !cancelled && !locked && operation.kind != OperationKind.Opening) {
                 Button(onClick = edit, enabled = !commands.busy, modifier = Modifier.fillMaxWidth()) {
                     Text("Исправить")
                 }
@@ -731,7 +750,7 @@ private fun Operation.accountCaption(snapshot: LedgerSnapshot): String {
 private fun Operation.displayedAmount(): Long =
     if (kind == OperationKind.Transfer) amountMinor else movementFor(accountId)
 
-private fun monthLabel(month: YearMonth): String =
+internal fun monthLabel(month: YearMonth): String =
     month.format(MonthFormat).replaceFirstChar { it.titlecase(Russian) }
 
 internal fun money(minor: Long, signed: Boolean = false): String = money(minor.toBigInteger(), signed)

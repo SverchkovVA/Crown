@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 3
+private const val CURRENT_VERSION: Byte = 4
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -29,6 +29,8 @@ internal data class BackupLedger(
     val operations: List<Operation>,
     val revisions: List<Revision>,
     val categories: List<Category> = emptyList(),
+    val periods: List<PeriodEvent> = emptyList(),
+    val reconciliations: List<Reconciliation> = emptyList(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
@@ -62,6 +64,16 @@ internal data class BackupLedger(
             current[value.id] = value
         }
         validateRefunds(assembleHistory(operations, revisions))
+        require(periods.size <= MAX_ROWS && reconciliations.size <= MAX_ROWS)
+        closedMonths(periods)
+        require(reconciliations.map(Reconciliation::id).distinct().size == reconciliations.size)
+        for (result in reconciliations) {
+            require(result.id.length in 1..64 && result.accountId in ids)
+            require(LocalDate.parse(result.date).year in 1900..9999)
+            require(result.actualMinor != Long.MIN_VALUE)
+            require(result.calculatedMinor.length <= 100 && result.calculatedMinor.toBigInteger().toString() == result.calculatedMinor)
+            require(result.fingerprint.matches(Regex("[0-9a-f]{64}")))
+        }
     }
 
     private fun Operation.validate(knownAccounts: Set<String>, kinds: Map<String, OperationKind>) {
@@ -152,6 +164,23 @@ internal object PortableBackup {
                     out.writeBoolean(revision.cancelled)
                     out.operation(revision.value)
                 }
+                out.writeInt(data.periods.size)
+                for (event in data.periods) {
+                    out.text(event.month)
+                    out.writeBoolean(event.closed)
+                    out.writeUTF(event.reason)
+                    out.writeLong(event.recordedAt)
+                }
+                out.writeInt(data.reconciliations.size)
+                for (result in data.reconciliations) {
+                    out.text(result.id)
+                    out.text(result.accountId)
+                    out.text(result.date)
+                    out.writeLong(result.actualMinor)
+                    out.text(result.calculatedMinor)
+                    out.text(result.fingerprint)
+                    out.writeLong(result.recordedAt)
+                }
             }
             return content.toByteArray()
         } finally {
@@ -173,8 +202,14 @@ internal object PortableBackup {
             val cancelled = data.readBoolean()
             Revision(data.operation(version), recordedAt, cancelled)
         }
+        val periods = if (version >= 4) List(data.count()) { index ->
+            PeriodEvent(index.toLong() + 1, data.text(), data.readBoolean(), data.readUTF(), data.readLong())
+        } else emptyList()
+        val reconciliations = if (version >= 4) List(data.count()) {
+            Reconciliation(data.text(), data.text(), data.text(), data.readLong(), data.text(), data.text(), data.readLong())
+        } else emptyList()
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions, categories)
+        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {

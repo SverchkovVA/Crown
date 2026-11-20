@@ -32,10 +32,15 @@ class JournalUiTest {
         YearMonth.from(date), listOf(Account("main", "Основной")), listOf(purchase),
     ).copy(categories = listOf(food, home), history = listOf(OperationHistory(listOf(Revision(purchase, null)))))
 
-    private fun commands(accept: (Operation) -> Unit = {}) = BookCommands(
+    private fun commands(
+        reconcileAction: (ReconciliationPreview, Long, () -> Unit) -> Unit = { _, _, _ -> },
+        closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
+        accept: (Operation) -> Unit = {},
+    ) = BookCommands(
         busy = false, error = null, clearError = {}, changeMonth = {}, addAccount = { _, _, _, _ -> },
         addOperation = { value, _ -> accept(value) }, reviseOperation = { _, _, _ -> },
         backup = {}, export = { _, _ -> }, addCategory = { _, _, _ -> }, inspectBackup = {},
+        setPeriodClosed = closeAction, reconcile = reconcileAction,
     )
 
     @Test
@@ -55,6 +60,7 @@ class JournalUiTest {
         rule.onNodeWithText("Сумма возврата превышает доступный остаток").assertIsDisplayed()
         assertNull(recorded)
         rule.onNode(hasText("Возврат части 1, ₽") and hasSetTextAction()).performTextReplacement("1.50")
+        rule.onNodeWithText("Сумма возврата превышает доступный остаток").assertDoesNotExist()
         saveImage("refund-form")
         rule.onNodeWithText("Сохранить возврат").assertIsDisplayed().performClick()
         rule.runOnIdle {
@@ -85,9 +91,55 @@ class JournalUiTest {
         rule.onNodeWithText("Сумма частей должна равняться сумме операции").assertIsDisplayed()
         assertNull(recorded)
         rule.onNode(hasText("Сумма части 2, ₽") and hasSetTextAction()).performTextReplacement("4.00")
+        rule.onNodeWithText("Сумма частей должна равняться сумме операции").assertDoesNotExist()
         saveImage("split-form")
         rule.onNodeWithText("Сохранить операцию").assertIsDisplayed().performClick()
         rule.runOnIdle { assertEquals(listOf(Allocation(food.id, 600), Allocation(home.id, 400)), recorded?.parts) }
+    }
+
+    @Test
+    fun reconciliationUsesChosenDateAndKeepsSaveVisible() {
+        var saved: ReconciliationPreview? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent {
+                CrownTheme {
+                    ReconciliationEditor(snapshot, commands(reconcileAction = { preview, _, _ -> saved = preview }), {})
+                }
+            }
+        }
+        rule.onNode(hasText("Дата сверки · ДД.ММ.ГГГГ") and hasSetTextAction()).performTextReplacement("14.11.2026")
+        rule.onNode(hasText("Остаток в банке, ₽") and hasSetTextAction()).performTextReplacement("0.00")
+        rule.onNodeWithText("Остатки совпадают").assertIsDisplayed()
+        saveImage("reconciliation-form")
+        rule.onNodeWithText("Сохранить сверку").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(date.minusDays(1), saved?.date)
+            assertEquals(0.toBigInteger(), saved?.calculatedMinor)
+        }
+    }
+
+    @Test
+    fun reopeningMonthRequiresReasonAndConfirmation() {
+        var opened = false
+        val locked = snapshot.copy(periods = listOf(PeriodEvent(
+            1, snapshot.month.toString(), true, "", 1,
+        )))
+        rule.activity.runOnUiThread {
+            rule.activity.setContent {
+                CrownTheme {
+                    PeriodsPage(locked, commands(closeAction = { month, closed, reason ->
+                        opened = month == snapshot.month && !closed && reason == "Уточнение"
+                    }))
+                }
+            }
+        }
+        rule.onNodeWithText("Открыть месяц").assertIsNotEnabled()
+        rule.onNode(hasText("Причина открытия месяца") and hasSetTextAction()).performTextReplacement("Уточнение")
+        rule.onNodeWithText("Открыть месяц").performClick()
+        assertFalse(opened)
+        rule.onNodeWithText("Подтвердить").performClick()
+        rule.runOnIdle { assertTrue(opened) }
     }
 
     private fun saveImage(name: String) {

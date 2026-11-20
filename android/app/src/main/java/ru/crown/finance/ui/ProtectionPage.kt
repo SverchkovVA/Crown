@@ -30,6 +30,7 @@ internal fun ProtectionPage(
     openHistory: () -> Unit,
     openCategories: () -> Unit,
     inspectBackup: () -> Unit,
+    openPeriods: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -37,6 +38,7 @@ internal fun ProtectionPage(
     ) {
         WorkspaceTitle("Настройки")
         OutlinedButton(openCategories) { Text("Категории") }
+        OutlinedButton(openPeriods) { Text("Периоды") }
         OutlinedButton(openHistory) {
             Icon(painterResource(R.drawable.ic_history), contentDescription = null, modifier = Modifier.padding(end = 8.dp))
             Text("История изменений")

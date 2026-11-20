@@ -35,8 +35,11 @@ internal interface BookIdentityDao {
 }
 
 @Database(
-    entities = [BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class],
-    version = 4,
+    entities = [
+        BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
+        PeriodEvent::class, Reconciliation::class,
+    ],
+    version = 5,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -44,7 +47,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun ledger(): LedgerDao
     abstract fun revisions(): RevisionDao
     abstract fun categories(): CategoryDao
+    abstract fun control(): ControlDao
 }
+
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration)
 
 internal class BookRepository(
     context: Context,
@@ -125,6 +131,8 @@ internal class BookRepository(
         })
         for (category in backup.categories) database.categories().insert(category.toRow())
         database.ledger().insertOperations(backup.operations.map(Operation::toRow))
+        for (event in backup.periods) database.control().insert(event.copy(sequence = 0))
+        for (result in backup.reconciliations) database.control().insert(result)
         for (revision in backup.revisions) {
             database.revisions().insert(
                 RevisionRow(
@@ -169,7 +177,7 @@ internal class BookRepository(
             System.loadLibrary("sqlcipher")
             database = Room.databaseBuilder(app, BookDatabase::class.java, file.absolutePath)
                 .openHelperFactory(SupportOpenHelperFactory(material))
-                .addMigrations(historyMigration, categoriesMigration, detailsMigration)
+                .addMigrations(*bookMigrations)
                 .setJournalMode(RoomDatabase.JournalMode.TRUNCATE)
                 .build()
             database.openHelper.writableDatabase.query("PRAGMA cipher_version").use { cursor ->
@@ -201,6 +209,7 @@ internal class BookSession(
         val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
+            periods = db.control().periods(), reconciliations = db.control().reconciliations(),
         )
     }
 
@@ -211,6 +220,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
+                db.control().periods(), db.control().reconciliations(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -225,6 +235,7 @@ internal class BookSession(
         val title = name.trim()
         require(opening != Long.MIN_VALUE) { "Начальный остаток превышает допустимый диапазон" }
         require(title.length in 1..100) { "Введите название счёта" }
+        if (opening != 0L) requireOpenDates(db.control().periods(), date)
         val accounts = dao.accounts()
         require(accounts.none { it.name.equals(title, ignoreCase = true) }) { "Счёт с таким названием уже есть" }
         val row = AccountRow(UUID.randomUUID().toString(), title, accounts.size)
@@ -241,6 +252,7 @@ internal class BookSession(
 
     suspend fun addOperation(operation: Operation) = db.withTransaction {
         require(operation.kind != OperationKind.Opening)
+        requireOpenDates(db.control().periods(), operation.date)
         validateCategory(operation)
         checkRefundSource(operation)
         dao.insertOperations(listOf(operation.toRow()))
@@ -255,6 +267,7 @@ internal class BookSession(
         val current = revision?.value?.toOperation() ?: original.toOperation()
         require(current == expected) { "Операция изменилась. Откройте её заново" }
         val next = replacement ?: current
+        requireOpenDates(db.control().periods(), current.date, next.date)
         if (replacement != null) checkRefundSource(next)
         require(next.id == id && current.kind != OperationKind.Opening && next.kind != OperationKind.Opening)
         val ids = dao.accounts().map(AccountRow::id).toSet()
@@ -267,6 +280,27 @@ internal class BookSession(
             RevisionRow(recordedAt = Instant.now().toEpochMilli(), cancelled = replacement == null, value = next.toRow()),
         )
         validateRefunds(history())
+    }
+
+    suspend fun setPeriodClosed(month: YearMonth, closed: Boolean, reason: String) = db.withTransaction {
+        require(month.year in 1900..9999)
+        val events = db.control().periods()
+        require((month in closedMonths(events)) != closed) { "Состояние периода уже изменилось" }
+        require(reason.trim().length <= 200)
+        require(closed || reason.isNotBlank()) { "Укажите причину открытия периода" }
+        db.control().insert(PeriodEvent(
+            month = month.toString(), closed = closed, reason = reason.trim(), recordedAt = Instant.now().toEpochMilli(),
+        ))
+    }
+
+    suspend fun reconcile(preview: ReconciliationPreview, actualMinor: Long) = db.withTransaction {
+        val current = previewReconciliation(history(), dao.accounts().map(AccountRow::toAccount), preview.accountId, preview.date)
+        require(current == preview) { "Данные изменились. Выполните сверку заново" }
+        require(actualMinor != Long.MIN_VALUE) { "Сумма превышает допустимый диапазон" }
+        db.control().insert(Reconciliation(
+            UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
+            preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
+        ))
     }
 
     suspend fun addCategory(name: String, kind: OperationKind) = db.withTransaction {

@@ -21,6 +21,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.Allocation
+import ru.crown.finance.ledger.ReconciliationPreview
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
@@ -59,6 +61,8 @@ internal data class BookCommands(
     val export: (JournalExport, JournalFormat) -> Unit,
     val addCategory: (String, OperationKind, () -> Unit) -> Unit,
     val inspectBackup: () -> Unit,
+    val setPeriodClosed: (YearMonth, Boolean, String) -> Unit,
+    val reconcile: (ReconciliationPreview, Long, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
@@ -72,6 +76,10 @@ internal fun AccountEditor(month: YearMonth, commands: BookCommands, close: () -
     var opening by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(defaultDate(month)) }
     var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(name, opening, date) {
+        error = null
+        commands.clearError()
+    }
     Editor(
         "Новый счёт", commands, error, close, "Сохранить счёт",
         submit = {
@@ -124,6 +132,10 @@ internal fun OperationEditor(
     var error by remember { mutableStateOf<String?>(null) }
     val transfer = kind == OperationKind.Transfer
     val availableCategories = categories.filter { it.kind == kind }
+    LaunchedEffect(kind, origin, destination, amount, fee, category, date, description, allocations, split) {
+        error = null
+        commands.clearError()
+    }
     Editor(
         if (existing == null) "Новая операция" else "Исправление операции",
         commands, error, close, "Сохранить операцию",
@@ -210,6 +222,10 @@ internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, 
     var name by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf(OperationKind.Expense) }
     var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(name, kind) {
+        error = null
+        commands.clearError()
+    }
     Editor(
         "Категории", commands, error, close, "Создать категорию",
         submit = {

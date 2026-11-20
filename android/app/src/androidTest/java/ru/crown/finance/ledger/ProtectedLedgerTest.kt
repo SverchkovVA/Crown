@@ -81,10 +81,59 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun periodsBlockChangesAndReconciliationDoesNotInventMoney() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Синтетика", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) { book.addAccount("Основной", 100_000, day) }
+                val initial = book.snapshot(month)
+                val accounts = initial.balances.map { it.account }
+                val account = accounts.single().id
+                val preview = previewReconciliation(initial.history, accounts, account, day)
+                val purchase = Operation("buy", OperationKind.Expense, day.plusDays(1), account, 1_000, "Покупка")
+                book.update(month) { book.addOperation(purchase) }
+                book.update(month) { book.reconcile(preview, 99_995) }
+                val checked = book.snapshot(month)
+                assertEquals((-5).toBigInteger(), checked.reconciliations.single().difference)
+                assertEquals(99_000.toBigInteger(), checked.totalMinor)
+                val changed = purchase.copy(date = day)
+                book.update(month) { book.reviseOperation(purchase, changed) }
+                reject { book.update(month) { book.reconcile(preview, 100_000) } }
+                book.update(month) { book.setPeriodClosed(month, true, "") }
+                val locked = book.snapshot(month)
+                reject { book.update(month) { book.addOperation(changed.copy(id = "extra")) } }
+                reject { book.update(month) { book.reviseOperation(changed, changed.copy(date = day.plusMonths(1))) } }
+                reject { book.update(month) { book.reviseOperation(changed, null) } }
+                reject { book.update(month) { book.setPeriodClosed(month, false, " ") } }
+                assertEquals(locked, book.snapshot(month))
+                val returned = Operation(
+                    "return", OperationKind.Refund, month.plusMonths(1).atDay(1), account, 100, "Возврат",
+                    refundOf = changed.id, refundVersion = changed.fingerprint(),
+                )
+                book.update(month.plusMonths(1)) { book.addOperation(returned) }
+                val copyBytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore(
+                    "new-only".toCharArray(), "copy-only".toCharArray(), { copyBytes.inputStream() },
+                )
+                restored = copy
+                assertEquals(book.snapshot(month).periods, copy.snapshot(month).periods)
+                assertEquals(book.snapshot(month).reconciliations, copy.snapshot(month).reconciliations)
+                reject { copy.update(month) { copy.addOperation(changed.copy(id = "locked-copy")) } }
+                book.update(month) { book.setPeriodClosed(month, false, "Уточнение данных") }
+                assertTrue(closedMonths(book.snapshot(month).periods).isEmpty())
+            } finally {
+                restored?.close()
+                book.close()
+            }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..3) {
+            for (version in 1..4) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets
@@ -116,7 +165,7 @@ class ProtectedLedgerTest {
                 helper.close()
                 val room = Room.databaseBuilder(context, BookDatabase::class.java, path.absolutePath)
                     .openHelperFactory(SupportOpenHelperFactory(key))
-                    .addMigrations(historyMigration, categoriesMigration, detailsMigration)
+                    .addMigrations(*bookMigrations)
                     .build()
                 try {
                     assertEquals("migration", room.identity().entries().single().id)
