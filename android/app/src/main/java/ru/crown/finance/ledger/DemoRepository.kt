@@ -2,6 +2,7 @@ package ru.crown.finance.ledger
 
 import android.content.Context
 import androidx.room.Dao
+import androidx.room.ColumnInfo
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -20,8 +21,14 @@ import java.time.LocalDate
 import java.time.YearMonth
 
 @Entity(tableName = "ledger_accounts")
-internal data class AccountRow(@PrimaryKey val id: String, val name: String, val sortOrder: Int) {
-    fun toAccount() = Account(id, name)
+internal data class AccountRow(
+    @PrimaryKey val id: String,
+    val name: String,
+    val sortOrder: Int,
+    val bankId: String? = null,
+    @ColumnInfo(defaultValue = "'other'") val kind: String = "other",
+) {
+    fun toAccount() = Account(id, name, bankId, AccountKind.fromWireName(kind))
 }
 
 @Entity(

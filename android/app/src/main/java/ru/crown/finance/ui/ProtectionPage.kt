@@ -31,12 +31,14 @@ internal fun ProtectionPage(
     openCategories: () -> Unit,
     inspectBackup: () -> Unit,
     openPeriods: () -> Unit,
+    openBanks: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         WorkspaceTitle("Настройки")
+        OutlinedButton(openBanks) { Text("Банки") }
         OutlinedButton(openCategories) { Text("Категории") }
         OutlinedButton(openPeriods) { Text("Периоды") }
         OutlinedButton(openHistory) {

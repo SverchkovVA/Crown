@@ -11,18 +11,26 @@ import java.math.BigInteger
 
 internal val categoryKinds = listOf(OperationKind.Expense, OperationKind.Income)
 
-internal data class Category(val id: String, val name: String, val kind: OperationKind) {
+internal data class Category(
+    val id: String,
+    val name: String,
+    val kind: OperationKind,
+    val parentId: String? = null,
+) {
     init {
         require(id.length in 1..64 && name.isNotBlank() && name.length <= 80 && kind in categoryKinds)
+        require(parentId == null || (parentId != id && parentId.length in 1..64))
     }
 }
 
 @Entity(tableName = "ledger_categories")
-internal data class CategoryRow(@PrimaryKey val id: String, val name: String, val kind: String) {
-    fun toCategory() = Category(id, name, OperationKind.fromWireName(kind))
+internal data class CategoryRow(
+    @PrimaryKey val id: String, val name: String, val kind: String, val parentId: String? = null,
+) {
+    fun toCategory() = Category(id, name, OperationKind.fromWireName(kind), parentId)
 }
 
-internal fun Category.toRow() = CategoryRow(id, name, kind.wireName)
+internal fun Category.toRow() = CategoryRow(id, name, kind.wireName, parentId)
 
 @Dao
 internal interface CategoryDao {

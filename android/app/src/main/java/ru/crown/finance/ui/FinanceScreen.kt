@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import ru.crown.finance.DemoState
 import ru.crown.finance.R
 import ru.crown.finance.ledger.AccountBalance
+import ru.crown.finance.ledger.AccountKind
 import ru.crown.finance.ledger.LedgerSnapshot
 import ru.crown.finance.ledger.Operation
 import ru.crown.finance.ledger.OperationKind
@@ -95,7 +96,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation }
+private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks }
 
 @Composable
 internal fun FinanceScreen(
@@ -244,6 +245,7 @@ internal fun FinanceScreen(
                         },
                         inspectBackup = { commands?.inspectBackup?.invoke() },
                         openPeriods = { tab = Section.Periods.name },
+                        openBanks = { editor = EditorSection.Banks },
                     )
                 }
             }
@@ -252,7 +254,7 @@ internal fun FinanceScreen(
 
     if (snapshot != null && commands != null) {
         when (editor) {
-            EditorSection.Account -> AccountEditor(snapshot.month, commands, closeEditor)
+            EditorSection.Account -> AccountEditor(snapshot.month, snapshot.banks, commands, closeEditor)
             EditorSection.Operation -> OperationEditor(
                 snapshot.balances, snapshot.categories, snapshot.month, filterId, commands, closeEditor, correction,
             )
@@ -260,6 +262,7 @@ internal fun FinanceScreen(
                 RefundEditor(purchase, snapshot, commands, closeEditor, correction)
             }
             EditorSection.Reconciliation -> ReconciliationEditor(snapshot, commands, closeEditor)
+            EditorSection.Banks -> BankEditor(snapshot.banks, commands, closeEditor)
             EditorSection.Backup -> BackupForm(commands, closeEditor)
             EditorSection.Categories -> CategoryEditor(snapshot.categories, commands, closeEditor)
             EditorSection.Export -> JournalExportForm(snapshot, monthLabel(snapshot.month), commands, closeEditor)
@@ -415,6 +418,10 @@ private fun AccountsPage(
                     Icon(painterResource(R.drawable.ic_accounts), null, tint = MaterialTheme.colorScheme.primary)
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(balance.account.name, style = MaterialTheme.typography.titleMedium)
+                        val bank = snapshot.banks.firstOrNull { it.id == balance.account.bankId }?.name
+                        val kind = balance.account.kind.takeUnless { it == AccountKind.Other }?.title
+                        val caption = listOfNotNull(bank, kind).joinToString(" · ")
+                        if (caption.isNotEmpty()) Text(caption, style = MaterialTheme.typography.bodySmall)
                         Text(money(balance.minor), style = MaterialTheme.typography.bodyLarge)
                     }
                     Icon(

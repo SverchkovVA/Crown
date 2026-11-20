@@ -62,6 +62,19 @@ class PortableBackupTest {
     }
 
     @Test
+    fun banksKindsAndParentsRoundTripWithoutChangingFinancialAmounts() {
+        val bank = Bank("bank", "Учебный банк")
+        val parent = category.copy(id = "parent", name = "Родитель")
+        val data = ledger.copy(
+            accounts = listOf(ledger.accounts.single().copy(bankId = bank.id, kind = AccountKind.Deposit)),
+            categories = listOf(parent, category.copy(parentId = parent.id)),
+            banks = listOf(bank),
+        )
+        val bytes = PortableBackup.seal(data, correct.toCharArray())
+        assertEquals(data, PortableBackup.open(bytes.inputStream(), correct.toCharArray()))
+    }
+
+    @Test
     fun authenticationRejectsWrongPasswordAndAlteredBytes() {
         val copy = PortableBackup.seal(ledger, correct.toCharArray())
         assertThrows(AEADBadTagException::class.java) {

@@ -203,10 +203,52 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun banksAccountKindsAndSubcategoriesSurviveProtectedRestore() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Синтетика", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                assertTrue(book.snapshot(month).banks.isEmpty())
+                book.update(month) {
+                    book.addBank("Учебный банк")
+                    book.addCategory("Продукты", OperationKind.Expense)
+                }
+                val catalog = book.snapshot(month)
+                val bank = catalog.banks.single()
+                val parent = catalog.categories.single()
+                book.update(month) {
+                    book.addCategory("Кафе", OperationKind.Expense, parent.id)
+                    book.addAccount("Карта", 15_000, day, bank.id, AccountKind.DebitCard)
+                }
+                val actual = book.snapshot(month)
+                reject { book.update(month) { book.addBank("учебный БАНК") } }
+                reject { book.update(month) { book.addAccount("Ошибка", 100, day, "missing-bank") } }
+                reject { book.update(month) { book.addCategory("Ошибка", OperationKind.Income, parent.id) } }
+                assertEquals(actual, book.snapshot(month))
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore(
+                    "new-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() },
+                )
+                restored = copy
+                val after = copy.snapshot(month)
+                assertEquals(actual.banks, after.banks)
+                assertEquals(actual.categories, after.categories)
+                assertEquals(actual.balances, after.balances)
+                assertEquals(AccountKind.DebitCard, after.balances.single().account.kind)
+                assertEquals(bank.id, after.balances.single().account.bankId)
+                assertEquals(parent.id, after.categories.first { it.name == "Кафе" }.parentId)
+            } finally {
+                restored?.close()
+                book.close()
+            }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..5) {
+            for (version in 1..6) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets
@@ -243,6 +285,8 @@ class ProtectedLedgerTest {
                 try {
                     assertEquals("migration", room.identity().entries().single().id)
                     assertEquals("main", room.ledger().accounts().single().id)
+                    assertEquals(AccountKind.Other, room.ledger().accounts().single().toAccount().kind)
+                    assertNull(room.ledger().accounts().single().bankId)
                     assertTrue(room.ledger().operations().isEmpty())
                     val header = ByteArray(16)
                     java.io.DataInputStream(path.inputStream()).use { it.readFully(header) }

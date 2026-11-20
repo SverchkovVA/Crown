@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 5
+private const val CURRENT_VERSION: Byte = 6
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -32,11 +32,13 @@ internal data class BackupLedger(
     val periods: List<PeriodEvent> = emptyList(),
     val reconciliations: List<Reconciliation> = emptyList(),
     val statementReceipts: List<StatementReceipt> = emptyList(),
+    val banks: List<Bank> = emptyList(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
         require(accounts.size <= MAX_ROWS && operations.size <= MAX_ROWS && revisions.size <= MAX_ROWS)
-        require(categories.size <= MAX_ROWS)
+        require(categories.size <= MAX_ROWS && banks.size <= MAX_ROWS)
+        validateCatalogs(accounts, categories, banks)
         val kinds = categories.associate { it.id to it.kind }
         require(kinds.size == categories.size)
         require(categories.map { it.kind to it.name.lowercase() }.distinct().size == categories.size)
@@ -158,12 +160,15 @@ internal object PortableBackup {
                 for (account in data.accounts) {
                     out.text(account.id)
                     out.text(account.name)
+                    out.writeUTF(account.bankId.orEmpty())
+                    out.text(account.kind.wireName)
                 }
                 out.writeInt(data.categories.size)
                 for (category in data.categories) {
                     out.text(category.id)
                     out.text(category.name)
                     out.text(category.kind.wireName)
+                    out.writeUTF(category.parentId.orEmpty())
                 }
                 out.writeInt(data.operations.size)
                 data.operations.forEach { out.operation(it) }
@@ -197,6 +202,11 @@ internal object PortableBackup {
                     out.text(receipt.operationId)
                     out.text(receipt.operationVersion)
                 }
+                out.writeInt(data.banks.size)
+                for (bank in data.banks) {
+                    out.text(bank.id)
+                    out.text(bank.name)
+                }
             }
             return content.toByteArray()
         } finally {
@@ -206,9 +216,20 @@ internal object PortableBackup {
 
     private fun decode(bytes: ByteArray, version: Int): BackupLedger = DataInputStream(ByteArrayInputStream(bytes)).use { data ->
         val title = data.text()
-        val accounts = List(data.count()) { Account(data.text(), data.text()) }
+        val accounts = List(data.count()) {
+            val id = data.text()
+            val name = data.text()
+            val bank = if (version >= 6) data.readUTF().ifEmpty { null } else null
+            val kind = if (version >= 6) AccountKind.fromWireName(data.text()) else AccountKind.Other
+            Account(id, name, bank, kind)
+        }
         val categories = if (version >= 2) {
-            List(data.count()) { Category(data.text(), data.text(), OperationKind.fromWireName(data.text())) }
+            List(data.count()) {
+                val id = data.text()
+                val name = data.text()
+                val kind = OperationKind.fromWireName(data.text())
+                Category(id, name, kind, if (version >= 6) data.readUTF().ifEmpty { null } else null)
+            }
         } else {
             emptyList()
         }
@@ -227,8 +248,9 @@ internal object PortableBackup {
         val receipts = if (version >= 5) List(data.count()) {
             StatementReceipt(data.text(), data.text(), data.text(), data.text())
         } else emptyList()
+        val banks = if (version >= 6) List(data.count()) { Bank(data.text(), data.text()) } else emptyList()
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts)
+        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {

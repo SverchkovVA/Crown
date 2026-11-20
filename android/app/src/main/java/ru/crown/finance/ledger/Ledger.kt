@@ -16,7 +16,12 @@ internal enum class OperationKind(val wireName: String) {
     }
 }
 
-internal data class Account(val id: String, val name: String)
+internal data class Account(
+    val id: String,
+    val name: String,
+    val bankId: String? = null,
+    val kind: AccountKind = AccountKind.Other,
+)
 
 internal data class Operation(
     val id: String,
@@ -82,6 +87,7 @@ internal data class LedgerSnapshot(
     val periods: List<PeriodEvent> = emptyList(),
     val reconciliations: List<Reconciliation> = emptyList(),
     val statementReceipts: List<StatementReceipt> = emptyList(),
+    val banks: List<Bank> = emptyList(),
 ) {
     val totalMinor: BigInteger = balances.fold(BigInteger.ZERO) { sum, balance -> sum + balance.minor }
 

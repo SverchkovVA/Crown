@@ -37,9 +37,9 @@ internal interface BookIdentityDao {
 @Database(
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
-        PeriodEvent::class, Reconciliation::class, StatementReceipt::class,
+        PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -49,9 +49,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun categories(): CategoryDao
     abstract fun control(): ControlDao
     abstract fun statements(): StatementDao
+    abstract fun banks(): BankDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration)
 
 internal class BookRepository(
     context: Context,
@@ -127,8 +128,9 @@ internal class BookRepository(
     }
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
+        for (bank in backup.banks) database.banks().insert(bank)
         database.ledger().insertAccounts(backup.accounts.mapIndexed { index, account ->
-            AccountRow(account.id, account.name, index)
+            AccountRow(account.id, account.name, index, account.bankId, account.kind.wireName)
         })
         for (category in backup.categories) database.categories().insert(category.toRow())
         database.ledger().insertOperations(backup.operations.map(Operation::toRow))
@@ -212,7 +214,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(),
+            statementReceipts = db.statements().all(), banks = db.banks().all(),
         )
     }
 
@@ -223,7 +225,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -234,14 +236,18 @@ internal class BookSession(
         snapshot(month)
     }
 
-    suspend fun addAccount(name: String, opening: Long, date: LocalDate) = db.withTransaction {
+    suspend fun addAccount(
+        name: String, opening: Long, date: LocalDate,
+        bankId: String? = null, kind: AccountKind = AccountKind.Other,
+    ) = db.withTransaction {
         val title = name.trim()
         require(opening != Long.MIN_VALUE) { "Начальный остаток превышает допустимый диапазон" }
         require(title.length in 1..100) { "Введите название счёта" }
         if (opening != 0L) requireOpenDates(db.control().periods(), date)
         val accounts = dao.accounts()
         require(accounts.none { it.name.equals(title, ignoreCase = true) }) { "Счёт с таким названием уже есть" }
-        val row = AccountRow(UUID.randomUUID().toString(), title, accounts.size)
+        require(bankId == null || db.banks().all().any { it.id == bankId }) { "Выберите банк книги" }
+        val row = AccountRow(UUID.randomUUID().toString(), title, accounts.size, bankId, kind.wireName)
         dao.insertAccounts(listOf(row))
         if (opening != 0L) {
             dao.insertOperations(
@@ -344,13 +350,23 @@ internal class BookSession(
         ))
     }
 
-    suspend fun addCategory(name: String, kind: OperationKind) = db.withTransaction {
+    suspend fun addBank(name: String) = db.withTransaction {
+        val title = name.trim()
+        require(title.length in 1..100) { "Введите название банка" }
+        require(db.banks().all().none { it.name.equals(title, ignoreCase = true) }) { "Такой банк уже есть" }
+        db.banks().insert(Bank(UUID.randomUUID().toString(), title))
+    }
+
+    suspend fun addCategory(name: String, kind: OperationKind, parentId: String? = null) = db.withTransaction {
         val title = name.trim()
         require(title.length in 1..80) { "Введите название категории" }
         require(db.categories().all().none { it.kind == kind.wireName && it.name.equals(title, ignoreCase = true) }) {
             "Категория с таким названием уже есть"
         }
-        db.categories().insert(Category(UUID.randomUUID().toString(), title, kind).toRow())
+        require(parentId == null || db.categories().find(parentId)?.kind == kind.wireName) {
+            "Выберите родительскую категорию того же вида"
+        }
+        db.categories().insert(Category(UUID.randomUUID().toString(), title, kind, parentId).toRow())
     }
 
     private suspend fun checkRefundSource(operation: Operation) {

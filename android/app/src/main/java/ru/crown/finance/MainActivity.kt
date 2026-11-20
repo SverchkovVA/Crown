@@ -34,6 +34,7 @@ import ru.crown.finance.ledger.OperationKind
 import ru.crown.finance.ledger.ReconciliationPreview
 import ru.crown.finance.ledger.StatementDocument
 import ru.crown.finance.ledger.ImportChoice
+import ru.crown.finance.ledger.AccountKind
 import ru.crown.finance.ledger.readStatement
 import ru.crown.finance.ui.AccessScreen
 import ru.crown.finance.ui.BookCommands
@@ -401,8 +402,10 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         if (month.year in 1900..9999) change { snapshot(month) }
     }
 
-    fun addAccount(name: String, opening: Long, date: LocalDate, saved: () -> Unit) =
-        change(saved) { update(YearMonth.from(date)) { addAccount(name, opening, date) } }
+    fun addAccount(
+        name: String, opening: Long, date: LocalDate,
+        bankId: String?, kind: AccountKind, saved: () -> Unit,
+    ) = change(saved) { update(YearMonth.from(date)) { addAccount(name, opening, date, bankId, kind) } }
 
     fun addOperation(operation: Operation, saved: () -> Unit) =
         change(saved) { update(YearMonth.from(operation.date)) { addOperation(operation) } }
@@ -412,9 +415,14 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         change(saved) { update(month) { reviseOperation(original, replacement) } }
     }
 
-    fun addCategory(name: String, kind: OperationKind, saved: () -> Unit) {
+    fun addCategory(name: String, kind: OperationKind, parentId: String?, saved: () -> Unit) {
         val current = mutableState.value as? Workspace.Book ?: return
-        change(saved) { update(current.snapshot.month) { addCategory(name, kind) } }
+        change(saved) { update(current.snapshot.month) { addCategory(name, kind, parentId) } }
+    }
+
+    fun addBank(name: String, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { addBank(name) } }
     }
 
     fun setPeriodClosed(month: YearMonth, closed: Boolean, reason: String) =
@@ -509,6 +517,7 @@ class MainActivity : ComponentActivity() {
                                     reconcile = model::reconcile,
                                     chooseStatement = { openStatement() },
                                     importStatement = model::importStatement,
+                                    addBank = model::addBank,
                                 )
                             if (workspace.statement != null) {
                                 ru.crown.finance.ui.StatementReview(

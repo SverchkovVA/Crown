@@ -36,6 +36,8 @@ import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.Allocation
 import ru.crown.finance.ledger.ReconciliationPreview
 import ru.crown.finance.ledger.ImportChoice
+import ru.crown.finance.ledger.AccountKind
+import ru.crown.finance.ledger.Bank
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
@@ -55,17 +57,18 @@ internal data class BookCommands(
     val error: String?,
     val clearError: () -> Unit,
     val changeMonth: (Int) -> Unit,
-    val addAccount: (String, Long, LocalDate, () -> Unit) -> Unit,
+    val addAccount: (String, Long, LocalDate, String?, AccountKind, () -> Unit) -> Unit,
     val addOperation: (Operation, () -> Unit) -> Unit,
     val reviseOperation: (Operation, Operation?, () -> Unit) -> Unit,
     val backup: (CharArray) -> Unit,
     val export: (JournalExport, JournalFormat) -> Unit,
-    val addCategory: (String, OperationKind, () -> Unit) -> Unit,
+    val addCategory: (String, OperationKind, String?, () -> Unit) -> Unit,
     val inspectBackup: () -> Unit,
     val setPeriodClosed: (YearMonth, Boolean, String) -> Unit,
     val reconcile: (ReconciliationPreview, Long, () -> Unit) -> Unit,
     val chooseStatement: () -> Unit,
     val importStatement: (String, List<ImportChoice>) -> Unit,
+    val addBank: (String, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
@@ -74,12 +77,14 @@ internal fun dateValue(text: String): LocalDate? =
     runCatching { LocalDate.parse(text.trim(), datePattern) }.getOrNull()?.takeIf { it.year in 1900..9999 }
 
 @Composable
-internal fun AccountEditor(month: YearMonth, commands: BookCommands, close: () -> Unit) {
+internal fun AccountEditor(month: YearMonth, banks: List<Bank>, commands: BookCommands, close: () -> Unit) {
+    var bank by remember { mutableStateOf<String?>(null) }
+    var kind by remember { mutableStateOf(AccountKind.Other) }
     var name by remember { mutableStateOf("") }
     var opening by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(defaultDate(month)) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(name, opening, date) {
+    LaunchedEffect(name, opening, date, bank, kind) {
         error = null
         commands.clearError()
     }
@@ -95,11 +100,17 @@ internal fun AccountEditor(month: YearMonth, commands: BookCommands, close: () -
                 else -> null
             }
             if (error == null && amount != null && day != null) {
-                commands.addAccount(name, amount, day, close)
+                commands.addAccount(name, amount, day, bank, kind, close)
             }
         },
     ) {
         Entry(name, { name = it.take(100) }, "Название счёта", commands.busy)
+        Choice("Вид счёта", kind, AccountKind.entries, AccountKind::title, !commands.busy) { kind = it }
+        if (banks.isNotEmpty()) {
+            Choice("Банк", bank, listOf(null) + banks.map(Bank::id), { id ->
+                banks.firstOrNull { it.id == id }?.name ?: "Без банка"
+            }, !commands.busy) { bank = it }
+        }
         Entry(opening, { opening = it.take(24) }, "Начальный остаток, ₽", commands.busy, KeyboardType.Decimal)
         Entry(date, { date = it.take(10) }, "Дата остатка · ДД.ММ.ГГГГ", commands.busy)
     }
@@ -224,8 +235,9 @@ internal fun OperationEditor(
 internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, close: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf(OperationKind.Expense) }
+    var parent by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(name, kind) {
+    LaunchedEffect(name, kind, parent) {
         error = null
         commands.clearError()
     }
@@ -233,17 +245,29 @@ internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, 
         "Категории", commands, error, close, "Создать категорию",
         submit = {
             error = if (name.isBlank()) "Введите название категории" else null
-            if (error == null) commands.addCategory(name, kind) { name = "" }
+            if (error == null) commands.addCategory(name, kind, parent) { name = "" }
         },
     ) {
         Entry(name, { name = it.take(80) }, "Название новой категории", commands.busy)
-        Choice("Вид категории", kind, categoryKinds, OperationKind::label, !commands.busy) { kind = it }
+        Choice("Вид категории", kind, categoryKinds, OperationKind::label, !commands.busy) {
+            if (kind != it) parent = null
+            kind = it
+        }
+        val parents = categories.filter { it.kind == kind }
+        if (parents.isNotEmpty()) {
+            Choice("Родительская категория", parent, listOf(null) + parents.map(Category::id), { id ->
+                parents.firstOrNull { it.id == id }?.name ?: "Без родительской категории"
+            }, !commands.busy) { parent = it }
+        }
         if (categories.isNotEmpty()) {
             for (type in categoryKinds) {
                 val names = categories.filter { it.kind == type }
                 if (names.isNotEmpty()) {
                     Text(type.label(), style = MaterialTheme.typography.titleMedium)
-                    for (entry in names) Text(entry.name)
+                    for (entry in names) Text(if (entry.parentId == null) entry.name else {
+                        val parentName = categories.first { it.id == entry.parentId }.name
+                        "$parentName / ${entry.name}"
+                    })
                 }
             }
         }
