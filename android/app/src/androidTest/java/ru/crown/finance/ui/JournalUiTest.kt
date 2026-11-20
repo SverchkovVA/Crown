@@ -323,7 +323,7 @@ class JournalUiTest {
         rule.onNodeWithContentDescription("Настройки").performClick()
         rule.onNodeWithText("Защита и копии").performScrollTo().assertIsDisplayed()
         rule.onNodeWithContentDescription("Операции").performClick()
-        rule.onNodeWithText("Поиск и фильтры").assertIsDisplayed()
+        rule.onNodeWithText("Поиск и фильтры").performScrollTo().assertIsDisplayed()
         saveImage("journal-navigation", editor = false)
     }
 
