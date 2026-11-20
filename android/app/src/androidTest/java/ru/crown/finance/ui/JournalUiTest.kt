@@ -1,5 +1,7 @@
 package ru.crown.finance.ui
 
+import android.os.Build
+import androidx.test.platform.app.InstrumentationRegistry
 import android.graphics.Bitmap
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -185,15 +187,17 @@ class JournalUiTest {
             }
         }
         rule.onNodeWithText("Добавить операции (0)").assertIsNotEnabled()
-        rule.onNodeWithText("Оформить возврат строки 1").performClick()
-        rule.onNodeWithText("Выбрать: покупка").performClick()
+        rule.onNodeWithTag("statement-rows").performScrollToNode(hasText("Оформить возврат строки 1"))
+        rule.onNodeWithText("Оформить возврат строки 1").performScrollTo().performClick()
+        rule.onNodeWithText("Выбрать: покупка").performScrollTo().performClick()
         rule.onNodeWithText("Учебная покупка", substring = true).performClick()
         rule.onNodeWithText("Продолжить").performClick()
         rule.onNode(hasText("Возврат части 1, ₽") and hasSetTextAction()).performTextReplacement("2.00")
         rule.onNodeWithText("Сохранить возврат").performClick()
         rule.onNodeWithText("Добавить операции (1)").assertIsNotEnabled()
         assertNull(written)
-        rule.onNodeWithText("Настроить строку 1").performClick()
+        rule.onNodeWithTag("statement-rows").performScrollToNode(hasText("Настроить строку 1"))
+        rule.onNodeWithText("Настроить строку 1").performScrollTo().performClick()
         rule.onNode(hasText("Возврат части 1, ₽") and hasSetTextAction()).performTextReplacement("1.50")
         rule.onNodeWithText("Сохранить возврат").performClick()
         assertNull(written)
@@ -302,12 +306,12 @@ class JournalUiTest {
         rule.onNodeWithText("По выбранным условиям операций нет").assertIsDisplayed()
         rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Сбросить поиск и фильтры"))
         rule.onNodeWithText("Сбросить поиск и фильтры").performClick()
-        rule.onNodeWithText("Выбрать: категория").performClick()
+        rule.onNodeWithText("Выбрать: категория").performScrollTo().performClick()
         rule.onNodeWithText("Продукты").performClick()
         rule.onNodeWithText("Найдено операций: 1 из 2").assertIsDisplayed()
         saveImage("journal-filters", editor = false)
         rule.onNodeWithText("Сбросить поиск и фильтры").performClick()
-        rule.onNodeWithText("Поиск и фильтры").assertIsDisplayed()
+        rule.onNodeWithText("Поиск и фильтры").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Начальный долг"))
         rule.onNodeWithText("Начальный долг").assertIsDisplayed()
         rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Учебная покупка"))
@@ -319,7 +323,11 @@ class JournalUiTest {
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }
         val file = File(directory, "$name.png")
         val node = if (editor) rule.onNodeWithTag("operation-editor") else rule.onRoot()
-        val bitmap = node.captureToImage().asAndroidBitmap()
+        val bitmap = if (Build.VERSION.SDK_INT < 28) {
+            requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+        } else {
+            node.captureToImage().asAndroidBitmap()
+        }
         file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
     }
 }
