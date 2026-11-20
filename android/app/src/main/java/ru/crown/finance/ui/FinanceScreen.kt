@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -330,7 +331,7 @@ private fun OperationsPage(
         it.accountId == filter.account.id || it.destinationId == filter.account.id
     }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("operations-list"),
         state = scroll,
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
     ) {

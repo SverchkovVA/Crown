@@ -52,6 +52,7 @@ class JournalUiTest {
                 CrownTheme { FinanceScreen(DemoState.Ready(snapshot), {}, "Учебная", {}, commands { recorded = it }) }
             }
         }
+        rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Учебная покупка"))
         rule.onNodeWithText("Учебная покупка").performClick()
         rule.onNodeWithText("Оформить возврат").assertIsDisplayed().performClick()
         rule.onNodeWithText("Сохранить возврат").assertIsDisplayed()
@@ -110,7 +111,7 @@ class JournalUiTest {
         }
         rule.onNode(hasText("Дата сверки · ДД.ММ.ГГГГ") and hasSetTextAction()).performTextReplacement("14.11.2026")
         rule.onNode(hasText("Остаток в банке, ₽") and hasSetTextAction()).performTextReplacement("0.00")
-        rule.onNodeWithText("Остатки совпадают").assertIsDisplayed()
+        rule.onNodeWithText("Остатки совпадают").performScrollTo().assertIsDisplayed()
         saveImage("reconciliation-form")
         rule.onNodeWithText("Сохранить сверку").assertIsDisplayed().performClick()
         rule.runOnIdle {
