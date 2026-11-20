@@ -145,7 +145,7 @@ internal fun RefundEditor(
                 } }, "Возврат части ${index + 1}, ₽", commands.busy, KeyboardType.Decimal,
             )
         }
-        Entry(date, { date = it.take(10) }, "Дата · ДД.ММ.ГГГГ", commands.busy)
+        DateEntry(date, { date = it }, "Дата · ДД.ММ.ГГГГ", commands.busy)
         Entry(description, { description = it.take(200) }, "Описание", commands.busy)
     }
 }

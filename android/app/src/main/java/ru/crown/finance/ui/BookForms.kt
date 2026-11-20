@@ -112,7 +112,7 @@ internal fun AccountEditor(month: YearMonth, banks: List<Bank>, commands: BookCo
             }, !commands.busy) { bank = it }
         }
         Entry(opening, { opening = it.take(24) }, "Начальный остаток, ₽", commands.busy, KeyboardType.Decimal)
-        Entry(date, { date = it.take(10) }, "Дата остатка · ДД.ММ.ГГГГ", commands.busy)
+        DateEntry(date, { date = it }, "Дата остатка · ДД.ММ.ГГГГ", commands.busy)
     }
 }
 
@@ -209,7 +209,7 @@ internal fun OperationEditor(
         }
         Entry(amount, { amount = it.take(24) }, "Сумма, ₽", commands.busy, KeyboardType.Decimal)
         if (transfer) Entry(fee, { fee = it.take(24) }, "Комиссия, ₽", commands.busy, KeyboardType.Decimal)
-        Entry(date, { date = it.take(10) }, "Дата · ДД.ММ.ГГГГ", commands.busy)
+        DateEntry(date, { date = it }, "Дата · ДД.ММ.ГГГГ", commands.busy)
         Entry(description, { description = it.take(200) }, "Описание", commands.busy)
         if (!transfer) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

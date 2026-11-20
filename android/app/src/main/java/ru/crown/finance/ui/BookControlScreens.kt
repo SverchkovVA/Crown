@@ -95,7 +95,7 @@ internal fun ReconciliationEditor(snapshot: LedgerSnapshot, commands: BookComman
         Choice("Счёт", account, snapshot.balances.map { it.account.id }, { id ->
             snapshot.balances.first { it.account.id == id }.account.name
         }, !commands.busy) { account = it }
-        Entry(date, { date = it.take(10) }, "Дата сверки · ДД.ММ.ГГГГ", commands.busy)
+        DateEntry(date, { date = it }, "Дата сверки · ДД.ММ.ГГГГ", commands.busy)
         Entry(actual, { actual = it.take(24) }, "Остаток в банке, ₽", commands.busy, KeyboardType.Decimal)
         if (preview != null) {
             Text("В книге · ${money(preview.calculatedMinor)}", style = MaterialTheme.typography.titleMedium)

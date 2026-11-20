@@ -261,6 +261,28 @@ class JournalUiTest {
         rule.runOnIdle { assertEquals(food.id, parentId) }
     }
 
+    @Test
+    fun numericDateInputRejectsInvalidDayAndSavesLeapDate() {
+        var savedDate: LocalDate? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                AccountEditor(snapshot.month, emptyList(), commands(
+                    accountAction = { _, _, day, _, _, _ -> savedDate = day },
+                ), {})
+            } }
+        }
+        rule.onNode(hasText("Название счёта") and hasSetTextAction()).performTextReplacement("DateDemo")
+        rule.onNode(hasText("Дата остатка · ДД.ММ.ГГГГ") and hasSetTextAction()).performTextReplacement("31022026")
+        rule.onNodeWithText("Сохранить счёт").performClick()
+        rule.onNodeWithText("Введите дату в формате ДД.ММ.ГГГГ").assertIsDisplayed()
+        assertNull(savedDate)
+        rule.onNode(hasText("Дата остатка · ДД.ММ.ГГГГ") and hasSetTextAction()).performTextReplacement("29022024")
+        saveImage("numeric-date")
+        rule.onNodeWithText("Сохранить счёт").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(LocalDate.of(2024, 2, 29), savedDate) }
+    }
+
     private fun saveImage(name: String, editor: Boolean = true) {
         rule.waitForIdle()
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }
