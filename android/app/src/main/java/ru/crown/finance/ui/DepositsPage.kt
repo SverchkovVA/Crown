@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
@@ -51,7 +52,9 @@ internal fun DepositsPage(snapshot: LedgerSnapshot, commands: BookCommands, back
         forecast?.let { result -> val dates = result.scenario.payouts.toSet(); result.days.filter { it.date in dates } }.orEmpty()
     }
     Column(Modifier.fillMaxSize()) {
-        LazyColumn(Modifier.weight(1f).testTag("deposits-list"), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(Modifier.weight(1f).testTag("deposits-list").semantics {
+            stateDescription = if (viewed == null) "Список сценариев" else if (failure != null) "Ошибка расчёта" else if (forecast == null) "Идёт расчёт" else "Расчёт готов"
+        }, contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 TextButton(goBack) { Icon(painterResource(R.drawable.ic_back), null); Spacer(Modifier.width(8.dp)); Text(if (selectedId == null) "Отчёты" else "Сценарии") }
                 WorkspaceTitle(viewed?.name ?: "Вклады")

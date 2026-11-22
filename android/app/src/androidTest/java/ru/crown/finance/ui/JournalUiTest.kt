@@ -607,12 +607,16 @@ class JournalUiTest {
             rule.activity.setContent { CrownTheme { DepositsPage(snapshot.copy(depositEvents = listOf(first, second)), commands(), {}) } }
         }
         rule.onNodeWithText("Учебный вклад").performClick()
-        rule.waitUntil(10000) { rule.onAllNodesWithText(money(120000)).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10000) { rule.onNodeWithTag("deposits-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+        rule.onNodeWithTag("deposits-list").performScrollToNode(hasText(money(120000)))
+        rule.onAllNodesWithText(money(120000)).onFirst().assertIsDisplayed()
         rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("История условий"))
         rule.onNodeWithText("История условий").performClick()
         rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Версия 1 · Учебный вклад"))
         rule.onNodeWithText("Версия 1 · Учебный вклад").performClick()
-        rule.waitUntil(10000) { rule.onAllNodesWithText(money(100000)).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(10000) { rule.onNodeWithTag("deposits-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+        rule.onNodeWithTag("deposits-list").performScrollToNode(hasText(money(100000)))
+        rule.onAllNodesWithText(money(100000)).onFirst().assertIsDisplayed()
         rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Прогноз процентов"))
         saveImage("deposit-history", editor = false)
         rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Просмотр прежних условий · версия 1"))
