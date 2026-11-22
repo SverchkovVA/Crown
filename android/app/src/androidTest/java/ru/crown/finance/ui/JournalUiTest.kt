@@ -350,7 +350,9 @@ class JournalUiTest {
         }
         rule.onNode(hasText("Поездка") and hasClickAction()).performScrollTo().performClick()
         rule.onNode(hasText("Название тега") and hasSetTextAction()).performScrollTo().performTextReplacement("Отпуск")
-        rule.onNodeWithContentDescription("В архиве").performScrollTo().performClick()
+        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        rule.waitForIdle()
+        rule.onNodeWithContentDescription("В архиве").performScrollTo().assertIsDisplayed().performClick().assertIsOn()
         saveImage("tag-editor")
         rule.onNodeWithText("Сохранить изменения").assertIsDisplayed().performClick()
         rule.runOnIdle { assertEquals("Отпуск", renamed); assertTrue(archived) }
