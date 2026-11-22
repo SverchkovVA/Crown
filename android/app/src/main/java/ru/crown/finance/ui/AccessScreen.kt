@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -24,6 +25,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -237,9 +241,13 @@ internal fun Entry(
     busy: Boolean,
     keyboard: KeyboardType = KeyboardType.Text,
 ) {
+    val focus = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     OutlinedTextField(
         value, change, Modifier.fillMaxWidth(), label = { Text(label) },
-        enabled = !busy, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = keyboard),
+        enabled = !busy, singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focus.clearFocus(); keyboardController?.hide() }),
     )
 }
 

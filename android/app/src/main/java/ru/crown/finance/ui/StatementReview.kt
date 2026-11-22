@@ -50,6 +50,9 @@ internal fun StatementReview(
             candidate.row.position to ImportChoice(candidate.row.position, candidate.row.proposal(target, document.key(target, candidate.row)))
         })
     }
+    var categoryConflicts by remember(document, account) { mutableStateOf<Set<Int>>(emptySet()) }
+    var classificationNotice by remember(document, account) { mutableStateOf<String?>(null) }
+    val rules = currentRules(snapshot.ruleEvents).map { it.rule() }
     var reviewedChoices by remember(document, account) { mutableStateOf<Map<Int, ImportChoice>>(emptyMap()) }
     var editing by remember(document, account) { mutableStateOf<StatementCandidate?>(null) }
     var confirm by remember { mutableStateOf(false) }
@@ -59,7 +62,8 @@ internal fun StatementReview(
     val ready = choices.isNotEmpty() && choices.values.all { choice ->
         val row = candidates.first { it.row.position == choice.position }
         (choice.operation.accountId == account || choice.operation.destinationId == account) &&
-            (choice.linkExisting || choice.reviewed || (row.status == ImportStatus.New && !row.row.needsReview))
+            (choice.linkExisting || choice.reviewed || (row.status == ImportStatus.New && !row.row.needsReview)) &&
+            (choice.position !in categoryConflicts || choice.reviewed)
     }
     Scaffold(
         topBar = {
@@ -75,7 +79,7 @@ internal fun StatementReview(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     commands.error?.let { FormError(it) }
-                    if (choices.isNotEmpty() && !ready) Text("Проверьте возможные повторы, переводы и возвраты")
+                    if (choices.isNotEmpty() && !ready) Text("Проверьте возможные повторы, переводы, возвраты и конфликты категорий")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             confirm, { confirm = it }, enabled = !commands.busy,
@@ -99,6 +103,14 @@ internal fun StatementReview(
         ) {
             item {
                 Text("${document.kind} · предложено ${candidates.size}, исключено ${document.issues.size}")
+                if (rules.any(CategoryRule::enabled)) TextButton({
+                    val result = classifyStatement(choices.values.toList(), rules, snapshot.categories)
+                    choices = result.choices.associateBy(ImportChoice::position)
+                    categoryConflicts = result.conflicts
+                    classificationNotice = "Предложено категорий: ${result.suggested}. Конфликтов: ${result.conflicts.size}."
+                    confirm = false
+                }, enabled = !commands.busy && choices.isNotEmpty()) { Text("Предложить категории") }
+                classificationNotice?.let { StatusText(it) }
                 if (account == null) Text("Сначала создайте счёт в книге")
                 else Choice(
                     "Счёт выписки", account, snapshot.balances.map { it.account.id },
@@ -133,6 +145,12 @@ internal fun StatementReview(
                         }
                     }
                     val chosen = choices[row.position] ?: reviewedChoices[row.position]
+                    chosen?.operation?.categoryId?.let { id ->
+                        Text("Категория к записи: " + snapshot.categories.first { it.id == id }.name)
+                    }
+                    if (row.position in categoryConflicts && chosen?.reviewed != true) {
+                        FormError("Правила предлагают разные категории. Настройте строку.")
+                    }
                     if (chosen != null && (chosen.reviewed || chosen.linkExisting)) {
                         Text(
                             if (chosen.linkExisting) "Связана с записанной операцией" else "К записи · ${chosen.operation.kind.label()}",
@@ -221,6 +239,8 @@ internal fun StatementReview(
             reviewedChoices = reviewedChoices + (candidate.row.position to value)
             choices = choices + (candidate.row.position to value)
             confirm = false
+            classificationNotice = null
+            categoryConflicts = categoryConflicts - candidate.row.position
             editing = null
         }
         val local = commands.copy(
@@ -229,7 +249,7 @@ internal fun StatementReview(
             reviseOperation = { _, operation, _ -> if (operation != null) capture(operation) },
         )
         OperationEditor(
-            snapshot.balances, snapshot.categories, snapshot.month, target, local, { editing = null }, existing,
+            snapshot.balances, snapshot.categories, snapshot.month, target, local, { editing = null }, existing, rules = rules,
         )
     }
 }

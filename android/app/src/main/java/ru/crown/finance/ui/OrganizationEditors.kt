@@ -83,7 +83,7 @@ internal fun OperationTagsEditor(operation: Operation, snapshot: LedgerSnapshot,
         commands.assignTags(operation.id, expected, selected, close)
     }) {
         Text(operation.description)
-        Text("Теги не меняют сумму, остатки и исходную версию операции")
+        Text("Выберите теги для поиска и группировки")
         for (tag in snapshot.organization.tags.filter { !it.archived || it.id in expected }) {
             Row(Modifier.fillMaxWidth()) {
                 Checkbox(tag.id in selected, { checked -> selected = if (checked) selected + tag.id else selected - tag.id },
@@ -112,6 +112,5 @@ internal fun FilterSaveEditor(query: JournalQuery, snapshot: LedgerSnapshot, exp
         query.accountId?.let { id -> Text("Счёт: " + snapshot.balances.first { it.account.id == id }.account.name) }
         query.categoryId?.let { id -> Text("Категория: " + snapshot.categories.first { it.id == id }.name) }
         query.tagId?.let { id -> Text("Тег: " + snapshot.organization.tags.first { it.id == id }.name) }
-        Text("Сохраняются условия поиска. Операции и остатки не изменяются.")
     }
 }

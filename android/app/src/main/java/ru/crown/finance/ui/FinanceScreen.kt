@@ -97,7 +97,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags }
+private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags, Rules }
 
 @Composable
 internal fun FinanceScreen(
@@ -254,6 +254,7 @@ internal fun FinanceScreen(
                         openPeriods = { tab = Section.Periods.name },
                         openBanks = { editor = EditorSection.Banks },
                         openOrganization = { editor = EditorSection.Organization },
+                        openRules = { editor = EditorSection.Rules },
                     )
                 }
             }
@@ -262,11 +263,13 @@ internal fun FinanceScreen(
 
     if (snapshot != null && commands != null) {
         when (editor) {
+            EditorSection.Rules -> CategoryRulesEditor(snapshot, commands, closeEditor)
             EditorSection.Organization -> OrganizationEditor(snapshot, commands, closeEditor)
             EditorSection.OperationTags -> tagOperation?.let { OperationTagsEditor(it, snapshot, commands, closeEditor) }
             EditorSection.Account -> AccountEditor(snapshot.month, snapshot.banks, commands, closeEditor)
             EditorSection.Operation -> OperationEditor(
                 snapshot.balances, snapshot.categories, snapshot.month, journalQuery.accountId, commands, closeEditor, correction,
+                rules = ru.crown.finance.ledger.currentRules(snapshot.ruleEvents).map { it.rule() },
             )
             EditorSection.Refund -> refundPurchase?.let { purchase ->
                 RefundEditor(purchase, snapshot, commands, closeEditor, correction)

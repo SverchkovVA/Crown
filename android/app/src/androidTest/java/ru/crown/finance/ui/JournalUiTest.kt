@@ -43,6 +43,7 @@ class JournalUiTest {
         tagAction: (String, TagEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _ -> },
         assignAction: (String, Set<String>, Set<String>, () -> Unit) -> Unit = { _, _, _, _ -> },
         filterAction: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _ -> },
+        ruleAction: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit = { _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
         accept: (Operation) -> Unit = {},
     ) = BookCommands(
@@ -51,7 +52,7 @@ class JournalUiTest {
         backup = {}, export = { _, _ -> }, addCategory = categoryAction, inspectBackup = {},
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
-        saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction,
+        saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
     )
 
     @Test
@@ -350,7 +351,7 @@ class JournalUiTest {
         }
         rule.onNode(hasText("Поездка") and hasClickAction()).performScrollTo().performClick()
         rule.onNode(hasText("Название тега") and hasSetTextAction()).performScrollTo().performTextReplacement("Отпуск")
-        InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        rule.onNode(hasText("Название тега") and hasSetTextAction()).performImeAction()
         rule.waitForIdle()
         rule.onNodeWithContentDescription("В архиве").performScrollTo().assertIsDisplayed().performClick().assertIsOn()
         saveImage("tag-editor")
@@ -390,6 +391,88 @@ class JournalUiTest {
         saveImage("saved-filter")
         rule.onAllNodes(hasText("Сохранить фильтр") and hasClickAction()).onLast().performClick()
         rule.runOnIdle { assertEquals(filter.query(), savedQuery) }
+    }
+
+    @Test
+    fun ruleEditorRejectsPriorityAndSavesChosenCategory() {
+        var saved: CategoryRule? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                CategoryRulesEditor(snapshot, commands(ruleAction = { value, previous, _ ->
+                    assertNull(previous); saved = value
+                }), {})
+            } }
+        }
+        rule.onNode(hasText("Название правила") and hasSetTextAction()).performTextReplacement("Магазины")
+        rule.onNode(hasText("Описание содержит") and hasSetTextAction()).performScrollTo().performTextReplacement("магазин")
+        rule.onNode(hasText("Описание содержит") and hasSetTextAction()).performImeAction()
+        rule.waitForIdle()
+        rule.onNodeWithText("Выбрать: категория правила").performScrollTo().performClick()
+        rule.onNodeWithText("Продукты").performClick()
+        rule.onNode(hasText("Приоритет · 0–999") and hasSetTextAction()).performScrollTo().performTextReplacement("1000")
+        rule.onNodeWithText("Создать правило").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Приоритет — целое число от 0 до 999").assertIsDisplayed()
+        assertNull(saved)
+        rule.onNode(hasText("Приоритет · 0–999") and hasSetTextAction()).performTextReplacement("20")
+        saveImage("rule-editor")
+        rule.onNodeWithText("Создать правило").performClick()
+        rule.runOnIdle {
+            assertEquals(food.id, saved?.categoryId)
+            assertEquals(20, saved?.priority)
+        }
+    }
+
+    @Test
+    fun categorySuggestionNeedsApplicationAndManualChoiceWins() {
+        val shop = CategoryRule("shop", "Магазины", OperationKind.Expense, "магазин", food.id)
+        var recorded: Operation? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                OperationEditor(snapshot.balances, snapshot.categories, snapshot.month, null, commands { recorded = it }, {}, rules = listOf(shop))
+            } }
+        }
+        rule.onNode(hasText("Сумма, ₽") and hasSetTextAction()).performScrollTo().performTextReplacement("10.00")
+        rule.onNode(hasText("Описание") and hasSetTextAction()).performScrollTo().performTextReplacement("Учебный магазин")
+        rule.onNode(hasText("Описание") and hasSetTextAction()).performImeAction()
+        rule.waitForIdle()
+        rule.onNodeWithText("Применить категорию").performScrollTo().performClick()
+        rule.onNodeWithText("Категория: Продукты").performScrollTo().performClick()
+        rule.onNodeWithText("Дом").performClick()
+        rule.onNodeWithText("Применить категорию").assertDoesNotExist()
+        saveImage("rule-manual-choice")
+        rule.onNodeWithText("Сохранить операцию").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(home.id, recorded?.categoryId) }
+    }
+
+    @Test
+    fun statementRuleConflictRequiresReviewBeforeWriting() {
+        val shop = CategoryRule("shop", "Магазины", OperationKind.Expense, "магазин", food.id)
+        val conflicting = shop.copy(id = "other-rule", name = "Другое правило", categoryId = home.id)
+        val snapshotWithRules = snapshot.copy(ruleEvents = listOf(
+            shop.event(1).copy(sequence = 1), conflicting.event(2).copy(sequence = 2),
+        ))
+        val document = parseStatement("date;amount;description;id\n2026-11-20;-10.00;Учебный магазин;rule-demo".toByteArray())
+        var written: List<ImportChoice>? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                StatementReview(document, snapshotWithRules, commands(importAction = { _, values -> written = values }), {})
+            } }
+        }
+        rule.onNodeWithText("Предложить категории").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Подтвердить строки выписки").performClick()
+        rule.onNodeWithText("Добавить операции (1)").assertIsNotEnabled()
+        rule.onNodeWithText("Настроить строку 1").performScrollTo().performClick()
+        rule.onNodeWithText("Выбрать: категория").performScrollTo().performClick()
+        rule.onNodeWithText("Продукты").performClick()
+        rule.onNodeWithText("Сохранить операцию").performClick()
+        rule.onNodeWithText("Категория к записи: Продукты").performScrollTo().assertIsDisplayed()
+        saveImage("rule-statement", editor = false)
+        rule.onNodeWithContentDescription("Подтвердить строки выписки").performClick()
+        rule.onNodeWithText("Добавить операции (1)").assertIsEnabled().performClick()
+        rule.runOnIdle { assertEquals(food.id, written?.single()?.operation?.categoryId) }
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {

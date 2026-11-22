@@ -33,6 +33,7 @@ internal fun ProtectionPage(
     openPeriods: () -> Unit,
     openBanks: () -> Unit,
     openOrganization: () -> Unit,
+    openRules: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -42,6 +43,7 @@ internal fun ProtectionPage(
         OutlinedButton(openBanks) { Text("Банки") }
         OutlinedButton(openCategories) { Text("Категории") }
         OutlinedButton(openOrganization) { Text("Теги и фильтры") }
+        OutlinedButton(openRules) { Text("Правила категорий") }
         OutlinedButton(openPeriods) { Text("Периоды") }
         OutlinedButton(openHistory) {
             Icon(painterResource(R.drawable.ic_history), contentDescription = null, modifier = Modifier.padding(end = 8.dp))

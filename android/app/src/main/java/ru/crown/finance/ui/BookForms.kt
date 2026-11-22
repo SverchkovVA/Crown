@@ -41,6 +41,9 @@ import ru.crown.finance.ledger.Bank
 import ru.crown.finance.ledger.TagEvent
 import ru.crown.finance.ledger.FilterEvent
 import ru.crown.finance.ledger.JournalQuery
+import ru.crown.finance.ledger.CategoryRule
+import ru.crown.finance.ledger.CategoryRuleEvent
+import ru.crown.finance.ledger.suggestCategory
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
@@ -75,6 +78,7 @@ internal data class BookCommands(
     val saveTag: (String, TagEvent?, Boolean, () -> Unit) -> Unit,
     val assignTags: (String, Set<String>, Set<String>, () -> Unit) -> Unit,
     val saveFilter: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit,
+    val saveRule: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
@@ -131,6 +135,7 @@ internal fun OperationEditor(
     commands: BookCommands,
     close: () -> Unit,
     existing: Operation? = null,
+    rules: List<CategoryRule> = emptyList(),
 ) {
     val kinds = remember(accounts.size) {
         if (accounts.size >= 2) listOf(OperationKind.Expense, OperationKind.Income, OperationKind.Transfer)
@@ -225,6 +230,10 @@ internal fun OperationEditor(
                     modifier = Modifier.semantics { contentDescription = "Разделить по категориям" },
                 )
             }
+        }
+        if (!split && rules.isNotEmpty()) {
+            val suggestion = suggestCategory(kind, origin, description, rules, categories, category)
+            CategoryRuleHint(suggestion, rules, categories, !commands.busy) { category = it }
         }
         if (split) {
             AllocationFields(allocations, availableCategories, commands.busy) { allocations = it }
