@@ -34,6 +34,7 @@ internal fun ProtectionPage(
     openBanks: () -> Unit,
     openOrganization: () -> Unit,
     openRules: () -> Unit,
+    changePassword: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -50,6 +51,7 @@ internal fun ProtectionPage(
             Text("История изменений")
         }
         Text("Защита и копии", style = MaterialTheme.typography.titleLarge)
+        OutlinedButton(changePassword) { Text("Сменить парольную фразу") }
         Text("Зашифрованную копию можно перенести на другой телефон и открыть с паролем копии.")
         Button(startBackup) { Text("Создать резервную копию") }
         OutlinedButton(inspectBackup) { Text("Проверить резервную копию") }

@@ -62,6 +62,24 @@ internal class BookKeys {
         }
     }
 
+    fun changePassword(metadata: ByteArray, expectedId: String, credential: CharArray, kind: CredentialKind, password: CharArray): ByteArray {
+        val unlocked = unlock(metadata, credential, kind)
+        try {
+            check(unlocked.id == expectedId) { "Обёртка относится к другой книге" }
+            val outer = JSONObject(metadata.toString(Charsets.UTF_8))
+            val raw = unseal(deviceKey(create = false), outer.getJSONObject("metadata"), ENVELOPE_AAD, METADATA_LIMIT)
+            val inner = try { JSONObject(raw.toString(Charsets.UTF_8)) } finally { raw.fill(0) }
+            val salt = randomBytes(16)
+            val derived = derivePasswordKey(password, salt)
+            val wrap = try { seal(aesKey(derived), unlocked.key, bookPurpose(expectedId, CredentialKind.Password)) }
+                finally { derived.fill(0) }
+            inner.put("salt", encode(salt)).put("password", wrap)
+            val content = inner.toString().toByteArray(Charsets.UTF_8)
+            val envelope = try { seal(deviceKey(create = false), content, ENVELOPE_AAD) } finally { content.fill(0) }
+            return JSONObject().put("version", 1).put("metadata", envelope).toString().toByteArray(Charsets.UTF_8)
+        } finally { unlocked.key.fill(0) }
+    }
+
     fun unlock(metadata: ByteArray, credential: CharArray, kind: CredentialKind): Unlocked {
         require(metadata.size in 1..METADATA_LIMIT)
         val outer = JSONObject(metadata.toString(Charsets.UTF_8))

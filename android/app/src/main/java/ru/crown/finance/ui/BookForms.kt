@@ -81,6 +81,7 @@ internal data class BookCommands(
     val saveRule: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit,
     val saveBonusProgram: (String, ru.crown.finance.ledger.BonusProgramEvent?, Boolean, () -> Unit) -> Unit,
     val saveBonusEntry: (ru.crown.finance.ledger.BonusEntryEvent, ru.crown.finance.ledger.BonusEntryEvent?, () -> Unit) -> Unit,
+    val changePassword: (CharArray, CharArray, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

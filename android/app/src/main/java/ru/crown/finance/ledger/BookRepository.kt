@@ -10,6 +10,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
@@ -62,6 +64,7 @@ internal class BookRepository(
     context: Context,
     private val path: File = File(context.noBackupFilesDir, "mobile-book-v1"),
 ) {
+    companion object { private val envelopeMutex = Mutex() }
     private val app = context.applicationContext
     private val keys = BookKeys()
     val exists get() = path.exists()
@@ -158,10 +161,21 @@ internal class BookRepository(
         }
     }
 
+    suspend fun changePassword(bookId: String, credential: CharArray, kind: CredentialKind, password: CharArray) = withContext(Dispatchers.IO) {
+        envelopeMutex.withLock {
+            val file = File(path, "key-envelope.json")
+            check(file.isFile && file.length() in 1..4096)
+            val before = file.readBytes()
+            val replacement = keys.changePassword(before, bookId, credential, kind, password)
+            try { replaceKeyEnvelope(file, before, replacement) } finally { replacement.fill(0) }
+        }
+    }
+
     suspend fun open(credential: CharArray, kind: CredentialKind): BookSession = withContext(Dispatchers.IO) {
         val envelope = File(path, "key-envelope.json")
         check(envelope.isFile && envelope.length() in 1L..4096L)
-        val unlocked = keys.unlock(envelope.readBytes(), credential, kind)
+        val metadata = envelopeMutex.withLock { envelope.readBytes() }
+        val unlocked = keys.unlock(metadata, credential, kind)
         try {
             openDatabase(unlocked.id, unlocked.key)
         } finally {

@@ -98,7 +98,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags, Rules }
+private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags, Rules, Password }
 
 @Composable
 internal fun FinanceScreen(
@@ -257,6 +257,7 @@ internal fun FinanceScreen(
                         openBanks = { editor = EditorSection.Banks },
                         openOrganization = { editor = EditorSection.Organization },
                         openRules = { editor = EditorSection.Rules },
+                        changePassword = { editor = EditorSection.Password; commands?.clearError() },
                     )
                 }
             }
@@ -265,6 +266,7 @@ internal fun FinanceScreen(
 
     if (snapshot != null && commands != null) {
         when (editor) {
+            EditorSection.Password -> PasswordForm(commands, closeEditor)
             EditorSection.Rules -> CategoryRulesEditor(snapshot, commands, closeEditor)
             EditorSection.Organization -> OrganizationEditor(snapshot, commands, closeEditor)
             EditorSection.OperationTags -> tagOperation?.let { OperationTagsEditor(it, snapshot, commands, closeEditor) }

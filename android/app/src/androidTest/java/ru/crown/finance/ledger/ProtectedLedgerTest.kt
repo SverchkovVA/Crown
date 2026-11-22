@@ -358,6 +358,40 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun passwordChangeKeepsDatabaseAndRecoveryAndRejectsWrongCredential() = runBlocking {
+        withBooks { first, _ ->
+            val repository = BookRepository(context, first)
+            val (book, recovery) = repository.create("Доступ · синтетика", "old-only".toCharArray())
+            book.update(month) { book.addAccount("Основной", 12345, day) }
+            val expected = book.snapshot(month)
+            val id = book.identity.id
+            book.close()
+            val keyFile = File(first, "key-envelope.json")
+            val before = keyFile.readBytes()
+            val database = File(first, "ledger.db").readBytes()
+            try {
+                repository.changePassword(id, "wrong-only".toCharArray(), CredentialKind.Password, "new-only".toCharArray())
+                fail("Неверный пароль не должен менять доступ")
+            } catch (_: javax.crypto.AEADBadTagException) { }
+            assertArrayEquals(before, keyFile.readBytes())
+            reject { repository.changePassword(id, "old-only".toCharArray(), CredentialKind.Password, charArrayOf()) }
+            assertArrayEquals(before, keyFile.readBytes())
+            repository.changePassword(id, "old-only".toCharArray(), CredentialKind.Password, "new-only".toCharArray())
+            assertArrayEquals(database, File(first, "ledger.db").readBytes())
+            assertFalse(before.contentEquals(keyFile.readBytes()))
+            try {
+                repository.open("old-only".toCharArray(), CredentialKind.Password).use { fail("Старый пароль должен быть отклонён") }
+            } catch (_: javax.crypto.AEADBadTagException) { }
+            repository.open("new-only".toCharArray(), CredentialKind.Password).use { assertEquals(expected, it.snapshot(month)) }
+            repository.open(recovery.toCharArray(), CredentialKind.Recovery).use { assertEquals(expected, it.snapshot(month)) }
+            repository.changePassword(id, recovery.toCharArray(), CredentialKind.Recovery, "final-only".toCharArray())
+            repository.open("final-only".toCharArray(), CredentialKind.Password).use { assertEquals(expected, it.snapshot(month)) }
+            repository.open(recovery.toCharArray(), CredentialKind.Recovery).use { assertEquals(expected, it.snapshot(month)) }
+            assertFalse(first.listFiles()!!.any { it.name.startsWith("key-change-") })
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")

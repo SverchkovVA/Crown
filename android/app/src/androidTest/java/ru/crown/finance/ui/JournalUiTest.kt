@@ -44,6 +44,7 @@ class JournalUiTest {
         assignAction: (String, Set<String>, Set<String>, () -> Unit) -> Unit = { _, _, _, _ -> },
         filterAction: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _ -> },
         ruleAction: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit = { _, _, _ -> },
+        passwordAction: (CharArray, CharArray, () -> Unit) -> Unit = { first, second, _ -> first.fill(' '); second.fill(' ') },
         bonusAction: (BonusEntryEvent, BonusEntryEvent?, () -> Unit) -> Unit = { _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
         accept: (Operation) -> Unit = {},
@@ -54,7 +55,7 @@ class JournalUiTest {
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
         saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
-        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction,
+        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction,
     )
 
     @Test
@@ -353,6 +354,8 @@ class JournalUiTest {
             } }
         }
         rule.onNode(hasText("Поездка") and hasClickAction()).performScrollTo().performClick()
+        rule.onNodeWithText("Сохранить изменения").assertIsDisplayed()
+        rule.onNodeWithContentDescription("В архиве").assertExists()
         rule.onNode(hasText("Название тега") and hasSetTextAction()).performScrollTo().performTextReplacement("Отпуск")
         rule.onNode(hasText("Название тега") and hasSetTextAction()).performImeAction()
         rule.waitForIdle()
@@ -522,6 +525,7 @@ class JournalUiTest {
         rule.onNodeWithContentDescription("Бонусы").performClick()
         rule.onNodeWithText("Программа: Другой магазин").assertIsDisplayed().performClick()
         rule.onNodeWithText("Магазин", useUnmergedTree = true).performClick()
+        rule.onNodeWithTag("bonus-list").performScrollToNode(hasText("1,25 баллов"))
         rule.onNodeWithText("1,25 баллов").assertIsDisplayed()
         rule.onNodeWithTag("bonus-list").performScrollToNode(hasText("Продукты: 1,25"))
         rule.onNodeWithText("Продукты: 1,25").assertIsDisplayed()
@@ -530,6 +534,30 @@ class JournalUiTest {
         rule.onNodeWithText("Настроить программу").performClick()
         rule.onNodeWithText("Программа бонусов").assertIsDisplayed()
         rule.onNode(hasText("Название программы") and hasSetTextAction()).assertTextContains("Магазин")
+    }
+
+    @Test
+    fun passwordFormChecksConfirmationAndClearsSubmittedFields() {
+        var called = false
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { PasswordForm(commands(passwordAction = { current, next, _ ->
+                assertEquals("old-only", current.concatToString())
+                assertEquals("new-only", next.concatToString())
+                current.fill(' '); next.fill(' '); called = true
+            }), {}) } }
+        }
+        rule.onNode(hasText("Текущий пароль или CA1") and hasSetTextAction()).performTextReplacement("old-only")
+        rule.onNode(hasText("Новая парольная фраза") and hasSetTextAction()).performTextReplacement("new-only")
+        rule.onNode(hasText("Повторите новую фразу") and hasSetTextAction()).performTextReplacement("different")
+        rule.onNodeWithText("Изменить пароль").performClick()
+        rule.onNodeWithText("Новые парольные фразы различаются").assertIsDisplayed()
+        assertFalse(called)
+        rule.onNode(hasText("Повторите новую фразу") and hasSetTextAction()).performTextReplacement("new-only")
+        saveImage("password-change")
+        rule.onNodeWithText("Изменить пароль").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertTrue(called) }
+        rule.onNode(hasText("Новая парольная фраза") and hasSetTextAction()).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {

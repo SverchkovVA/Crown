@@ -428,6 +428,24 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         change(saved) { update(current.snapshot.month) { addBank(name) } }
     }
 
+    fun changePassword(credential: CharArray, next: CharArray, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book
+        if (current == null || current.busy || current.recoveryCode != null || session == null) {
+            credential.fill(' '); next.fill(' '); return
+        }
+        change({
+            saved()
+            val updated = mutableState.value as? Workspace.Book
+            if (updated != null) mutableState.value = updated.copy(message = "Парольная фраза изменена")
+        }) {
+            try {
+                val recovery = Regex("CA1-[A-Za-z0-9_-]{43}").matches(credential.concatToString().trim())
+                repository.changePassword(identity.id, credential, if (recovery) CredentialKind.Recovery else CredentialKind.Password, next)
+                snapshot(current.snapshot.month)
+            } finally { credential.fill(' '); next.fill(' ') }
+        }
+    }
+
     fun saveBonusProgram(name: String, expected: ru.crown.finance.ledger.BonusProgramEvent?, archived: Boolean, saved: () -> Unit) {
         val current = mutableState.value as? Workspace.Book ?: return
         change(saved) { update(current.snapshot.month) { saveBonusProgram(name, expected, archived) } }
@@ -552,7 +570,7 @@ class MainActivity : ComponentActivity() {
                                     importStatement = model::importStatement,
                                     addBank = model::addBank,
                                     saveTag = model::saveTag, assignTags = model::assignTags, saveFilter = model::saveFilter, saveRule = model::saveRule,
-                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry,
+                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry, changePassword = model::changePassword,
                                 )
                             if (workspace.statement != null) {
                                 ru.crown.finance.ui.StatementReview(
