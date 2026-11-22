@@ -419,6 +419,14 @@ class ProtectedLedgerTest {
                                 for (index in 0 until setup.length()) db.execSQL(setup.getString(index))
                                 db.execSQL("INSERT INTO book_identity(id,name) VALUES('migration','Синтетика')")
                                 db.execSQL("INSERT INTO ledger_accounts(id,name,sortOrder) VALUES('main','Основной',0)")
+                                db.execSQL("INSERT INTO ledger_operations(id,kind,date,accountId,amountMinor,description,destinationId,feeMinor) VALUES('opening','opening','2026-11-01','main',10000,'Начальный остаток',NULL,0)")
+                                db.execSQL("INSERT INTO ledger_operations(id,kind,date,accountId,amountMinor,description,destinationId,feeMinor) VALUES('expense','expense','2026-11-15','main',345,'Учебная покупка',NULL,0)")
+                                if (version >= 2) db.execSQL("INSERT INTO ledger_revisions(recordedAt,cancelled,value_id,value_kind,value_date,value_accountId,value_amountMinor,value_description,value_destinationId,value_feeMinor) VALUES(1,0,'expense','expense','2026-11-15','main',400,'Уточнённая покупка',NULL,0)")
+                                if (version >= 3) {
+                                    db.execSQL("INSERT INTO ledger_categories(id,name,kind) VALUES('food','Продукты','expense')")
+                                    db.execSQL("UPDATE ledger_operations SET categoryId='food' WHERE id='expense'")
+                                    db.execSQL("UPDATE ledger_revisions SET value_categoryId='food' WHERE value_id='expense'")
+                                }
                             }
                             override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = error("Test setup")
                         }).build(),
@@ -434,7 +442,16 @@ class ProtectedLedgerTest {
                     assertEquals("main", room.ledger().accounts().single().id)
                     assertEquals(AccountKind.Other, room.ledger().accounts().single().toAccount().kind)
                     assertNull(room.ledger().accounts().single().bankId)
-                    assertTrue(room.ledger().operations().isEmpty())
+                    val originals = room.ledger().operations().map(OperationRow::toOperation)
+                    assertEquals(345L, originals.first { it.id == "expense" }.amountMinor)
+                    val revisions = room.revisions().all().map(RevisionRow::toRevision)
+                    val history = assembleHistory(originals, revisions)
+                    val current = history.map { it.current.value }
+                    val snapshot = LedgerSnapshot.from(month, room.ledger().accounts().map(AccountRow::toAccount), current)
+                    assertEquals((if (version >= 2) 9600 else 9655).toBigInteger(), snapshot.totalMinor)
+                    assertEquals(if (version >= 2) 2 else 1, history.first { it.id == "expense" }.revisions.size)
+                    assertEquals(if (version >= 3) "food" else null, current.first { it.id == "expense" }.categoryId)
+                    assertEquals(if (version >= 3) 1 else 0, room.categories().all().size)
                     val header = ByteArray(16)
                     java.io.DataInputStream(path.inputStream()).use { it.readFully(header) }
                     assertFalse(header.contentEquals("SQLite format 3\u0000".toByteArray()))
