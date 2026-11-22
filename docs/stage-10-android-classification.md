@@ -69,5 +69,7 @@ SHA-256: `4a9eb2c7700e73c6000f3649928fa3b45e670f5adbd6095c95870ddb7e6f9b16`.
 рефлексии старого Espresso 3.5.0. Явно закреплена стабильная тестовая зависимость
 3.7.0 с исправлением InputManager; это не меняет APK приложения — SHA-256 совпал.
 Основание: [официальные примечания AndroidX Test](https://developer.android.com/jetpack/androidx/releases/test).
-Дополнительный [CI тестового компонента](https://github.com/SverchkovVA/Crown/actions/runs/45024143689) успешен; сверка архива выполняется отдельно.
+Дополнительный [CI тестового компонента](https://github.com/SverchkovVA/Crown/actions/runs/45024143689) успешен; архив 14755371720 и SHA-256
+`faf04d4ac9acf5239dcfec5fbee47230214efce5ba45db70b975d4b3f30c3363`
+сверены, JUnit 55 без ошибок.
 Эмулятор не заменяет физический Samsung.
