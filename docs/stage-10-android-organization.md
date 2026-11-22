@@ -68,7 +68,7 @@ Room 8 добавляет `tag_events`, `tag_assignments`, `filter_events`.
 успешен. В скачанном техническом архиве сверены 48 тестов JUnit, lint и
 SHA-256 `a43a99627b2a14b7db4d915921bbaf8e956b17a50cb80ae0e12a232a3bcf0b7e`.
 [CI уточнённого теста](https://github.com/SverchkovVA/Crown/actions/runs/45020984210)
-проверяется отдельно.
+завершился успешно. Сверены точный коммит e750221, SHA-256 архива и 48 тестов JUnit.
 
 APK: `artifacts/android-stage10-dev16-proof/Crown-Android-0.1.0-dev16.apk`.
 SHA-256: `86003da1254aa47ef0fb2ec1a8d38a235024301f88f3c11626e96e0d48c6666a`.
