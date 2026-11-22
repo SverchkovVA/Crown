@@ -112,7 +112,7 @@ public class OfflineOcrTest {
         } finally { engine.recycle(); page.recycle(); if (next != null) next.recycle(); }
     }
 
-    private File prepareData() throws Exception {
+    static File prepareData() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         File root = new File(context.getNoBackupFilesDir(), "synthetic-ocr");
         File data = new File(root, "tessdata");
