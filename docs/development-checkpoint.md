@@ -1,10 +1,10 @@
-# Контрольная точка Android 20.11.2026
+# Контрольная точка Android 22.11.2026
 
 Активный worktree — `artifacts/worktree-stage10-android`, ветка
 `stage-10-android-foundation`. Основная папка Windows остаётся на
 `stage-5-ocr` с тремя прежними локальными коммитами.
 
-Текущий APK — 0.1.0-dev15. Схема Android 7, копия v6 читает v1–v5.
+Текущий APK — 0.1.0-dev16. Схема Android 8, копия v7 читает v1–v6.
 Точные результаты последнего прогона и CI — в
 [отчёте мобильного журнала](stage-10-android-ledger.md).
 [Инструкция для телефона](android-quickstart.md).
