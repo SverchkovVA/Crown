@@ -60,6 +60,17 @@ class BookRoundTripTest {
             rule.onNode(hasText("Описание") and hasSetTextAction()).performImeAction()
             rule.onNodeWithText("Сохранить операцию").performClick()
             waitText("Добавить операцию")
+            rule.onNodeWithContentDescription("Отчёты").performClick()
+            rule.onNodeWithText("Вклады · прогноз процентов").performScrollTo().performClick()
+            rule.onNodeWithText("Новый сценарий вклада", substring = false).performClick()
+            field("Название сценария", "E2E вклад")
+            field("Сумма вклада, ₽", "10000,00")
+            field("Открытие", "01012026")
+            field("Окончание", "01012027")
+            field("Начальная ставка, %", "12")
+            rule.onNode(hasText("Начальная ставка, %") and hasSetTextAction()).performImeAction()
+            rule.onNodeWithText("Сохранить сценарий").performClick()
+            waitText("Прогноз процентов")
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)
@@ -82,6 +93,7 @@ class BookRoundTripTest {
                     val snapshot = book.snapshot(YearMonth.now())
                     assertEquals(12000.toBigInteger(), snapshot.totalMinor)
                     assertEquals(345.toBigInteger(), snapshot.expenseMinor)
+                    assertEquals(120000.toBigInteger(), forecastDeposit(currentDeposits(snapshot.depositEvents).single().scenario()).interest)
                 }
             }
         } finally {

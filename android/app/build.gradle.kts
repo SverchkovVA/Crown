@@ -14,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 19
-        versionName = "0.1.0-dev19"
+        versionCode = 20
+        versionName = "0.1.0-dev20"
     }
 
     buildFeatures { compose = true }

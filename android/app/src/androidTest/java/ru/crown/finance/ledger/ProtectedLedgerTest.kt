@@ -392,10 +392,49 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun depositVersionsAndRestoreLeaveRealMoneyUntouched() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Вклады · синтетика", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) { book.addAccount("Основной", 12345, day) }
+                val before = book.snapshot(month)
+                val end = day.plusYears(1)
+                val scenario = DepositScenario(day, end, 1000000, listOf(DepositRate("rate", day, java.math.BigDecimal("12"))), emptyList(), listOf(end))
+                book.update(month) { book.saveDeposit("deposit", "Учебный вклад", scenario, null, false) }
+                val original = book.snapshot(month).depositEvents.single()
+                book.update(month) { book.saveDeposit("deposit", "Учебный вклад", scenario.copy(capitalize = true), original, false) }
+                val latest = currentDeposits(book.snapshot(month).depositEvents).single()
+                reject { book.update(month) { book.saveDeposit("deposit", "Старая форма", scenario, original, false) } }
+                val stable = book.snapshot(month)
+                reject { book.update(month) { book.saveDeposit("other", "Учебный вклад", scenario, null, false) } }
+                reject { book.update(month) { book.saveDeposit("broken", "Ошибка", scenario.copy(initial = 0), null, false) } }
+                assertEquals(stable, book.snapshot(month))
+                book.update(month) { book.setPeriodClosed(month, true, "") }
+                book.update(month) { book.saveDeposit("deposit", latest.name, latest.scenario(), latest, true) }
+                val after = book.snapshot(month)
+                assertEquals(before.totalMinor, after.totalMinor)
+                assertEquals(before.incomeMinor, after.incomeMinor)
+                assertEquals(before.history, after.history)
+                assertEquals(3, after.depositEvents.size)
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore("new-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() })
+                restored = copy
+                val copied = copy.snapshot(month)
+                assertEquals(after.depositEvents, copied.depositEvents)
+                assertEquals(after.history, copied.history)
+                val archived = currentDeposits(copied.depositEvents).single()
+                copy.update(month) { copy.saveDeposit(archived.id, archived.name, archived.scenario(), archived, false) }
+                assertFalse(currentDeposits(copy.snapshot(month).depositEvents).single().archived)
+            } finally { restored?.close(); book.close() }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..9) {
+            for (version in 1..10) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets

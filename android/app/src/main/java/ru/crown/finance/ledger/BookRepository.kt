@@ -40,9 +40,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
-        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -56,9 +56,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun organization(): OrganizationDao
     abstract fun classification(): ClassificationDao
     abstract fun bonuses(): BonusDao
+    abstract fun deposits(): DepositDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration)
 
 internal class BookRepository(
     context: Context,
@@ -136,6 +137,7 @@ internal class BookRepository(
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
+        for (event in backup.depositEvents) database.deposits().insert(event)
         for (event in backup.bonuses.programEvents) database.bonuses().insert(event)
         for (event in backup.bonuses.entryEvents) database.bonuses().insert(event)
         for (event in backup.ruleEvents) database.classification().insert(event)
@@ -238,7 +240,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(),
+            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(), depositEvents = db.deposits().events(),
         )
     }
 
@@ -249,7 +251,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -372,6 +374,22 @@ internal class BookSession(
             UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
             preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
         ))
+    }
+
+    suspend fun saveDeposit(id: String, name: String, scenario: DepositScenario, expected: DepositEvent?, archived: Boolean) = db.withTransaction {
+        require(id.length in 1..64)
+        val title = name.trim()
+        require(title.length in 1..80) { "Введите название сценария" }
+        val current = currentDeposits(db.deposits().events())
+        val previous = current.firstOrNull { it.id == id }
+        require(previous == expected) { "Сценарий изменился. Откройте его заново" }
+        require(!archived || expected != null)
+        require(archived || current.none { it.id != id && !it.archived && it.name.equals(title, true) }) { "Такой действующий сценарий уже есть" }
+        require(archived || previous?.archived == false || current.count { !it.archived } < 1000) { "В книге уже 1000 действующих сценариев" }
+        forecastDeposit(scenario)
+        val payload = encodeDeposit(scenario)
+        require(previous == null || previous.name != title || previous.payload != payload || previous.archived != archived) { "Сценарий не изменился" }
+        db.deposits().insert(DepositEvent(id = id, name = title, payload = payload, archived = archived, recordedAt = Instant.now().toEpochMilli()))
     }
 
     private suspend fun bonuses() = BonusState(db.bonuses().programs(), db.bonuses().entries())

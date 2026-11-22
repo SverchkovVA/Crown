@@ -44,6 +44,7 @@ class JournalUiTest {
         assignAction: (String, Set<String>, Set<String>, () -> Unit) -> Unit = { _, _, _, _ -> },
         filterAction: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _ -> },
         ruleAction: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit = { _, _, _ -> },
+        depositAction: (String, String, DepositScenario, DepositEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _, _ -> },
         passwordAction: (CharArray, CharArray, () -> Unit) -> Unit = { first, second, _ -> first.fill(' '); second.fill(' ') },
         bonusAction: (BonusEntryEvent, BonusEntryEvent?, () -> Unit) -> Unit = { _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
@@ -55,7 +56,7 @@ class JournalUiTest {
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
         saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
-        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction,
+        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction,
     )
 
     @Test
@@ -558,6 +559,65 @@ class JournalUiTest {
         rule.onNodeWithText("Изменить пароль").assertIsDisplayed().performClick()
         rule.runOnIdle { assertTrue(called) }
         rule.onNode(hasText("Новый пароль") and hasSetTextAction()).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+    }
+
+    @Test
+    fun depositEditorValidatesRateAndSavesExplicitPolicies() {
+        var recorded: DepositScenario? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                DepositEditor(null, null, "", commands(depositAction = { _, title, value, previous, archived, _ ->
+                    assertEquals("Учебный вклад", title); assertNull(previous); assertFalse(archived); recorded = value
+                }), {}, {})
+            } }
+        }
+        rule.onNode(hasText("Название сценария") and hasSetTextAction()).performTextReplacement("Учебный вклад")
+        rule.onNode(hasText("Сумма вклада, ₽") and hasSetTextAction()).performScrollTo().performTextReplacement("10000,00")
+        rule.onNode(hasText("Открытие") and hasSetTextAction()).performScrollTo().performTextReplacement("01012026")
+        rule.onNode(hasText("Окончание") and hasSetTextAction()).performScrollTo().performTextReplacement("01012027")
+        rule.onNode(hasText("Начальная ставка, %") and hasSetTextAction()).performScrollTo().performTextReplacement("1001")
+        rule.onNode(hasText("Начальная ставка, %") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithText("Сохранить сценарий").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Проверьте ставку 1: от 0 до 1000%, до 8 дробных знаков").assertIsDisplayed()
+        assertNull(recorded)
+        rule.onNode(hasText("Начальная ставка, %") and hasSetTextAction()).performScrollTo().performTextReplacement("12")
+        rule.onNode(hasText("Начальная ставка, %") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithText("Правила расчёта").performScrollTo().performClick()
+        rule.onNodeWithText("Дни в году: 365 или 366 по календарю").performScrollTo().performClick()
+        rule.onNodeWithText("Всегда 365 дней").performClick()
+        saveImage("deposit-editor")
+        rule.onNodeWithText("Сохранить сценарий").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertNotNull(recorded)
+            assertEquals(DepositDayCount.Fixed365, recorded?.dayCount)
+            assertEquals(LocalDate.of(2026, 1, 1), recorded?.opened)
+            assertEquals(120000.toBigInteger(), forecastDeposit(requireNotNull(recorded)).interest)
+        }
+    }
+
+    @Test
+    fun depositHistoryRecalculatesChosenVersionWithoutChangingLedger() {
+        val opened = LocalDate.of(2026, 1, 1)
+        val scenario = DepositScenario(opened, opened.plusYears(1), 1000000, listOf(DepositRate("r", opened, java.math.BigDecimal("10"))), emptyList(), listOf(opened.plusYears(1)))
+        val first = DepositEvent(1, "d", "Учебный вклад", encodeDeposit(scenario), false, 1)
+        val second = first.copy(sequence = 2, payload = encodeDeposit(scenario.copy(rates = listOf(DepositRate("r", opened, java.math.BigDecimal("12"))))), recordedAt = 2)
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { DepositsPage(snapshot.copy(depositEvents = listOf(first, second)), commands(), {}) } }
+        }
+        rule.onNodeWithText("Учебный вклад").performClick()
+        rule.waitUntil(10000) { rule.onAllNodesWithText(money(120000)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("История условий"))
+        rule.onNodeWithText("История условий").performClick()
+        rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Версия 1 · Учебный вклад"))
+        rule.onNodeWithText("Версия 1 · Учебный вклад").performClick()
+        rule.waitUntil(10000) { rule.onAllNodesWithText(money(100000)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Прогноз процентов"))
+        saveImage("deposit-history", editor = false)
+        rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Просмотр прежних условий · версия 1"))
+        rule.onNodeWithText("Просмотр прежних условий · версия 1").assertIsDisplayed()
+        rule.onNodeWithText("Изменить условия").assertDoesNotExist()
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {
