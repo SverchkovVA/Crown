@@ -1,0 +1,54 @@
+name: Проверка кандидата OCR Android
+
+on:
+  push:
+    paths:
+      - 'tools/android-ocr-probe/**'
+      - 'tools/prepare_android_ocr_probe.py'
+      - '.github/workflows/android-ocr-probe.yml'
+  pull_request:
+    paths:
+      - 'tools/android-ocr-probe/**'
+      - 'tools/prepare_android_ocr_probe.py'
+      - '.github/workflows/android-ocr-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ocr-candidate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      LC_ALL: C.UTF-8
+      CROWN_OCR_CANDIDATE: ${{ runner.temp }}/crown-ocr-inputs
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Публичные материалы с закреплёнными хешами
+        run: python3 tools/prepare_android_ocr_probe.py --output "$CROWN_OCR_CANDIDATE"
+      - name: Среда Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          if [[ ! -f "$ANDROID_HOME/platforms/android-36/android.jar" || ! -d "$ANDROID_HOME/build-tools/35.0.0" ]]; then
+            sdkmanager --install 'platforms;android-36' 'build-tools;35.0.0'
+          fi
+      - name: Сборка и проверка изолированного кандидата
+        working-directory: android
+        run: ./gradlew -p ../tools/android-ocr-probe -PcrownOcrCandidateDir="$CROWN_OCR_CANDIDATE" --no-daemon assembleDebug assembleDebugAndroidTest lintDebug
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: android-ocr-candidate-check
+          path: |
+            tools/android-ocr-probe/build/reports/lint-results-debug.xml
+            ${{ runner.temp }}/crown-ocr-inputs/candidate-inputs.json
+          if-no-files-found: ignore
+          retention-days: 14
