@@ -422,6 +422,7 @@ class JournalUiTest {
         rule.onNodeWithText("Выбрать: категория правила").performScrollTo().performClick()
         rule.onNodeWithText("Продукты").performClick()
         rule.onNode(hasText("Приоритет · 0–999") and hasSetTextAction()).performScrollTo().performTextReplacement("1000")
+        rule.onNode(hasText("Приоритет · 0–999") and hasSetTextAction()).performImeAction()
         rule.onNodeWithText("Создать правило").assertIsDisplayed().performClick()
         rule.onNodeWithText("Приоритет — целое число от 0 до 999").assertIsDisplayed()
         assertNull(saved)

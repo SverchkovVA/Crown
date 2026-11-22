@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -305,6 +306,7 @@ internal fun Editor(
     submit: () -> Unit,
     content: @Composable () -> Unit,
 ) {
+    val focus = LocalFocusManager.current
     ModalBottomSheet(
         onDismissRequest = { if (!commands.busy) close() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -321,7 +323,7 @@ internal fun Editor(
             ) { content() }
             (error ?: commands.error)?.let { FormError(it) }
             if (commands.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            Button(submit, Modifier.fillMaxWidth(), enabled = !commands.busy) { Text(submitLabel) }
+            Button({ focus.clearFocus(); submit() }, Modifier.fillMaxWidth(), enabled = !commands.busy) { Text(submitLabel) }
         }
     }
 }
