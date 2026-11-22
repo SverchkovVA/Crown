@@ -38,8 +38,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -50,9 +51,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun control(): ControlDao
     abstract fun statements(): StatementDao
     abstract fun banks(): BankDao
+    abstract fun organization(): OrganizationDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration)
 
 internal class BookRepository(
     context: Context,
@@ -129,6 +131,9 @@ internal class BookRepository(
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
+        for (event in backup.organization.tagEvents) database.organization().insert(event)
+        for (event in backup.organization.assignments) database.organization().insert(event)
+        for (event in backup.organization.filterEvents) database.organization().insert(event)
         database.ledger().insertAccounts(backup.accounts.mapIndexed { index, account ->
             AccountRow(account.id, account.name, index, account.bankId, account.kind.wireName)
         })
@@ -214,7 +219,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(), banks = db.banks().all(),
+            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(),
         )
     }
 
@@ -225,7 +230,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -347,6 +352,61 @@ internal class BookSession(
         db.control().insert(Reconciliation(
             UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
             preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
+        ))
+    }
+
+    private suspend fun organization() = OrganizationState(
+        db.organization().tags(), db.organization().assignments(), db.organization().filters(),
+    )
+
+    suspend fun saveTag(name: String, expected: TagEvent?, archived: Boolean) = db.withTransaction {
+        val title = name.trim()
+        require(title.length in 1..80) { "Введите название тега" }
+        val current = organization().tags
+        require(expected == null || current.firstOrNull { it.id == expected.id } == expected) { "Тег изменился. Откройте его заново" }
+        require(expected != null || !archived)
+        require(archived || current.none { !it.archived && it.id != expected?.id && it.name.equals(title, true) }) { "Такой тег уже есть" }
+        require(expected == null || expected.name != title || expected.archived != archived) { "Тег не изменился" }
+        db.organization().insert(TagEvent(
+            id = expected?.id ?: UUID.randomUUID().toString(), name = title, archived = archived,
+            recordedAt = Instant.now().toEpochMilli(),
+        ))
+    }
+
+    suspend fun assignTags(operationId: String, expected: Set<String>, selected: Set<String>) = db.withTransaction {
+        val state = organization()
+        require(history().any { it.id == operationId && !it.current.cancelled }) { "Операция не найдена или отменена" }
+        val previous = state.tagsByOperation()[operationId].orEmpty()
+        require(previous == expected) { "Теги изменились. Откройте операцию заново" }
+        require(selected.size <= 100)
+        val tags = state.tags.associateBy(TagEvent::id)
+        require(selected.all { tags[it]?.let { tag -> !tag.archived || it in previous } == true }) { "Выберите действующие теги книги" }
+        require(selected != previous) { "Теги не изменились" }
+        val timestamp = Instant.now().toEpochMilli()
+        for (id in (previous + selected).sorted()) {
+            if ((id in previous) != (id in selected)) {
+                db.organization().insert(TagAssignment(
+                    operationId = operationId, tagId = id, present = id in selected, recordedAt = timestamp,
+                ))
+            }
+        }
+    }
+
+    suspend fun saveFilter(name: String, query: JournalQuery, expected: FilterEvent?, archived: Boolean) = db.withTransaction {
+        val title = name.trim()
+        require(title.length in 1..80) { "Введите название фильтра" }
+        val state = organization()
+        require(expected == null || state.filters.firstOrNull { it.id == expected.id } == expected) { "Фильтр изменился. Откройте его заново" }
+        require(expected != null || !archived)
+        require(archived || state.filters.none { !it.archived && it.id != expected?.id && it.name.equals(title, true) }) { "Такой фильтр уже есть" }
+        require(query.accountId == null || dao.accounts().any { it.id == query.accountId }) { "Счёт фильтра не найден" }
+        require(query.categoryId == null || db.categories().find(query.categoryId) != null) { "Категория фильтра не найдена" }
+        require(query.tagId == null || state.tags.any { it.id == query.tagId }) { "Тег фильтра не найден" }
+        require(expected == null || expected.name != title || expected.query() != query || expected.archived != archived) { "Фильтр не изменился" }
+        db.organization().insert(FilterEvent(
+            id = expected?.id ?: UUID.randomUUID().toString(), name = title, textQuery = query.text,
+            kind = query.kind?.wireName, categoryId = query.categoryId, accountId = query.accountId, tagId = query.tagId,
+            archived = archived, recordedAt = Instant.now().toEpochMilli(),
         ))
     }
 

@@ -245,10 +245,53 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun tagsAndSavedFiltersRestoreWithoutFinancialRevisions() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Синтетика тегов", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) { book.addAccount("Основной", 0, day) }
+                val account = book.snapshot(month).balances.single().account.id
+                val purchase = Operation("tagged-purchase", OperationKind.Expense, day, account, 725, "Учебная покупка")
+                book.update(month) { book.addOperation(purchase) }
+                val before = book.snapshot(month)
+                book.update(month) { book.saveTag("Поездка", null, false) }
+                val tag = book.snapshot(month).organization.tags.single()
+                book.update(month) { book.assignTags(purchase.id, emptySet(), setOf(tag.id)) }
+                reject { book.update(month) { book.assignTags(purchase.id, emptySet(), emptySet()) } }
+                reject { book.update(month) { book.assignTags(purchase.id, setOf(tag.id), setOf("foreign")) } }
+                book.update(month) { book.saveFilter("Мои покупки", JournalQuery(accountId = account, tagId = tag.id), null, false) }
+                val filter = book.snapshot(month).organization.filters.single()
+                book.update(month) { book.setPeriodClosed(month, true, "") }
+                book.update(month) { book.saveTag("Отпуск", tag, true) }
+                reject { book.update(month) { book.saveTag("Устарело", tag, false) } }
+                book.update(month) { book.saveFilter("Архив поездки", filter.query(), filter, true) }
+                reject { book.update(month) { book.saveFilter("Устарело", filter.query(), filter, false) } }
+                val tagged = book.snapshot(month)
+                assertEquals(before.operations, tagged.operations)
+                assertEquals(before.history, tagged.history)
+                assertEquals(before.totalMinor, tagged.totalMinor)
+                assertEquals(purchase.fingerprint(), tagged.operations.single().fingerprint())
+                assertEquals(setOf(tag.id), tagged.organization.tagsByOperation()[purchase.id])
+                val found = filter.query().apply(tagged.operations, tagged.balances.map { it.account }, tagged.categories, tagged.organization.tagsByOperation())
+                assertEquals(listOf(purchase), found)
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore("restored-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() })
+                restored = copy
+                assertEquals(tagged.organization, copy.snapshot(month).organization)
+                assertEquals(tagged.operations, copy.snapshot(month).operations)
+                val current = copy.snapshot(month).organization.tags.single()
+                copy.update(month) { copy.saveTag(current.name, current, false) }
+                assertEquals(3, copy.snapshot(month).organization.tagEvents.size)
+            } finally { restored?.close(); book.close() }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..6) {
+            for (version in 1..7) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets

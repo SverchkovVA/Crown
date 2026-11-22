@@ -75,6 +75,44 @@ class PortableBackupTest {
     }
 
     @Test
+    fun organizationHistoryRoundTripsWithoutChangingFinancialFingerprints() {
+        val tag = TagEvent(1, "tag", "Учебный тег", false, 1)
+        val organization = OrganizationState(
+            listOf(tag), listOf(TagAssignment(1, expense.id, tag.id, true, 2)),
+            listOf(FilterEvent(1, "filter", "По тегу", "", null, null, "one", tag.id, false, 3)),
+        )
+        val data = ledger.copy(organization = organization)
+        val copy = PortableBackup.open(PortableBackup.seal(data, correct.toCharArray()).inputStream(), correct.toCharArray())
+        assertEquals(data, copy)
+        assertEquals(expense.fingerprint(), copy.operations.single().fingerprint())
+    }
+
+    @Test
+    fun stillReadsVersionSixWithNoOrganizationTrailer() {
+        val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
+        val salt = ByteArray(16) { it.toByte() }
+        val iv = ByteArray(12) { (it + 20).toByte() }
+        val header = signature + byteArrayOf(6) + salt + iv
+        val body = java.io.ByteArrayOutputStream()
+        java.io.DataOutputStream(body).use { out ->
+            val name = "Прежняя копия".toByteArray()
+            out.writeShort(name.size); out.write(name)
+            repeat(8) { out.writeInt(0) }
+        }
+        val key = derivePasswordKey(correct.toCharArray(), salt)
+        val encrypted = try {
+            javax.crypto.Cipher.getInstance("AES/GCM/NoPadding").run {
+                init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"),
+                    javax.crypto.spec.GCMParameterSpec(128, iv))
+                updateAAD(header); doFinal(body.toByteArray())
+            }
+        } finally { key.fill(0) }
+        val copy = PortableBackup.open((header + encrypted).inputStream(), correct.toCharArray())
+        assertEquals("Прежняя копия", copy.title)
+        assertEquals(OrganizationState(), copy.organization)
+    }
+
+    @Test
     fun authenticationRejectsWrongPasswordAndAlteredBytes() {
         val copy = PortableBackup.seal(ledger, correct.toCharArray())
         assertThrows(AEADBadTagException::class.java) {

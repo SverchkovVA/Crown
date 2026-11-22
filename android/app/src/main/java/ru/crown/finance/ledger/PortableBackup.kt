@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 6
+private const val CURRENT_VERSION: Byte = 7
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -33,6 +33,7 @@ internal data class BackupLedger(
     val reconciliations: List<Reconciliation> = emptyList(),
     val statementReceipts: List<StatementReceipt> = emptyList(),
     val banks: List<Bank> = emptyList(),
+    val organization: OrganizationState = OrganizationState(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
@@ -46,6 +47,7 @@ internal data class BackupLedger(
         require(ids.size == accounts.size)
         require(accounts.all { it.id.length in 1..64 && it.name.isNotBlank() && it.name.length <= 100 })
         require(accounts.map { it.name.lowercase() }.distinct().size == accounts.size)
+        organization.validate(ids, kinds.keys, operations.map(Operation::id).toSet())
         val current = mutableMapOf<String, Operation>()
         val cancelled = mutableSetOf<String>()
         for (operation in operations) {
@@ -207,6 +209,7 @@ internal object PortableBackup {
                     out.text(bank.id)
                     out.text(bank.name)
                 }
+                out.organization(data.organization)
             }
             return content.toByteArray()
         } finally {
@@ -249,8 +252,9 @@ internal object PortableBackup {
             StatementReceipt(data.text(), data.text(), data.text(), data.text())
         } else emptyList()
         val banks = if (version >= 6) List(data.count()) { Bank(data.text(), data.text()) } else emptyList()
+        val organization = if (version >= 7) data.organization() else OrganizationState()
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks)
+        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks, organization)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {
