@@ -38,9 +38,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
-        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -53,9 +53,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun banks(): BankDao
     abstract fun organization(): OrganizationDao
     abstract fun classification(): ClassificationDao
+    abstract fun bonuses(): BonusDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration)
 
 internal class BookRepository(
     context: Context,
@@ -132,6 +133,8 @@ internal class BookRepository(
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
+        for (event in backup.bonuses.programEvents) database.bonuses().insert(event)
+        for (event in backup.bonuses.entryEvents) database.bonuses().insert(event)
         for (event in backup.ruleEvents) database.classification().insert(event)
         for (event in backup.organization.tagEvents) database.organization().insert(event)
         for (event in backup.organization.assignments) database.organization().insert(event)
@@ -221,7 +224,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(),
+            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(),
         )
     }
 
@@ -232,7 +235,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -355,6 +358,35 @@ internal class BookSession(
             UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
             preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
         ))
+    }
+
+    private suspend fun bonuses() = BonusState(db.bonuses().programs(), db.bonuses().entries())
+
+    suspend fun saveBonusProgram(name: String, expected: BonusProgramEvent?, archived: Boolean) = db.withTransaction {
+        val title = name.trim()
+        require(title.length in 1..80) { "Введите название программы" }
+        val current = bonuses().programs
+        require(expected == null || current.firstOrNull { it.id == expected.id } == expected) { "Программа изменилась. Откройте её заново" }
+        require(expected != null || (!archived && current.size < 1000))
+        require(current.none { it.id != expected?.id && it.name.equals(title, true) }) { "Такая программа уже есть" }
+        require(expected == null || title != expected.name || archived != expected.archived) { "Программа не изменилась" }
+        db.bonuses().insert(BonusProgramEvent(id = expected?.id ?: UUID.randomUUID().toString(), name = title, archived = archived, recordedAt = Instant.now().toEpochMilli()))
+    }
+
+    suspend fun saveBonusEntry(value: BonusEntryEvent, expected: BonusEntryEvent?) = db.withTransaction {
+        val state = bonuses()
+        val previous = state.entries.firstOrNull { it.id == value.id }
+        require(previous == expected) { "Запись изменилась. Откройте её заново" }
+        require(previous?.cancelled != true) { "Запись уже отменена" }
+        val event = value.copy(sequence = 0, recordedAt = Instant.now().toEpochMilli())
+        event.validate()
+        val program = requireNotNull(state.programs.firstOrNull { it.id == value.programId }) { "Программа не найдена" }
+        require(!program.archived || (event.cancelled && previous?.programId == event.programId)) { "Программа в архиве" }
+        if (event.cancelled) require(previous != null && event.sameFact(previous)) { "При отмене нельзя менять запись" }
+        else require(previous == null || !event.sameFact(previous)) { "Запись не изменилась" }
+        val validated = state.copy(entryEvents = state.entryEvents + event.copy(sequence = (state.entryEvents.lastOrNull()?.sequence ?: 0) + 1))
+        validated.validate(db.categories().all().map(CategoryRow::toCategory), dao.operations().map(OperationRow::id).toSet())
+        db.bonuses().insert(event)
     }
 
     suspend fun saveRule(rule: CategoryRule, expected: CategoryRuleEvent?) = db.withTransaction {

@@ -44,6 +44,7 @@ class JournalUiTest {
         assignAction: (String, Set<String>, Set<String>, () -> Unit) -> Unit = { _, _, _, _ -> },
         filterAction: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _ -> },
         ruleAction: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit = { _, _, _ -> },
+        bonusAction: (BonusEntryEvent, BonusEntryEvent?, () -> Unit) -> Unit = { _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
         accept: (Operation) -> Unit = {},
     ) = BookCommands(
@@ -53,6 +54,7 @@ class JournalUiTest {
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
         saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
+        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction,
     )
 
     @Test
@@ -475,6 +477,59 @@ class JournalUiTest {
         rule.onNodeWithContentDescription("Подтвердить строки выписки").performClick()
         rule.onNodeWithText("Добавить операции (1)").assertIsEnabled().performClick()
         rule.runOnIdle { assertEquals(food.id, written?.single()?.operation?.categoryId) }
+    }
+
+    @Test
+    fun bonusEntryValidatesAmountAndKeepsCategoryAndOperationLink() {
+        var recorded: BonusEntryEvent? = null
+        val program = BonusProgramEvent(1, "store", "Учебный магазин", false, 1)
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { BonusEntryEditor(snapshot, program, null, commands(bonusAction = { value, _, _ -> recorded = value }), {}) } }
+        }
+        rule.onNode(hasText("Количество бонусов") and hasSetTextAction()).performTextReplacement("-1")
+        rule.onNode(hasText("Количество бонусов") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithText("Сохранить бонусы").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Введите ненулевое число, не более двух знаков после запятой").assertIsDisplayed()
+        assertNull(recorded)
+        rule.onNode(hasText("Количество бонусов") and hasSetTextAction()).performScrollTo().performTextReplacement("1,25")
+        rule.onNode(hasText("Количество бонусов") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithText("Выбрать: категория расхода").performScrollTo().performClick()
+        rule.onNodeWithText("Продукты").performClick()
+        rule.onNodeWithText("Выбрать: связанная операция").performScrollTo().performClick()
+        rule.onNodeWithText("15.11.2026 · Учебная покупка").performClick()
+        saveImage("bonus-entry")
+        rule.onNodeWithText("Сохранить бонусы").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(125L, recorded?.units)
+            assertEquals(food.id, recorded?.categoryId)
+            assertEquals(purchase.id, recorded?.operationId)
+            assertEquals("2026-11-01", recorded?.date)
+        }
+    }
+
+    @Test
+    fun bonusPageKeepsProgramBalancesSeparateAndEditsInitiallySelectedProgram() {
+        val programs = listOf(BonusProgramEvent(1, "a", "Магазин", false, 1), BonusProgramEvent(2, "b", "Другой магазин", false, 2))
+        val entries = listOf(
+            BonusEntryEvent(1, "one", "a", date.toString(), BonusKind.Accrual.name, 125, food.id, null, "", false, 1),
+            BonusEntryEvent(2, "two", "b", date.toString(), BonusKind.Accrual.name, 999, null, null, "", false, 2),
+        )
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { FinanceScreen(DemoState.Ready(snapshot.copy(bonuses = BonusState(programs, entries))), {}, "Синтетика", {}, commands()) } }
+        }
+        rule.onNodeWithContentDescription("Бонусы").performClick()
+        rule.onNodeWithText("Программа: Другой магазин").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Магазин", useUnmergedTree = true).performClick()
+        rule.onNodeWithText("1,25 баллов").assertIsDisplayed()
+        rule.onNodeWithTag("bonus-list").performScrollToNode(hasText("Продукты: 1,25"))
+        rule.onNodeWithText("Продукты: 1,25").assertIsDisplayed()
+        saveImage("bonus-page", editor = false)
+        rule.onNodeWithTag("bonus-list").performScrollToNode(hasText("Настроить программу"))
+        rule.onNodeWithText("Настроить программу").performClick()
+        rule.onNodeWithText("Программа бонусов").assertIsDisplayed()
+        rule.onNode(hasText("Название программы") and hasSetTextAction()).assertTextContains("Магазин")
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {

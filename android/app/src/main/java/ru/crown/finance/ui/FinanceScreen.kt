@@ -89,6 +89,7 @@ private val MoneyPanelLabel = Color(0xFFD1E9DE)
 
 private enum class Section(val title: String, val icon: Int) {
     Operations("Операции", R.drawable.ic_operations),
+    Bonuses("Бонусы", R.drawable.ic_bonus),
     Accounts("Счета", R.drawable.ic_accounts),
     Reports("Отчёты", R.drawable.ic_reports),
     History("История", R.drawable.ic_history),
@@ -178,7 +179,7 @@ internal fun FinanceScreen(
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
                                 if (destination in listOf(Section.History, Section.Periods, Section.Reconciliations)) continue
-                                if (commands == null && destination in listOf(Section.Reports, Section.Protection)) continue
+                                if (commands == null && destination in listOf(Section.Bonuses, Section.Reports, Section.Protection)) continue
                                 NavigationBarItem(
                                     modifier = Modifier.semantics { contentDescription = destination.title },
                                     selected = section == destination,
@@ -224,6 +225,7 @@ internal fun FinanceScreen(
                         showDetails = { detailsId = it.id },
                         commands = commands,
                     )
+                    Section.Bonuses -> commands?.let { BonusPage(state.snapshot, it) }
                     Section.Accounts -> AccountsPage(
                         state.snapshot, accountsScroll,
                         reconcile = { tab = Section.Reconciliations.name }.takeIf { commands != null },

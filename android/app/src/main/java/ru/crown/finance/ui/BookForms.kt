@@ -79,6 +79,8 @@ internal data class BookCommands(
     val assignTags: (String, Set<String>, Set<String>, () -> Unit) -> Unit,
     val saveFilter: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit,
     val saveRule: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit,
+    val saveBonusProgram: (String, ru.crown.finance.ledger.BonusProgramEvent?, Boolean, () -> Unit) -> Unit,
+    val saveBonusEntry: (ru.crown.finance.ledger.BonusEntryEvent, ru.crown.finance.ledger.BonusEntryEvent?, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

@@ -259,7 +259,8 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 val totals = "Счета — ${copy.accounts.size}, операции — ${copy.operations.size}, " +
                     "версии изменений — ${copy.revisions.size}, категории — ${copy.categories.size}, " +
                     "теги — ${copy.organization.tags.size}, фильтры — ${copy.organization.filters.size}, " +
-                    "правила — ${ru.crown.finance.ledger.currentRules(copy.ruleEvents).size}."
+                    "правила — ${ru.crown.finance.ledger.currentRules(copy.ruleEvents).size}, " +
+                    "бонусные программы — ${copy.bonuses.programs.size}, записи — ${copy.bonuses.entries.size}."
                 mutableState.value = current.copy(message = "Копия проверена. $totals", error = null)
             } catch (error: CancellationException) {
                 throw error
@@ -427,6 +428,16 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         change(saved) { update(current.snapshot.month) { addBank(name) } }
     }
 
+    fun saveBonusProgram(name: String, expected: ru.crown.finance.ledger.BonusProgramEvent?, archived: Boolean, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { saveBonusProgram(name, expected, archived) } }
+    }
+
+    fun saveBonusEntry(entry: ru.crown.finance.ledger.BonusEntryEvent, expected: ru.crown.finance.ledger.BonusEntryEvent?, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { saveBonusEntry(entry, expected) } }
+    }
+
     fun saveRule(rule: ru.crown.finance.ledger.CategoryRule, expected: ru.crown.finance.ledger.CategoryRuleEvent?, saved: () -> Unit) {
         val current = mutableState.value as? Workspace.Book ?: return
         change(saved) { update(current.snapshot.month) { saveRule(rule, expected) } }
@@ -541,6 +552,7 @@ class MainActivity : ComponentActivity() {
                                     importStatement = model::importStatement,
                                     addBank = model::addBank,
                                     saveTag = model::saveTag, assignTags = model::assignTags, saveFilter = model::saveFilter, saveRule = model::saveRule,
+                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry,
                                 )
                             if (workspace.statement != null) {
                                 ru.crown.finance.ui.StatementReview(
