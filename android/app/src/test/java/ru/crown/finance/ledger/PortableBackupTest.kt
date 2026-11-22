@@ -88,16 +88,17 @@ class PortableBackupTest {
     }
 
     @Test
-    fun stillReadsVersionSixWithNoOrganizationTrailer() {
+    fun stillReadsVersionsSixAndSeven() {
+        for (version in 6..7) {
         val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
         val salt = ByteArray(16) { it.toByte() }
         val iv = ByteArray(12) { (it + 20).toByte() }
-        val header = signature + byteArrayOf(6) + salt + iv
+        val header = signature + byteArrayOf(version.toByte()) + salt + iv
         val body = java.io.ByteArrayOutputStream()
         java.io.DataOutputStream(body).use { out ->
             val name = "Прежняя копия".toByteArray()
             out.writeShort(name.size); out.write(name)
-            repeat(8) { out.writeInt(0) }
+            repeat(if (version >= 7) 11 else 8) { out.writeInt(0) }
         }
         val key = derivePasswordKey(correct.toCharArray(), salt)
         val encrypted = try {
@@ -110,6 +111,17 @@ class PortableBackupTest {
         val copy = PortableBackup.open((header + encrypted).inputStream(), correct.toCharArray())
         assertEquals("Прежняя копия", copy.title)
         assertEquals(OrganizationState(), copy.organization)
+        assertEquals(emptyList<CategoryRuleEvent>(), copy.ruleEvents)
+        }
+    }
+
+    @Test
+    fun categoryRuleHistoryRoundTrips() {
+        val rule = CategoryRule("rule", "Учебный магазин", OperationKind.Expense, "покупка", category.id)
+        val events = listOf(rule.event(1).copy(sequence = 1), rule.copy(enabled = false).event(2).copy(sequence = 2))
+        val data = ledger.copy(ruleEvents = events)
+        val copy = PortableBackup.open(PortableBackup.seal(data, correct.toCharArray()).inputStream(), correct.toCharArray())
+        assertEquals(data, copy)
     }
 
     @Test

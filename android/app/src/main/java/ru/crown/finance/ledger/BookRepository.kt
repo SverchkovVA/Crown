@@ -38,9 +38,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
-        TagEvent::class, TagAssignment::class, FilterEvent::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -52,9 +52,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun statements(): StatementDao
     abstract fun banks(): BankDao
     abstract fun organization(): OrganizationDao
+    abstract fun classification(): ClassificationDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration)
 
 internal class BookRepository(
     context: Context,
@@ -131,6 +132,7 @@ internal class BookRepository(
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
+        for (event in backup.ruleEvents) database.classification().insert(event)
         for (event in backup.organization.tagEvents) database.organization().insert(event)
         for (event in backup.organization.assignments) database.organization().insert(event)
         for (event in backup.organization.filterEvents) database.organization().insert(event)
@@ -219,7 +221,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(),
+            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(),
         )
     }
 
@@ -230,7 +232,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -353,6 +355,19 @@ internal class BookSession(
             UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
             preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
         ))
+    }
+
+    suspend fun saveRule(rule: CategoryRule, expected: CategoryRuleEvent?) = db.withTransaction {
+        val events = db.classification().events()
+        val current = currentRules(events)
+        val previous = current.firstOrNull { it.id == rule.id }
+        require(previous == expected) { "Правило изменилось. Откройте его заново" }
+        require(expected != null || current.size < 1000) { "В книге уже 1000 правил" }
+        require(current.none { it.id != rule.id && it.name.equals(rule.name, true) }) { "Такое правило уже есть" }
+        require(expected == null || expected.rule() != rule) { "Правило не изменилось" }
+        require(db.categories().find(rule.categoryId)?.kind == rule.kind.wireName) { "Выберите категорию того же вида" }
+        require(rule.accountId == null || dao.accounts().any { it.id == rule.accountId }) { "Счёт правила не найден" }
+        db.classification().insert(rule.event(Instant.now().toEpochMilli()))
     }
 
     private suspend fun organization() = OrganizationState(

@@ -288,10 +288,47 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun ruleVersionsRestoreWithoutReclassifyingExistingOperations() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Синтетика правил", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) {
+                    book.addAccount("Основной", 0, day)
+                    book.addCategory("Продукты", OperationKind.Expense)
+                }
+                val initial = book.snapshot(month)
+                val account = initial.balances.single().account.id
+                val category = initial.categories.single()
+                val purchase = Operation("rule-purchase", OperationKind.Expense, day, account, 725, "Магазин")
+                book.update(month) { book.addOperation(purchase) }
+                val before = book.snapshot(month)
+                val rule = CategoryRule("shop-rule", "Магазин", OperationKind.Expense, "магазин", category.id, accountId = account)
+                book.update(month) { book.saveRule(rule, null) }
+                val firstVersion = book.snapshot(month).ruleEvents.single()
+                book.update(month) { book.saveRule(rule.copy(priority = 20, enabled = false), firstVersion) }
+                reject { book.update(month) { book.saveRule(rule.copy(priority = 30), firstVersion) } }
+                reject { book.update(month) { book.saveRule(rule.copy(id = "foreign", categoryId = "missing"), null) } }
+                val after = book.snapshot(month)
+                assertEquals(before.operations, after.operations)
+                assertEquals(before.history, after.history)
+                assertEquals(before.totalMinor, after.totalMinor)
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore("restored-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() })
+                restored = copy
+                assertEquals(after.ruleEvents, copy.snapshot(month).ruleEvents)
+                val expected = currentRules(copy.snapshot(month).ruleEvents).single()
+                copy.update(month) { copy.saveRule(expected.rule().copy(enabled = true), expected) }
+                assertEquals(3, copy.snapshot(month).ruleEvents.size)
+            } finally { restored?.close(); book.close() }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..7) {
+            for (version in 1..8) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets
