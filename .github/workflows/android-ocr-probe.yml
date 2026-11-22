@@ -22,13 +22,14 @@ jobs:
     timeout-minutes: 25
     env:
       LC_ALL: C.UTF-8
-      CROWN_OCR_CANDIDATE: ${{ runner.temp }}/crown-ocr-inputs
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
           persist-credentials: false
       - name: Публичные материалы с закреплёнными хешами
-        run: python3 tools/prepare_android_ocr_probe.py --output "$CROWN_OCR_CANDIDATE"
+        run: |
+          echo "CROWN_OCR_CANDIDATE=$RUNNER_TEMP/crown-ocr-inputs" >> "$GITHUB_ENV"
+          python3 tools/prepare_android_ocr_probe.py --output "$RUNNER_TEMP/crown-ocr-inputs"
       - name: Среда Android
         shell: bash
         run: |
