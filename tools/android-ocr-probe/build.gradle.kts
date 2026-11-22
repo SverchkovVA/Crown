@@ -47,6 +47,7 @@ tasks.named("preBuild") { dependsOn(stageModels) }
 dependencies {
     implementation(files(candidate.resolve("tesseract4android-4.9.0.aar")))
     implementation("androidx.annotation:annotation:1.3.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
 }
