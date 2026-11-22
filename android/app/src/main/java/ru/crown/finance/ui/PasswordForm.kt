@@ -10,7 +10,7 @@ internal fun PasswordForm(commands: BookCommands, close: () -> Unit) {
     var confirmation by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(credential, password, confirmation) { error = null; commands.clearError() }
-    Editor("Сменить парольную фразу", commands, error, close, "Изменить пароль", {
+    Editor("Смена пароля", commands, error, close, "Изменить пароль", {
         when {
             credential.isEmpty() -> error = "Введите текущий пароль или код CA1"
             password.isEmpty() -> error = "Введите новую парольную фразу"
@@ -23,10 +23,10 @@ internal fun PasswordForm(commands: BookCommands, close: () -> Unit) {
             }
         }
     }) {
-        Text("Подтвердите доступ к книге текущим паролем или полным кодом CA1.")
-        SecretField(credential, { credential = it }, "Текущий пароль или CA1", commands.busy)
-        SecretField(password, { password = it }, "Новая парольная фраза", commands.busy)
-        SecretField(confirmation, { confirmation = it }, "Повторите новую фразу", commands.busy)
+        Text("Введите текущий пароль или CA1, затем новую парольную фразу.")
+        SecretField(credential, { credential = it }, "Пароль или CA1", commands.busy)
+        SecretField(password, { password = it }, "Новый пароль", commands.busy)
+        SecretField(confirmation, { confirmation = it }, "Повторите пароль", commands.busy)
         Text("Сохранённый CA1 продолжит работать. Пароль резервных копий задаётся отдельно.")
     }
 }

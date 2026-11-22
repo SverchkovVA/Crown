@@ -547,17 +547,17 @@ class JournalUiTest {
                 current.fill(' '); next.fill(' '); called = true
             }), {}) } }
         }
-        rule.onNode(hasText("Текущий пароль или CA1") and hasSetTextAction()).performTextReplacement("old-only")
-        rule.onNode(hasText("Новая парольная фраза") and hasSetTextAction()).performTextReplacement("new-only")
-        rule.onNode(hasText("Повторите новую фразу") and hasSetTextAction()).performTextReplacement("different")
+        rule.onNode(hasText("Пароль или CA1") and hasSetTextAction()).performTextReplacement("old-only")
+        rule.onNode(hasText("Новый пароль") and hasSetTextAction()).performTextReplacement("new-only")
+        rule.onNode(hasText("Повторите пароль") and hasSetTextAction()).performTextReplacement("different")
         rule.onNodeWithText("Изменить пароль").performClick()
         rule.onNodeWithText("Новые парольные фразы различаются").assertIsDisplayed()
         assertFalse(called)
-        rule.onNode(hasText("Повторите новую фразу") and hasSetTextAction()).performTextReplacement("new-only")
+        rule.onNode(hasText("Повторите пароль") and hasSetTextAction()).performTextReplacement("new-only")
         saveImage("password-change")
         rule.onNodeWithText("Изменить пароль").assertIsDisplayed().performClick()
         rule.runOnIdle { assertTrue(called) }
-        rule.onNode(hasText("Новая парольная фраза") and hasSetTextAction()).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
+        rule.onNode(hasText("Новый пароль") and hasSetTextAction()).assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.EditableText, androidx.compose.ui.text.AnnotatedString("")))
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {
