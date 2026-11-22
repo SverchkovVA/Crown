@@ -45,6 +45,7 @@ class JournalUiTest {
         assignAction: (String, Set<String>, Set<String>, () -> Unit) -> Unit = { _, _, _, _ -> },
         filterAction: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _ -> },
         ruleAction: (CategoryRule, CategoryRuleEvent?, () -> Unit) -> Unit = { _, _, _ -> },
+        planningAction: (String, String, PlanningConditions, PlanningEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _, _ -> },
         depositAction: (String, String, DepositScenario, DepositEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _, _ -> },
         passwordAction: (CharArray, CharArray, () -> Unit) -> Unit = { first, second, _ -> first.fill(' '); second.fill(' ') },
         bonusAction: (BonusEntryEvent, BonusEntryEvent?, () -> Unit) -> Unit = { _, _, _ -> },
@@ -57,7 +58,7 @@ class JournalUiTest {
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
         saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
-        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction,
+        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction, savePlan = planningAction,
     )
 
     @Test
@@ -623,6 +624,85 @@ class JournalUiTest {
         rule.onNodeWithTag("deposits-list").performScrollToNode(hasText("Просмотр прежних условий · версия 1"))
         rule.onNodeWithText("Просмотр прежних условий · версия 1").assertIsDisplayed()
         rule.onNodeWithText("Изменить условия").assertDoesNotExist()
+    }
+
+    @Test
+    fun budgetFormSavesExplicitAccountAndCategoryScope() {
+        var recorded: BudgetPlan? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { BudgetEditor(null, null, "", snapshot, commands(planningAction = { _, _, value, _, _, _ -> recorded = value as BudgetPlan }), {}, {}) } }
+        }
+        rule.onNode(hasText("Название бюджета") and hasSetTextAction()).performTextReplacement("Учебный бюджет")
+        rule.onNode(hasText("Лимит расходов, ₽") and hasSetTextAction()).performTextReplacement("10,00")
+        rule.onNode(hasText("Лимит расходов, ₽") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithText("Счета и категории").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Все счета").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Счёт бюджета: Основной").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Все категории").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Категория бюджета: Продукты").performScrollTo().performClick()
+        saveImage("budget-editor")
+        rule.onNodeWithText("Сохранить бюджет").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(setOf("main"), recorded?.accounts)
+            assertEquals(setOf("food"), recorded?.categories)
+            assertEquals(snapshot.month.atDay(1), recorded?.start)
+            assertEquals(snapshot.month.atEndOfMonth(), recorded?.end)
+        }
+    }
+
+    @Test
+    fun goalFormRejectsPastDeadlineAndUsesCalendarMonth() {
+        var recorded: GoalPlan? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { GoalEditor(null, null, "", commands(planningAction = { _, _, value, _, _, _ -> recorded = value as GoalPlan }), {}, {}) } }
+        }
+        fun fill(label: String, text: String) { rule.onNode(hasText(label) and hasSetTextAction()).performScrollTo().performTextReplacement(text) }
+        fill("Название цели", "Учебная цель")
+        fill("Дата расчёта", "31012024")
+        fill("Уже накоплено, ₽", "1,00")
+        fill("Сумма цели, ₽", "10,00")
+        fill("Ежемесячно, ₽", "2,00")
+        rule.onNode(hasText("Ежемесячно, ₽") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithContentDescription("Есть срок цели").performScrollTo().performClick()
+        fill("Срок цели", "30012024")
+        rule.onNodeWithText("Сохранить цель").performClick()
+        rule.onNodeWithText("Срок цели не может быть раньше даты расчёта").assertIsDisplayed()
+        assertNull(recorded)
+        fill("Срок цели", "30052024")
+        saveImage("goal-editor")
+        rule.onNodeWithText("Сохранить цель").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            val result = projectGoal(requireNotNull(recorded))
+            assertEquals(LocalDate.of(2024, 6, 30), result.reachedOn)
+            assertEquals(300.toBigInteger(), result.requiredMonthly)
+        }
+    }
+
+    @Test
+    fun goalAccountPreviewLeavesManualConditionsUnchanged() {
+        val opening = Operation("opening", OperationKind.Opening, date, "main", 10000, "Учебный остаток")
+        val operations = listOf(opening, purchase)
+        val source = LedgerSnapshot.from(snapshot.month, listOf(Account("main", "Основной")), operations)
+            .copy(categories = snapshot.categories, history = operations.map { OperationHistory(listOf(Revision(it, null))) })
+        val plan = GoalPlan(date, 0, 10000, 100)
+        val event = PlanningEvent(1, "g", "savings_goal", "Учебная цель", encodePlan(plan), false, 1)
+        var saved = false
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { PlanningPage(source.copy(planningEvents = listOf(event)), commands(planningAction = { _, _, _, _, _, _ -> saved = true }), {}, {}) } }
+        }
+        rule.onNodeWithText("Цели").performClick()
+        rule.onNodeWithText("Учебная цель").performClick()
+        rule.onNodeWithText("Накопления: Из сохранённых условий").performScrollTo().performClick()
+        rule.onNodeWithText("По остатку счёта").performClick()
+        rule.waitUntil(10000) { rule.onNodeWithTag("planning-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+        rule.onNodeWithTag("planning-list").performScrollToNode(hasText(money(9000)))
+        saveImage("goal-account-progress", editor = false)
+        rule.onNodeWithTag("planning-list").performScrollToNode(hasText("Прогресс: 90,00%"))
+        rule.onNodeWithText("Прогресс: 90,00%").assertIsDisplayed()
+        rule.runOnIdle { assertFalse(saved); assertEquals(0L, (event.conditions() as GoalPlan).current) }
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {

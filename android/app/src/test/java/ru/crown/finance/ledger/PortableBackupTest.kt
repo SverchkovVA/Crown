@@ -88,8 +88,8 @@ class PortableBackupTest {
     }
 
     @Test
-    fun stillReadsVersionsSixThroughNine() {
-        for (version in 6..9) {
+    fun stillReadsVersionsSixThroughTen() {
+        for (version in 6..10) {
         val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
         val salt = ByteArray(16) { it.toByte() }
         val iv = ByteArray(12) { (it + 20).toByte() }
@@ -98,7 +98,7 @@ class PortableBackupTest {
         java.io.DataOutputStream(body).use { out ->
             val name = "Прежняя копия".toByteArray()
             out.writeShort(name.size); out.write(name)
-            repeat(if (version >= 9) 14 else if (version >= 8) 12 else if (version >= 7) 11 else 8) { out.writeInt(0) }
+            repeat(if (version >= 10) 15 else if (version >= 9) 14 else if (version >= 8) 12 else if (version >= 7) 11 else 8) { out.writeInt(0) }
         }
         val key = derivePasswordKey(correct.toCharArray(), salt)
         val encrypted = try {

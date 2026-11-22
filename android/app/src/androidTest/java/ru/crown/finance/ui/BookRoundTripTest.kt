@@ -71,6 +71,24 @@ class BookRoundTripTest {
             rule.onNode(hasText("Начальная ставка, %") and hasSetTextAction()).performImeAction()
             rule.onNodeWithText("Сохранить сценарий").performClick()
             waitText("Прогноз процентов")
+            rule.onNodeWithContentDescription("Отчёты").performClick()
+            rule.onNodeWithText("Бюджеты и цели").performScrollTo().performClick()
+            rule.onNodeWithText("Новый бюджет").performClick()
+            field("Название бюджета", "E2E бюджет")
+            field("Лимит расходов, ₽", "10,00")
+            rule.onNode(hasText("Лимит расходов, ₽") and hasSetTextAction()).performImeAction()
+            rule.onNodeWithText("Сохранить бюджет").performClick()
+            waitText("Расходы за период")
+            rule.onNodeWithTag("planning-list").performScrollToNode(hasText("Бюджеты"))
+            rule.onNodeWithText("Бюджеты").performClick()
+            rule.onNodeWithText("Цели").performClick()
+            rule.onNodeWithText("Новая цель").performClick()
+            field("Название цели", "E2E цель")
+            field("Сумма цели, ₽", "200,00")
+            field("Ежемесячно, ₽", "100,00")
+            rule.onNode(hasText("Ежемесячно, ₽") and hasSetTextAction()).performImeAction()
+            rule.onNodeWithText("Сохранить цель").performClick()
+            waitText("Накоплено")
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)
@@ -94,6 +112,13 @@ class BookRoundTripTest {
                     assertEquals(12000.toBigInteger(), snapshot.totalMinor)
                     assertEquals(345.toBigInteger(), snapshot.expenseMinor)
                     assertEquals(120000.toBigInteger(), forecastDeposit(currentDeposits(snapshot.depositEvents).single().scenario()).interest)
+                    val plans = currentPlans(snapshot.planningEvents)
+                    assertEquals(2, plans.size)
+                    val budget = plans.single { it.kind == PlanningKind.Budget.wire }.conditions() as BudgetPlan
+                    assertEquals(345.toBigInteger(), executeBudget(budget, snapshot.currentOperations()).spent)
+                    val goal = plans.single { it.kind == PlanningKind.Goal.wire }.conditions() as GoalPlan
+                    assertEquals(0L, goal.current)
+                    assertEquals(2.toBigInteger(), projectGoal(goal).contributions)
                 }
             }
         } finally {

@@ -431,10 +431,47 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun planningVersionsReferencesAndRestorePreserveMoney() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Планы · синтетика", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) { book.addAccount("Основной", 12345, day); book.addCategory("Продукты", OperationKind.Expense) }
+                val before = book.snapshot(month)
+                val account = before.balances.single().account.id
+                val category = before.categories.single().id
+                val budget = BudgetPlan(month.atDay(1), month.atEndOfMonth(), 10000, setOf(account), setOf(category), true)
+                val goal = GoalPlan(day, 0, 20000, 1000)
+                book.update(month) { book.savePlan("b", "Учебный", budget, null, false); book.savePlan("g", "Учебный", goal, null, false) }
+                val original = currentPlans(book.snapshot(month).planningEvents).first { it.id == "b" }
+                book.update(month) { book.savePlan("b", original.name, budget.copy(limit = 20000), original, false) }
+                val stable = book.snapshot(month)
+                reject { book.update(month) { book.savePlan("b", "Старая форма", budget, original, false) } }
+                val latest = currentPlans(stable.planningEvents).first { it.id == "b" }
+                reject { book.update(month) { book.savePlan("b", latest.name, goal, latest, false) } }
+                reject { book.update(month) { book.savePlan("unknown", "Ошибка", budget.copy(accounts = setOf("absent")), null, false) } }
+                assertEquals(stable, book.snapshot(month))
+                book.update(month) { book.setPeriodClosed(month, true, ""); book.savePlan("b", latest.name, latest.conditions(), latest, true) }
+                val after = book.snapshot(month)
+                assertEquals(before.totalMinor, after.totalMinor)
+                assertEquals(before.history, after.history)
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore("new-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() })
+                restored = copy
+                assertEquals(after.planningEvents, copy.snapshot(month).planningEvents)
+                assertEquals(after.history, copy.snapshot(month).history)
+                val archived = currentPlans(copy.snapshot(month).planningEvents).first { it.id == "b" }
+                copy.update(month) { copy.savePlan(archived.id, archived.name, archived.conditions(), archived, false) }
+                assertFalse(currentPlans(copy.snapshot(month).planningEvents).first { it.id == "b" }.archived)
+            } finally { restored?.close(); book.close() }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..10) {
+            for (version in 1..11) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets

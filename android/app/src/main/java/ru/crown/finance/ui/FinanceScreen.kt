@@ -92,6 +92,7 @@ private enum class Section(val title: String, val icon: Int) {
     Bonuses("Бонусы", R.drawable.ic_bonus),
     Accounts("Счета", R.drawable.ic_accounts),
     Reports("Отчёты", R.drawable.ic_reports),
+    Planning("Бюджеты и цели", R.drawable.ic_reports),
     Deposits("Вклады", R.drawable.ic_accounts),
     History("История", R.drawable.ic_history),
     Periods("Периоды", R.drawable.ic_history),
@@ -135,7 +136,7 @@ internal fun FinanceScreen(
     LaunchedEffect(journalQuery.accountId, snapshot?.month) { operationsScroll.scrollToItem(0) }
 
     BackHandler(detailsId == null && editor == null) {
-        if (section == Section.Deposits) {
+        if (section == Section.Deposits || section == Section.Planning) {
             tab = Section.Reports.name
         } else if (section == Section.History || section == Section.Periods) {
             tab = Section.Protection.name
@@ -181,7 +182,7 @@ internal fun FinanceScreen(
                         val compactNavigation = maxWidth < 400.dp && LocalDensity.current.fontScale > 1.2f
                         NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                             for (destination in Section.entries) {
-                                if (destination in listOf(Section.History, Section.Periods, Section.Reconciliations, Section.Deposits)) continue
+                                if (destination in listOf(Section.History, Section.Periods, Section.Reconciliations, Section.Deposits, Section.Planning)) continue
                                 if (commands == null && destination in listOf(Section.Bonuses, Section.Reports, Section.Protection)) continue
                                 NavigationBarItem(
                                     modifier = Modifier.semantics { contentDescription = destination.title },
@@ -241,8 +242,9 @@ internal fun FinanceScreen(
                     Section.Reconciliations -> commands?.let {
                         ReconciliationsPage(state.snapshot, it) { editor = EditorSection.Reconciliation }
                     }
+                    Section.Planning -> commands?.let { PlanningPage(state.snapshot, it, { tab = Section.Reports.name }, { operation -> detailsId = operation.id }) }
                     Section.Deposits -> commands?.let { DepositsPage(state.snapshot, it) { tab = Section.Reports.name } }
-                    Section.Reports -> ReportsPage(state.snapshot, commands, openDeposits = { tab = Section.Deposits.name }) {
+                    Section.Reports -> ReportsPage(state.snapshot, commands, openDeposits = { tab = Section.Deposits.name }, openPlanning = { tab = Section.Planning.name }) {
                         commands?.clearError()
                         editor = EditorSection.Export
                     }
@@ -682,7 +684,7 @@ private fun OperationDetails(
 }
 
 @Composable
-private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?, openDeposits: () -> Unit, export: () -> Unit) {
+private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?, openDeposits: () -> Unit, openPlanning: () -> Unit, export: () -> Unit) {
     val totals = remember(snapshot) { categoryTotals(snapshot) }
     LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp), modifier = Modifier.fillMaxSize()) {
         item {
@@ -690,6 +692,7 @@ private fun ReportsPage(snapshot: LedgerSnapshot, commands: BookCommands?, openD
             if (commands != null) {
                 MonthActions(commands)
                 OutlinedButton(openDeposits) { Text("Вклады · прогноз процентов") }
+                OutlinedButton(openPlanning) { Text("Бюджеты и цели") }
             }
             Spacer(Modifier.height(12.dp))
             BalancePanel("Остаток на конец месяца", snapshot.totalMinor, snapshot)

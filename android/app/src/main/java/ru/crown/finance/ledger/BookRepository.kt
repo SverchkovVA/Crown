@@ -40,9 +40,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
-        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class, PlanningEvent::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -57,9 +57,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun classification(): ClassificationDao
     abstract fun bonuses(): BonusDao
     abstract fun deposits(): DepositDao
+    abstract fun planning(): PlanningDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration)
 
 internal class BookRepository(
     context: Context,
@@ -137,6 +138,7 @@ internal class BookRepository(
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
+        for (event in backup.planningEvents) database.planning().insert(event)
         for (event in backup.depositEvents) database.deposits().insert(event)
         for (event in backup.bonuses.programEvents) database.bonuses().insert(event)
         for (event in backup.bonuses.entryEvents) database.bonuses().insert(event)
@@ -240,7 +242,7 @@ internal class BookSession(
         LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
             history = history, categories = db.categories().all().map(CategoryRow::toCategory),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(), depositEvents = db.deposits().events(),
+            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(), depositEvents = db.deposits().events(), planningEvents = db.planning().events(),
         )
     }
 
@@ -251,7 +253,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(), db.planning().events(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -374,6 +376,23 @@ internal class BookSession(
             UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
             preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
         ))
+    }
+
+    suspend fun savePlan(id: String, name: String, value: PlanningConditions, expected: PlanningEvent?, archived: Boolean) = db.withTransaction {
+        require(id.length in 1..64)
+        val title = name.trim()
+        require(title.length in 1..80) { "Введите название плана" }
+        val current = currentPlans(db.planning().events())
+        val previous = current.firstOrNull { it.id == id }
+        require(previous == expected) { "План изменился. Откройте его заново" }
+        require(previous == null || previous.kind == value.kind.wire) { "Нельзя изменить вид сохранённого плана" }
+        require(!archived || previous != null)
+        require(archived || current.none { it.id != id && it.kind == value.kind.wire && !it.archived && it.name.equals(title, true) }) { "Такой действующий план уже есть" }
+        require(archived || previous?.archived == false || current.count { it.kind == value.kind.wire && !it.archived } < 1000) { "Уже сохранено 1000 действующих планов этого вида" }
+        validatePlanReferences(value, dao.accounts().map(AccountRow::id).toSet(), db.categories().all().map(CategoryRow::id).toSet())
+        val payload = encodePlan(value)
+        require(previous == null || previous.name != title || previous.payload != payload || previous.archived != archived) { "План не изменился" }
+        db.planning().insert(PlanningEvent(id = id, kind = value.kind.wire, name = title, payload = payload, archived = archived, recordedAt = Instant.now().toEpochMilli()))
     }
 
     suspend fun saveDeposit(id: String, name: String, scenario: DepositScenario, expected: DepositEvent?, archived: Boolean) = db.withTransaction {
