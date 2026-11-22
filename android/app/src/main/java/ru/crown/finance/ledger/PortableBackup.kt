@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 11
+private const val CURRENT_VERSION: Byte = 12
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16

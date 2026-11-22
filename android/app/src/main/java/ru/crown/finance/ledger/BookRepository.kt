@@ -42,7 +42,7 @@ internal interface BookIdentityDao {
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
         TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class, PlanningEvent::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -60,7 +60,7 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun planning(): PlanningDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration, calendarMigration)
 
 internal class BookRepository(
     context: Context,

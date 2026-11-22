@@ -705,6 +705,70 @@ class JournalUiTest {
         rule.runOnIdle { assertFalse(saved); assertEquals(0L, (event.conditions() as GoalPlan).current) }
     }
 
+    @Test
+    fun calendarFormRejectsIntervalAndSavesMonthlyAnchor() {
+        var recorded: CalendarPlan? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { CalendarEditor(null, null, "", commands(planningAction = { _, _, value, _, _, _ -> recorded = value as CalendarPlan }), {}, {}) } }
+        }
+        fun fill(label: String, text: String) { rule.onNode(hasText(label) and hasSetTextAction()).performScrollTo().performTextReplacement(text) }
+        fill("Название календаря", "Учебный календарь")
+        fill("Название платежа", "Аренда")
+        fill("Сумма платежа, ₽", "100,00")
+        fill("Первый платёж", "31012024")
+        rule.onNodeWithText("Повтор: Разово").performScrollTo().performClick()
+        rule.onNodeWithText("Месяцы").performClick()
+        fill("Интервал повтора", "0")
+        rule.onNodeWithText("Сохранить календарь").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Платёж 1: Интервал должен быть от 1 до 1200").assertIsDisplayed()
+        assertNull(recorded)
+        fill("Интервал повтора", "2")
+        rule.onNodeWithContentDescription("Есть последняя дата").performScrollTo().performClick()
+        fill("Последняя дата", "30062024")
+        rule.onNode(hasText("Последняя дата") and hasSetTextAction()).performImeAction()
+        saveImage("calendar-editor")
+        rule.onNodeWithText("Сохранить календарь").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            val plan = requireNotNull(recorded)
+            assertEquals(listOf(LocalDate.of(2024, 1, 31), LocalDate.of(2024, 3, 31), LocalDate.of(2024, 5, 31)), forecastPayments(plan, LocalDate.of(2024, 1, 1), LocalDate.of(2024, 12, 31)).map { it.date })
+        }
+    }
+
+    @Test
+    fun calendarMatchingRemovesDoubleCountWithoutSaving() {
+        val opening = Operation("opening", OperationKind.Opening, date.minusDays(1), "main", 10000, "Остаток")
+        val operations = listOf(opening, purchase)
+        val plan = CalendarPlan(listOf(PaymentSchedule("Учебный платёж", 1000, false, date)))
+        val event = PlanningEvent(1, "calendar", PlanningKind.Calendar.wire, "Учебный календарь", encodePlan(plan), false, 1)
+        val source = LedgerSnapshot.from(snapshot.month, listOf(Account("main", "Основной")), operations).copy(
+            categories = snapshot.categories, history = operations.map { OperationHistory(listOf(Revision(it, null))) }, planningEvents = listOf(event))
+        var saved = false
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { CalendarsPage(source, commands(planningAction = { _, _, _, _, _, _ -> saved = true }), {}, {}) } }
+        }
+        rule.onNodeWithText("Учебный календарь").performClick()
+        fun ready() = rule.waitUntil(10000) { rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+        ready()
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText(money(8000)))
+        rule.onNodeWithText(money(8000)).assertIsDisplayed()
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Сопоставить платёж 1"))
+        rule.onNodeWithText("Сопоставить платёж 1").performClick()
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связать: Учебная покупка"))
+        rule.onNodeWithText("Связать: Учебная покупка").performClick()
+        ready()
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText(money(9000)))
+        rule.onNodeWithText(money(9000)).assertIsDisplayed()
+        saveImage("calendar-matched", editor = false)
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Убрать сопоставление"))
+        rule.onNodeWithText("Убрать сопоставление").performClick()
+        ready()
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText(money(8000)))
+        rule.onNodeWithText(money(8000)).assertIsDisplayed()
+        rule.runOnIdle { assertFalse(saved); assertEquals(plan, event.conditions()); assertEquals(9000.toBigInteger(), source.totalMinor) }
+    }
+
     private fun saveImage(name: String, editor: Boolean = true) {
         rule.waitForIdle()
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }

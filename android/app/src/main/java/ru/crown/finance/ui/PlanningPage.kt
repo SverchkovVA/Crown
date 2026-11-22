@@ -44,6 +44,7 @@ internal fun PlanningPage(snapshot: LedgerSnapshot, commands: BookCommands, back
                 val context = coroutineContext
                 val operations = snapshot.currentOperations()
                 when (val value = viewed.conditions()) {
+                    is CalendarPlan -> error("Календарь открывается в разделе регулярных платежей")
                     is BudgetPlan -> PlanResult(budget = executeBudget(value, operations) { context.ensureActive() })
                     is GoalPlan -> if (accountId == null) PlanResult(goal = projectGoal(value)) else {
                         val account = snapshot.balances.first { it.account.id == accountId }.account
@@ -63,7 +64,7 @@ internal fun PlanningPage(snapshot: LedgerSnapshot, commands: BookCommands, back
                 TextButton(goBack) { Icon(painterResource(R.drawable.ic_back), null); Spacer(Modifier.width(8.dp)); Text(if (viewed == null) "Отчёты" else kind.label) }
                 WorkspaceTitle(viewed?.name ?: "Бюджеты и цели")
                 if (viewed == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PlanningKind.entries.forEach { value -> FilterChip(selected = kind == value, onClick = { kind = value }, label = { Text(value.label) }) }
+                    PlanningKind.entries.filter { it != PlanningKind.Calendar }.forEach { value -> FilterChip(selected = kind == value, onClick = { kind = value }, label = { Text(value.label) }) }
                 }
             }
             if (viewed == null) {

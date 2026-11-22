@@ -4,7 +4,7 @@ import java.math.BigInteger
 import java.time.LocalDate
 import java.time.YearMonth
 
-internal enum class PlanningKind(val wire: String, val label: String) { Budget("budget", "Бюджеты"), Goal("savings_goal", "Цели") }
+internal enum class PlanningKind(val wire: String, val label: String) { Budget("budget", "Бюджеты"), Goal("savings_goal", "Цели"), Calendar("payment_calendar", "Календари") }
 internal sealed interface PlanningConditions {
     val kind: PlanningKind
     fun validate()

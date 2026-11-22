@@ -468,10 +468,46 @@ class ProtectedLedgerTest {
     }
 
     @Test
+    fun calendarVersionsRestoreAndMatchesNeverWriteMoney() = runBlocking {
+        withBooks { first, second ->
+            val (book, _) = BookRepository(context, first).create("Синтетика календаря", "test-only".toCharArray())
+            var restored: BookSession? = null
+            try {
+                book.update(month) { book.addAccount("Основной", 10000, day.minusDays(1)) }
+                val account = book.snapshot(month).balances.single().account.id
+                val payment = Operation("paid", OperationKind.Expense, day, account, 1000, "Оплачен")
+                book.update(month) { book.addOperation(payment) }
+                val plan = CalendarPlan(listOf(PaymentSchedule("Платёж", 1000, false, day)))
+                book.update(month) { book.savePlan("calendar", "Платежи", plan, null, false) }
+                val before = book.snapshot(month)
+                val original = before.planningEvents.single()
+                val report = forecastAccount(plan, setOf(account), before.currentOperations(), day, day, listOf(PaymentMatch(0, payment.id, payment.fingerprint())))
+                assertEquals(9000.toBigInteger(), report.closing)
+                assertEquals(before, book.snapshot(month))
+                book.update(month) { book.savePlan("calendar", "Платежи", plan.copy(schedules = listOf(plan.schedules.single().copy(amount = 2000))), original, false) }
+                val edited = book.snapshot(month)
+                reject { book.update(month) { book.savePlan("calendar", "Платежи", plan, original, false) } }
+                assertEquals(edited, book.snapshot(month))
+                book.update(month) { book.savePlan("calendar", "Платежи", edited.planningEvents.last().conditions(), edited.planningEvents.last(), true) }
+                val saved = book.snapshot(month)
+                assertEquals(before.totalMinor, saved.totalMinor)
+                assertEquals(before.history, saved.history)
+                val bytes = book.backup("copy-only".toCharArray())
+                val (copy, _) = BookRepository(context, second).restore("new-only".toCharArray(), "copy-only".toCharArray(), { bytes.inputStream() })
+                restored = copy
+                val snapshot = copy.snapshot(month)
+                assertEquals(saved.planningEvents, snapshot.planningEvents)
+                assertEquals(saved.history, snapshot.history)
+                assertEquals(saved.totalMinor, snapshot.totalMinor)
+            } finally { restored?.close(); book.close() }
+        }
+    }
+
+    @Test
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..11) {
+            for (version in 1..12) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets
@@ -498,6 +534,17 @@ class ProtectedLedgerTest {
                                 db.execSQL("INSERT INTO ledger_operations(id,kind,date,accountId,amountMinor,description,destinationId,feeMinor) VALUES('opening','opening','2026-11-01','main',10000,'Начальный остаток',NULL,0)")
                                 db.execSQL("INSERT INTO ledger_operations(id,kind,date,accountId,amountMinor,description,destinationId,feeMinor) VALUES('expense','expense','2026-11-15','main',345,'Учебная покупка',NULL,0)")
                                 if (version >= 2) db.execSQL("INSERT INTO ledger_revisions(recordedAt,cancelled,value_id,value_kind,value_date,value_accountId,value_amountMinor,value_description,value_destinationId,value_feeMinor) VALUES(1,0,'expense','expense','2026-11-15','main',400,'Уточнённая покупка',NULL,0)")
+                                if (version >= 11) {
+                                    val opening = LocalDate.of(2026, 1, 1)
+                                    val scenario = DepositScenario(opening, opening.plusYears(1), 1000000, listOf(DepositRate("r", opening, java.math.BigDecimal("12"))), emptyList(), listOf(opening.plusYears(1)))
+                                    db.execSQL("INSERT INTO deposit_events(sequence,id,name,payload,archived,recordedAt) VALUES(1,'legacy-deposit','Прежний вклад',?,0,1)", arrayOf(encodeDeposit(scenario)))
+                                }
+                                if (version >= 12) {
+                                    val budget = BudgetPlan(month.atDay(1), month.atEndOfMonth(), 1000, setOf("main"), setOf("food"), true)
+                                    db.execSQL("INSERT INTO planning_events(sequence,id,kind,name,payload,archived,recordedAt) VALUES(1,'legacy-budget','budget','Прежний бюджет',?,0,1)", arrayOf(encodePlan(budget)))
+                                    db.execSQL("INSERT INTO planning_events(sequence,id,kind,name,payload,archived,recordedAt) VALUES(2,'legacy-budget','budget','Прежний бюджет',?,1,2)", arrayOf(encodePlan(budget.copy(limit = 2000))))
+                                    db.execSQL("INSERT INTO planning_events(sequence,id,kind,name,payload,archived,recordedAt) VALUES(3,'legacy-goal','savings_goal','Прежняя цель',?,0,3)", arrayOf(encodePlan(GoalPlan(day, 0, 10000, 1000))))
+                                }
                                 if (version >= 3) {
                                     db.execSQL("INSERT INTO ledger_categories(id,name,kind) VALUES('food','Продукты','expense')")
                                     db.execSQL("UPDATE ledger_operations SET categoryId='food' WHERE id='expense'")
@@ -528,6 +575,17 @@ class ProtectedLedgerTest {
                     assertEquals(if (version >= 2) 2 else 1, history.first { it.id == "expense" }.revisions.size)
                     assertEquals(if (version >= 3) "food" else null, current.first { it.id == "expense" }.categoryId)
                     assertEquals(if (version >= 3) 1 else 0, room.categories().all().size)
+                    val deposits = room.deposits().events()
+                    assertEquals(if (version >= 11) 1 else 0, deposits.size)
+                    if (version >= 11) assertEquals(120000.toBigInteger(), forecastDeposit(deposits.single().scenario()).interest)
+                    val plans = room.planning().events()
+                    assertEquals(if (version >= 12) 3 else 0, plans.size)
+                    if (version >= 12) {
+                        assertTrue(currentPlans(plans).single { it.id == "legacy-budget" }.archived)
+                        assertEquals(1000L, (plans.first().conditions() as BudgetPlan).limit)
+                        assertEquals(2000L, (plans[1].conditions() as BudgetPlan).limit)
+                        assertEquals(10.toBigInteger(), projectGoal(plans.last().conditions() as GoalPlan).contributions)
+                    }
                     val header = ByteArray(16)
                     java.io.DataInputStream(path.inputStream()).use { it.readFully(header) }
                     assertFalse(header.contentEquals("SQLite format 3\u0000".toByteArray()))

@@ -23,6 +23,14 @@ internal fun encodePlan(value: PlanningConditions): String {
                 out.writeBoolean(value.categories != null)
                 value.categories?.let { ids -> out.writeInt(ids.size); ids.sortedBy { it.orEmpty() }.forEach { out.writeUTF(it.orEmpty()) } }
             }
+            is CalendarPlan -> {
+                out.writeUTF("calendar-payments-v1"); out.writeInt(value.schedules.size)
+                value.schedules.forEach { row ->
+                    out.writeUTF(row.name); out.writeLong(row.amount); out.writeBoolean(row.income); out.writeLong(row.first.toEpochDay())
+                    out.writeUTF(row.unit.name); out.writeInt(row.interval); out.writeBoolean(row.last != null)
+                    row.last?.let { out.writeLong(it.toEpochDay()) }
+                }
+            }
             is GoalPlan -> {
                 out.writeUTF("monthly-contribution-v1")
                 out.writeLong(value.asOf.toEpochDay()); out.writeLong(value.current); out.writeLong(value.target); out.writeLong(value.monthly)
@@ -53,6 +61,14 @@ internal fun decodePlan(text: String): PlanningConditions {
                 require(categories == null || categories.distinct().size == categories.size)
                 BudgetPlan(start, end, limit, accounts?.toSet(), categories?.toSet(), monthly)
             }
+            PlanningKind.Calendar -> {
+                require(input.readUTF() == "calendar-payments-v1")
+                CalendarPlan(List(input.readInt().also { require(it in 1..1000) }) {
+                    val name = input.readUTF(); val amount = input.readLong(); val income = input.readBoolean(); val first = LocalDate.ofEpochDay(input.readLong())
+                    val unit = RepeatUnit.valueOf(input.readUTF()); val interval = input.readInt()
+                    PaymentSchedule(name, amount, income, first, unit, interval, if (input.readBoolean()) LocalDate.ofEpochDay(input.readLong()) else null)
+                })
+            }
             PlanningKind.Goal -> {
                 require(input.readUTF() == "monthly-contribution-v1")
                 val day = LocalDate.ofEpochDay(input.readLong()); val current = input.readLong(); val target = input.readLong(); val monthly = input.readLong()
@@ -65,7 +81,7 @@ internal fun decodePlan(text: String): PlanningConditions {
     require(encodePlan(result) == text) { "Нарушен формат условий планирования" }
     return result
 }
-@Entity(tableName = "planning_events")
+@Entity(tableName = "planning_events", indices = [Index(value = ["id", "sequence"])])
 internal data class PlanningEvent(
     @PrimaryKey(autoGenerate = true) val sequence: Long = 0,
     val id: String, val kind: String, val name: String, val payload: String, val archived: Boolean, val recordedAt: Long,
@@ -111,6 +127,11 @@ internal fun DataInputStream.planning(): List<PlanningEvent> {
         val sequence = readLong(); val id = readUTF(); val kind = readUTF(); val name = readUTF()
         val raw = ByteArray(readInt().also { require(it in 1..6 * 1024 * 1024) }); readFully(raw)
         PlanningEvent(sequence, id, kind, name, raw.toString(Charsets.US_ASCII), readBoolean(), readLong())
+    }
+}
+internal val calendarMigration = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE INDEX index_planning_events_id_sequence ON planning_events(id, sequence)")
     }
 }
 internal val planningMigration = object : Migration(11, 12) {

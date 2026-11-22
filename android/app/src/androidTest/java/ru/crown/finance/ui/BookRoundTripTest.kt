@@ -89,6 +89,15 @@ class BookRoundTripTest {
             rule.onNode(hasText("Ежемесячно, ₽") and hasSetTextAction()).performImeAction()
             rule.onNodeWithText("Сохранить цель").performClick()
             waitText("Накоплено")
+            rule.onNodeWithContentDescription("Отчёты").performClick()
+            rule.onNodeWithText("Регулярные платежи").performScrollTo().performClick()
+            rule.onNodeWithText("Новый календарь").performClick()
+            field("Название календаря", "E2E календарь")
+            field("Название платежа", "E2E ожидаемая покупка")
+            field("Сумма платежа, ₽", "3,45")
+            rule.onNode(hasText("Сумма платежа, ₽") and hasSetTextAction()).performImeAction()
+            rule.onNodeWithText("Сохранить календарь").performClick()
+            waitText("Прогноз остатка")
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)
@@ -113,12 +122,18 @@ class BookRoundTripTest {
                     assertEquals(345.toBigInteger(), snapshot.expenseMinor)
                     assertEquals(120000.toBigInteger(), forecastDeposit(currentDeposits(snapshot.depositEvents).single().scenario()).interest)
                     val plans = currentPlans(snapshot.planningEvents)
-                    assertEquals(2, plans.size)
+                    assertEquals(3, plans.size)
                     val budget = plans.single { it.kind == PlanningKind.Budget.wire }.conditions() as BudgetPlan
                     assertEquals(345.toBigInteger(), executeBudget(budget, snapshot.currentOperations()).spent)
                     val goal = plans.single { it.kind == PlanningKind.Goal.wire }.conditions() as GoalPlan
                     assertEquals(0L, goal.current)
                     assertEquals(2.toBigInteger(), projectGoal(goal).contributions)
+                    val calendar = plans.single { it.kind == PlanningKind.Calendar.wire }.conditions() as CalendarPlan
+                    val day = java.time.LocalDate.now()
+                    val report = forecastAccount(calendar, setOf(snapshot.balances.single().account.id), snapshot.currentOperations(), day, day)
+                    assertEquals(11655.toBigInteger(), report.closing)
+                    val paid = snapshot.currentOperations().single { it.kind == OperationKind.Expense }
+                    assertEquals(12000.toBigInteger(), forecastAccount(calendar, setOf(paid.accountId), snapshot.currentOperations(), day, day, listOf(PaymentMatch(0, paid.id, paid.fingerprint()))).closing)
                 }
             }
         } finally {
