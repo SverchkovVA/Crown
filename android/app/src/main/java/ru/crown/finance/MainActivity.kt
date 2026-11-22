@@ -425,6 +425,21 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         change(saved) { update(current.snapshot.month) { addBank(name) } }
     }
 
+    fun saveTag(name: String, expected: ru.crown.finance.ledger.TagEvent?, archived: Boolean, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { saveTag(name, expected, archived) } }
+    }
+
+    fun assignTags(id: String, expected: Set<String>, selected: Set<String>, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { assignTags(id, expected, selected) } }
+    }
+
+    fun saveFilter(name: String, query: ru.crown.finance.ledger.JournalQuery, expected: ru.crown.finance.ledger.FilterEvent?, archived: Boolean, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { saveFilter(name, query, expected, archived) } }
+    }
+
     fun setPeriodClosed(month: YearMonth, closed: Boolean, reason: String) =
         change { update(month) { setPeriodClosed(month, closed, reason) } }
 
@@ -518,6 +533,7 @@ class MainActivity : ComponentActivity() {
                                     chooseStatement = { openStatement() },
                                     importStatement = model::importStatement,
                                     addBank = model::addBank,
+                                    saveTag = model::saveTag, assignTags = model::assignTags, saveFilter = model::saveFilter,
                                 )
                             if (workspace.statement != null) {
                                 ru.crown.finance.ui.StatementReview(

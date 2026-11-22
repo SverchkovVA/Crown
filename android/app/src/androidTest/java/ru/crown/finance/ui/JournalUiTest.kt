@@ -40,6 +40,9 @@ class JournalUiTest {
         bankAction: (String, () -> Unit) -> Unit = { _, _ -> },
         accountAction: (String, Long, LocalDate, String?, AccountKind, () -> Unit) -> Unit = { _, _, _, _, _, _ -> },
         categoryAction: (String, OperationKind, String?, () -> Unit) -> Unit = { _, _, _, _ -> },
+        tagAction: (String, TagEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _ -> },
+        assignAction: (String, Set<String>, Set<String>, () -> Unit) -> Unit = { _, _, _, _ -> },
+        filterAction: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit = { _, _, _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
         accept: (Operation) -> Unit = {},
     ) = BookCommands(
@@ -48,6 +51,7 @@ class JournalUiTest {
         backup = {}, export = { _, _ -> }, addCategory = categoryAction, inspectBackup = {},
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
+        saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction,
     )
 
     @Test
@@ -325,6 +329,65 @@ class JournalUiTest {
         rule.onNodeWithContentDescription("Операции").performClick()
         rule.onNodeWithText("Поиск и фильтры").performScrollTo().assertIsDisplayed()
         saveImage("journal-navigation", editor = false)
+    }
+
+    @Test
+    fun tagArchiveAssignmentAndSavedFilterUseExplicitSelections() {
+        val tag = TagEvent(1, "trip", "Поездка", false, 1)
+        val filter = FilterEvent(1, "trip-filter", "Покупки поездки", "", "expense", null, "main", tag.id, false, 2)
+        val organized = snapshot.copy(organization = OrganizationState(
+            listOf(tag), listOf(TagAssignment(1, purchase.id, tag.id, true, 3)), listOf(filter),
+        ))
+        var renamed: String? = null
+        var archived = false
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                OrganizationEditor(organized, commands(tagAction = { name, expected, archive, _ ->
+                    assertEquals(tag, expected); renamed = name; archived = archive
+                }), {})
+            } }
+        }
+        rule.onNode(hasText("Поездка") and hasClickAction()).performScrollTo().performClick()
+        rule.onNode(hasText("Название тега") and hasSetTextAction()).performScrollTo().performTextReplacement("Отпуск")
+        rule.onNodeWithContentDescription("В архиве").performScrollTo().performClick()
+        saveImage("tag-editor")
+        rule.onNodeWithText("Сохранить изменения").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals("Отпуск", renamed); assertTrue(archived) }
+
+        var assigned: Set<String>? = null
+        rule.activity.runOnUiThread {
+            rule.activity.setContent { CrownTheme {
+                OperationTagsEditor(purchase, snapshot.copy(organization = OrganizationState(listOf(tag))),
+                    commands(assignAction = { id, expected, selected, _ ->
+                        assertEquals(purchase.id, id); assertTrue(expected.isEmpty()); assigned = selected
+                    }), {})
+            } }
+        }
+        rule.onNodeWithContentDescription("Тег: Поездка").performClick()
+        saveImage("operation-tags")
+        rule.onNodeWithText("Сохранить теги").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(setOf(tag.id), assigned) }
+
+        var savedQuery: JournalQuery? = null
+        rule.activity.runOnUiThread {
+            rule.activity.setContent { CrownTheme {
+                FinanceScreen(DemoState.Ready(organized), {}, "Учебная", {}, commands(
+                    filterAction = { name, query, expected, archive, _ ->
+                        assertEquals("Повторный поиск", name); assertNull(expected); assertFalse(archive); savedQuery = query
+                    },
+                ))
+            } }
+        }
+        rule.onNodeWithText("Поиск и фильтры").performScrollTo().performClick()
+        rule.onNodeWithText("Выбрать: сохранённый фильтр").performScrollTo().performClick()
+        rule.onNodeWithText("Покупки поездки").performClick()
+        rule.onNodeWithText("Найдено операций: 1 из 1").performScrollTo().assertIsDisplayed()
+        rule.onNode(hasText("Сохранить фильтр") and hasClickAction()).performScrollTo().performClick()
+        rule.onNode(hasText("Название фильтра") and hasSetTextAction()).performTextReplacement("Повторный поиск")
+        saveImage("saved-filter")
+        rule.onAllNodes(hasText("Сохранить фильтр") and hasClickAction()).onLast().performClick()
+        rule.runOnIdle { assertEquals(filter.query(), savedQuery) }
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {

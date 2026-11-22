@@ -38,6 +38,9 @@ import ru.crown.finance.ledger.ReconciliationPreview
 import ru.crown.finance.ledger.ImportChoice
 import ru.crown.finance.ledger.AccountKind
 import ru.crown.finance.ledger.Bank
+import ru.crown.finance.ledger.TagEvent
+import ru.crown.finance.ledger.FilterEvent
+import ru.crown.finance.ledger.JournalQuery
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.categoryKinds
 import ru.crown.finance.ledger.Operation
@@ -69,6 +72,9 @@ internal data class BookCommands(
     val chooseStatement: () -> Unit,
     val importStatement: (String, List<ImportChoice>) -> Unit,
     val addBank: (String, () -> Unit) -> Unit,
+    val saveTag: (String, TagEvent?, Boolean, () -> Unit) -> Unit,
+    val assignTags: (String, Set<String>, Set<String>, () -> Unit) -> Unit,
+    val saveFilter: (String, JournalQuery, FilterEvent?, Boolean, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

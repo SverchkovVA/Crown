@@ -97,7 +97,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks }
+private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags }
 
 @Composable
 internal fun FinanceScreen(
@@ -109,7 +109,8 @@ internal fun FinanceScreen(
     notice: String? = null,
 ) {
     var tab by remember { mutableStateOf(Section.Operations.name) }
-    var filterId by remember { mutableStateOf<String?>(null) }
+    var journalQuery by remember { mutableStateOf(JournalQuery()) }
+    var tagOperation by remember { mutableStateOf<Operation?>(null) }
     var detailsId by remember { mutableStateOf<String?>(null) }
     var editor by remember { mutableStateOf<EditorSection?>(null) }
     var correction by remember { mutableStateOf<Operation?>(null) }
@@ -128,17 +129,17 @@ internal fun FinanceScreen(
     val accountsScroll = rememberLazyListState()
     val section = Section.valueOf(tab)
     val snapshot = (state as? DemoState.Ready)?.snapshot
-    val filter = snapshot?.balances?.firstOrNull { it.account.id == filterId }
-    LaunchedEffect(filterId, snapshot?.month) { operationsScroll.scrollToItem(0) }
+    val filter = snapshot?.balances?.firstOrNull { it.account.id == journalQuery.accountId }
+    LaunchedEffect(journalQuery.accountId, snapshot?.month) { operationsScroll.scrollToItem(0) }
 
     BackHandler(detailsId == null && editor == null) {
         if (section == Section.History || section == Section.Periods) {
             tab = Section.Protection.name
         } else if (section == Section.Reconciliations) {
             tab = Section.Accounts.name
-        } else if (section != Section.Operations || filterId != null) {
+        } else if (section != Section.Operations || journalQuery.accountId != null) {
             tab = Section.Operations.name
-            filterId = null
+            journalQuery = journalQuery.copy(accountId = null)
         } else {
             leave()
         }
@@ -183,7 +184,6 @@ internal fun FinanceScreen(
                                     selected = section == destination,
                                     onClick = {
                                         tab = destination.name
-                                        filterId = null
                                     },
                                     icon = { Icon(painterResource(destination.icon), contentDescription = null) },
                                     label = if (compactNavigation) null else ({ Text(destination.title) }),
@@ -218,7 +218,9 @@ internal fun FinanceScreen(
                 is DemoState.Ready -> when (section) {
                     Section.Operations -> OperationsPage(
                         state.snapshot, filter, operationsScroll,
-                        clearFilter = { filterId = null },
+                        clearFilter = { journalQuery = journalQuery.copy(accountId = null) },
+                        query = journalQuery,
+                        changeQuery = { journalQuery = it },
                         showDetails = { detailsId = it.id },
                         commands = commands,
                     )
@@ -226,7 +228,7 @@ internal fun FinanceScreen(
                         state.snapshot, accountsScroll,
                         reconcile = { tab = Section.Reconciliations.name }.takeIf { commands != null },
                     ) {
-                        filterId = it.account.id
+                        journalQuery = JournalQuery(accountId = it.account.id)
                         tab = Section.Operations.name
                     }
                     Section.History -> HistoryPage(state.snapshot.history) { detailsId = it.id }
@@ -251,6 +253,7 @@ internal fun FinanceScreen(
                         inspectBackup = { commands?.inspectBackup?.invoke() },
                         openPeriods = { tab = Section.Periods.name },
                         openBanks = { editor = EditorSection.Banks },
+                        openOrganization = { editor = EditorSection.Organization },
                     )
                 }
             }
@@ -259,9 +262,11 @@ internal fun FinanceScreen(
 
     if (snapshot != null && commands != null) {
         when (editor) {
+            EditorSection.Organization -> OrganizationEditor(snapshot, commands, closeEditor)
+            EditorSection.OperationTags -> tagOperation?.let { OperationTagsEditor(it, snapshot, commands, closeEditor) }
             EditorSection.Account -> AccountEditor(snapshot.month, snapshot.banks, commands, closeEditor)
             EditorSection.Operation -> OperationEditor(
-                snapshot.balances, snapshot.categories, snapshot.month, filterId, commands, closeEditor, correction,
+                snapshot.balances, snapshot.categories, snapshot.month, journalQuery.accountId, commands, closeEditor, correction,
             )
             EditorSection.Refund -> refundPurchase?.let { purchase ->
                 RefundEditor(purchase, snapshot, commands, closeEditor, correction)
@@ -281,6 +286,7 @@ internal fun FinanceScreen(
         if (operation != null) {
             OperationDetails(
                 operation, snapshot, history, commands, closeDetails,
+                editTags = { closeDetails(); tagOperation = operation; editor = EditorSection.OperationTags },
                 edit = {
                     closeDetails()
                     correction = operation
@@ -332,16 +338,17 @@ private fun OperationsPage(
     filter: AccountBalance?,
     scroll: LazyListState,
     clearFilter: () -> Unit,
+    query: JournalQuery,
+    changeQuery: (JournalQuery) -> Unit,
     showDetails: (Operation) -> Unit,
     commands: BookCommands?,
 ) {
-    var query by remember(snapshot.month) { mutableStateOf(JournalQuery()) }
     var expanded by remember { mutableStateOf(false) }
     val accountRows = if (filter == null) snapshot.operations else snapshot.operations.filter {
         it.accountId == filter.account.id || it.destinationId == filter.account.id
     }
-    val rows = remember(accountRows, query, snapshot.categories, snapshot.balances) {
-        query.apply(accountRows, snapshot.balances.map { it.account }, snapshot.categories)
+    val rows = remember(accountRows, query, snapshot.categories, snapshot.balances, snapshot.organization) {
+        query.apply(accountRows, snapshot.balances.map { it.account }, snapshot.categories, snapshot.organization.tagsByOperation())
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("operations-list"),
@@ -358,7 +365,7 @@ private fun OperationsPage(
                 commands.error?.let { FormError(it) }
                 if (snapshot.month in closedMonths(snapshot.periods)) Text("Месяц закрыт")
             }
-            JournalFilters(query, snapshot.categories, expanded, { expanded = !expanded }) { query = it }
+            JournalFilters(query, snapshot, expanded, { expanded = !expanded }, changeQuery, commands, filter?.account?.id)
             if (query.count > 0) Text("Найдено операций: ${rows.size} из ${accountRows.size}")
             if (filter != null) {
                 FilterChip(
@@ -574,6 +581,7 @@ private fun OperationDetails(
     commands: BookCommands?,
     close: () -> Unit,
     edit: () -> Unit,
+    editTags: () -> Unit,
     refund: () -> Unit,
 ) {
     var confirmCancellation by remember { mutableStateOf(false) }
@@ -604,6 +612,8 @@ private fun OperationDetails(
                 Text(operation.date.format(DayFormat), style = MaterialTheme.typography.bodyMedium)
                 Text(operation.accountCaption(snapshot), style = MaterialTheme.typography.bodyMedium)
                 AllocationSummary(operation, snapshot)
+                val tags = snapshot.organization.tagsByOperation()[operation.id].orEmpty()
+                if (tags.isNotEmpty()) Text("Теги: " + snapshot.organization.tags.filter { it.id in tags }.joinToString { it.name })
                 if (operation.kind == OperationKind.Refund) {
                     val source = snapshot.history.firstOrNull { it.id == operation.refundOf }?.revisions
                         ?.firstOrNull { it.value.fingerprint() == operation.refundVersion }?.value
@@ -617,6 +627,9 @@ private fun OperationDetails(
                 if (operation.feeMinor != 0L) Text("Комиссия ${money(operation.feeMinor)}")
                 if (cancelled) FormError("Операция отменена")
                 if (history != null && history.revisions.size > 1) RevisionList(history, snapshot)
+            }
+            if (commands != null && !cancelled) {
+                OutlinedButton(editTags, Modifier.fillMaxWidth(), enabled = !commands.busy) { Text("Изменить теги") }
             }
             if (commands != null && !cancelled && operation.kind == OperationKind.Expense &&
                 availableRefund(operation, snapshot).isNotEmpty()) {
