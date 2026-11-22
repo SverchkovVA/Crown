@@ -47,6 +47,7 @@ public class OfflineOcrTest {
             assertTrue(engine.init(root.getAbsolutePath(), "rus+eng"));
             engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO);
             engine.setImage(bitmap);
+            engine.getHOCRText(0);
             engine.getUTF8Text();
             ResultIterator words = engine.getResultIterator();
             assertNotNull(words);
@@ -70,6 +71,45 @@ public class OfflineOcrTest {
                 assertTrue("Не подтверждена сумма со знаком в синтетической строке " + (row + 1), text.startsWith(amounts[row]));
             }
         } finally { engine.recycle(); bitmap.recycle(); }
+    }
+
+    @Test(timeout = 30000) public void cancelsRecognizingAtProgressAndAcceptsNextImage() throws Exception {
+        File root = prepareData();
+        Bitmap page = Bitmap.createBitmap(1024, 2400, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(page);
+        canvas.drawColor(Color.WHITE);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(32);
+        for (int row = 0; row < 55; row++) canvas.drawText("Учебная строка " + row + " 123,45 RUB", 40, 60 + row * 40, paint);
+        java.util.concurrent.atomic.AtomicBoolean stopped = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<TessBaseAPI> reference = new java.util.concurrent.atomic.AtomicReference<>();
+        TessBaseAPI engine = new TessBaseAPI(progress -> {
+            if (progress.getPercent() > 0 && progress.getPercent() < 100 && stopped.compareAndSet(false, true)) {
+                reference.get().stop();
+            }
+        });
+        reference.set(engine);
+        Bitmap next = null;
+        try {
+            assertTrue(engine.init(root.getAbsolutePath(), "rus+eng"));
+            engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO);
+            engine.setImage(page);
+            engine.getHOCRText(0);
+            assertTrue("Остановка не запрошена во время распознавания", stopped.get());
+            // Частичный результат отменённой задачи не читается и никуда не записывается.
+            engine.clear();
+            next = Bitmap.createBitmap(720, 220, Bitmap.Config.ARGB_8888);
+            Canvas fresh = new Canvas(next);
+            fresh.drawColor(Color.WHITE);
+            paint.setTextSize(52);
+            fresh.drawText("-12,34 RUB", 50, 140, paint);
+            engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_LINE);
+            engine.setImage(next);
+            engine.getHOCRText(0);
+            assertTrue("Следующее изображение не распознано после отмены",
+                engine.getUTF8Text().replace('−', '-').replace('–', '-').contains("-12,34"));
+        } finally { engine.recycle(); page.recycle(); if (next != null) next.recycle(); }
     }
 
     private File prepareData() throws Exception {
@@ -108,6 +148,7 @@ public class OfflineOcrTest {
             assertTrue("Модели не загрузились", engine.init(root.getAbsolutePath(), "rus+eng"));
             engine.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO);
             engine.setImage(bitmap);
+            engine.getHOCRText(0);
             String recognized = engine.getUTF8Text();
             assertTrue("Не распознана синтетическая дата", recognized.contains("27.10.2026"));
             assertTrue("Не распознана синтетическая сумма со знаком",
