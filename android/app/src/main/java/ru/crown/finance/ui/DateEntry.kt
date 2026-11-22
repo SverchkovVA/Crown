@@ -2,10 +2,13 @@ package ru.crown.finance.ui
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
@@ -40,6 +43,7 @@ internal object DateVisualTransformation : VisualTransformation {
 
 @Composable
 internal fun DateEntry(value: String, change: (String) -> Unit, label: String, busy: Boolean) {
+    val focus = LocalFocusManager.current
     OutlinedTextField(
         value = dateDigits(value).orEmpty(),
         onValueChange = { text -> dateDigits(text)?.let { change(dateInputText(it)) } },
@@ -49,6 +53,7 @@ internal fun DateEntry(value: String, change: (String) -> Unit, label: String, b
         enabled = !busy,
         singleLine = true,
         visualTransformation = DateVisualTransformation,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
     )
 }

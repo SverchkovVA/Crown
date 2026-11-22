@@ -99,7 +99,9 @@ class JournalUiTest {
             }
         }
         rule.onNode(hasText("Сумма, ₽") and hasSetTextAction()).performTextReplacement("10.00")
+        rule.onNode(hasText("Сумма, ₽") and hasSetTextAction()).performImeAction()
         rule.onNodeWithContentDescription("Разделить по категориям").performScrollTo().performClick()
+        rule.onNodeWithContentDescription("Разделить по категориям").assertIsOn()
         rule.onNodeWithText("Выбрать: категория части 1").performScrollTo().performClick()
         rule.onNodeWithText("Продукты").performClick()
         rule.onNodeWithText("Выбрать: категория части 2").performScrollTo().performClick()

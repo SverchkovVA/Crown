@@ -537,7 +537,7 @@ class ProtectedLedgerTest {
                                 if (version >= 11) {
                                     val opening = LocalDate.of(2026, 1, 1)
                                     val scenario = DepositScenario(opening, opening.plusYears(1), 1000000, listOf(DepositRate("r", opening, java.math.BigDecimal("12"))), emptyList(), listOf(opening.plusYears(1)))
-                                    db.execSQL("INSERT INTO deposit_events(sequence,id,name,payload,archived,recordedAt) VALUES(1,'legacy-deposit','Прежний вклад',?,0,1)", arrayOf(encodeDeposit(scenario)))
+                                    db.execSQL("INSERT INTO deposit_scenario_events(sequence,id,name,payload,archived,recordedAt) VALUES(1,'legacy-deposit','Прежний вклад',?,0,1)", arrayOf(encodeDeposit(scenario)))
                                 }
                                 if (version >= 12) {
                                     val budget = BudgetPlan(month.atDay(1), month.atEndOfMonth(), 1000, setOf("main"), setOf("food"), true)

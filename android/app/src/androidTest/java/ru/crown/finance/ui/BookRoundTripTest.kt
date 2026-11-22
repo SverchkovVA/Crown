@@ -3,6 +3,7 @@ package ru.crown.finance.ui
 import android.content.Context
 import android.os.Build
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -97,7 +98,11 @@ class BookRoundTripTest {
             field("Сумма платежа, ₽", "3,45")
             rule.onNode(hasText("Сумма платежа, ₽") and hasSetTextAction()).performImeAction()
             rule.onNodeWithText("Сохранить календарь").performClick()
-            waitText("Прогноз остатка")
+            rule.waitUntil(15_000) {
+                rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов"
+            }
+            rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Прогноз остатка"))
+            rule.onNodeWithText("Прогноз остатка").assertIsDisplayed()
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)
