@@ -507,7 +507,7 @@ class ProtectedLedgerTest {
     fun everyPublishedSchemaMigratesInsideSqlCipher() = runBlocking {
         withBooks { directory, _ ->
             System.loadLibrary("sqlcipher")
-            for (version in 1..12) {
+            for (version in 1..13) {
                 val path = File(directory.parentFile, "migration-$version.db")
                 val key = ByteArray(32) { (it + version).toByte() }
                 val schema = InstrumentationRegistry.getInstrumentation().context.assets
@@ -575,6 +575,10 @@ class ProtectedLedgerTest {
                     assertEquals(if (version >= 2) 2 else 1, history.first { it.id == "expense" }.revisions.size)
                     assertEquals(if (version >= 3) "food" else null, current.first { it.id == "expense" }.categoryId)
                     assertEquals(if (version >= 3) 1 else 0, room.categories().all().size)
+                    assertTrue(room.catalog().events().isEmpty())
+                    val legacyCatalogs = CatalogState.from(room.ledger().accounts().map(AccountRow::toAccount), room.categories().all().map(CategoryRow::toCategory), room.banks().all(), room.catalog().events())
+                    assertTrue(legacyCatalogs.history.all { it.sequence == 0L && it.recordedAt == 0L })
+                    assertEquals("Основной", legacyCatalogs.accounts.single().name)
                     val deposits = room.deposits().events()
                     assertEquals(if (version >= 11) 1 else 0, deposits.size)
                     if (version >= 11) assertEquals(120000.toBigInteger(), forecastDeposit(deposits.single().scenario()).interest)

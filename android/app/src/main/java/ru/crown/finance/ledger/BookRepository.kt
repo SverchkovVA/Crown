@@ -40,9 +40,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
-        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class, PlanningEvent::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class, PlanningEvent::class, CatalogEvent::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -58,9 +58,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun bonuses(): BonusDao
     abstract fun deposits(): DepositDao
     abstract fun planning(): PlanningDao
+    abstract fun catalog(): CatalogHistoryDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration, calendarMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration, calendarMigration, catalogHistoryMigration)
 
 internal class BookRepository(
     context: Context,
@@ -138,6 +139,7 @@ internal class BookRepository(
 
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
+        for (event in backup.catalogEvents) database.catalog().insert(event)
         for (event in backup.planningEvents) database.planning().insert(event)
         for (event in backup.depositEvents) database.deposits().insert(event)
         for (event in backup.bonuses.programEvents) database.bonuses().insert(event)
@@ -236,13 +238,23 @@ internal class BookSession(
         db.revisions().all().map(RevisionRow::toRevision),
     )
 
+    private suspend fun catalogs() = CatalogState.from(dao.accounts().map(AccountRow::toAccount), db.categories().all().map(CategoryRow::toCategory), db.banks().all(), db.catalog().events())
+
+    suspend fun saveCatalog(expected: CatalogVersion, value: CatalogValue) = db.withTransaction {
+        val state = catalogs()
+        require(value.key == expected.value.key)
+        state.check(value, expected)
+        db.catalog().insert(value.event(expected, Instant.now().toEpochMilli()))
+    }
+
     suspend fun snapshot(month: YearMonth): LedgerSnapshot = db.withTransaction {
         val history = history()
         val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
-        LedgerSnapshot.from(month, dao.accounts().map(AccountRow::toAccount), active).copy(
-            history = history, categories = db.categories().all().map(CategoryRow::toCategory),
+        val catalogs = catalogs()
+        LedgerSnapshot.from(month, catalogs.accounts, active).copy(
+            history = history, categories = catalogs.categories, catalogHistory = catalogs.history.toList(),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
-            statementReceipts = db.statements().all(), banks = db.banks().all(), organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(), depositEvents = db.deposits().events(), planningEvents = db.planning().events(),
+            statementReceipts = db.statements().all(), banks = catalogs.banks, organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(), depositEvents = db.deposits().events(), planningEvents = db.planning().events(),
         )
     }
 
@@ -253,7 +265,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(), db.planning().events(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(), db.planning().events(), db.catalog().events(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -272,11 +284,12 @@ internal class BookSession(
         require(opening != Long.MIN_VALUE) { "Начальный остаток превышает допустимый диапазон" }
         require(title.length in 1..100) { "Введите название счёта" }
         if (opening != 0L) requireOpenDates(db.control().periods(), date)
-        val accounts = dao.accounts()
-        require(accounts.none { it.name.equals(title, ignoreCase = true) }) { "Счёт с таким названием уже есть" }
-        require(bankId == null || db.banks().all().any { it.id == bankId }) { "Выберите банк книги" }
-        val row = AccountRow(UUID.randomUUID().toString(), title, accounts.size, bankId, kind.wireName)
+        val state = catalogs()
+        val value = CatalogValue(CatalogType.Account, UUID.randomUUID().toString(), title, bankId = bankId, kind = kind.wireName)
+        state.check(value, null)
+        val row = AccountRow(value.id, title, state.accounts.size, bankId, kind.wireName)
         dao.insertAccounts(listOf(row))
+        db.catalog().insert(value.event(null, Instant.now().toEpochMilli()))
         if (opening != 0L) {
             dao.insertOperations(
                 listOf(OperationRow(
@@ -292,6 +305,8 @@ internal class BookSession(
         requireOpenDates(db.control().periods(), operation.date)
         validateCategory(operation)
         checkRefundSource(operation)
+        val retained = if (operation.kind == OperationKind.Refund) history().single { it.id == operation.refundOf }.current.value else null
+        catalogs().financialReferences(operation, retained)
         dao.insertOperations(listOf(operation.toRow()))
         validateRefunds(history())
     }
@@ -305,7 +320,11 @@ internal class BookSession(
         require(current == expected) { "Операция изменилась. Откройте её заново" }
         val next = replacement ?: current
         requireOpenDates(db.control().periods(), current.date, next.date)
-        if (replacement != null) checkRefundSource(next)
+        if (replacement != null) {
+            checkRefundSource(next)
+            val purchase = if (next.kind == OperationKind.Refund) history().single { it.id == next.refundOf }.current.value else null
+            catalogs().financialReferences(next, current, purchase)
+        }
         require(next.id == id && current.kind != OperationKind.Opening && next.kind != OperationKind.Opening)
         val ids = dao.accounts().map(AccountRow::id).toSet()
         require(next.accountId in ids && (next.destinationId == null || next.destinationId in ids)) {
@@ -369,7 +388,7 @@ internal class BookSession(
     }
 
     suspend fun reconcile(preview: ReconciliationPreview, actualMinor: Long) = db.withTransaction {
-        val current = previewReconciliation(history(), dao.accounts().map(AccountRow::toAccount), preview.accountId, preview.date)
+        val current = previewReconciliation(history(), catalogs().accounts, preview.accountId, preview.date)
         require(current == preview) { "Данные изменились. Выполните сверку заново" }
         require(actualMinor != Long.MIN_VALUE) { "Сумма превышает допустимый диапазон" }
         db.control().insert(Reconciliation(
@@ -450,6 +469,9 @@ internal class BookSession(
         require(expected == null || expected.rule() != rule) { "Правило не изменилось" }
         require(db.categories().find(rule.categoryId)?.kind == rule.kind.wireName) { "Выберите категорию того же вида" }
         require(rule.accountId == null || dao.accounts().any { it.id == rule.accountId }) { "Счёт правила не найден" }
+        val state = catalogs()
+        require(!state.archived(CatalogType.Category, rule.categoryId) || expected?.categoryId == rule.categoryId) { "Выберите действующую категорию правила" }
+        require(rule.accountId == null || !state.archived(CatalogType.Account, rule.accountId) || expected?.accountId == rule.accountId) { "Выберите действующий счёт правила" }
         db.classification().insert(rule.event(Instant.now().toEpochMilli()))
     }
 
@@ -511,20 +533,19 @@ internal class BookSession(
     suspend fun addBank(name: String) = db.withTransaction {
         val title = name.trim()
         require(title.length in 1..100) { "Введите название банка" }
-        require(db.banks().all().none { it.name.equals(title, ignoreCase = true) }) { "Такой банк уже есть" }
-        db.banks().insert(Bank(UUID.randomUUID().toString(), title))
+        val value = CatalogValue(CatalogType.Bank, UUID.randomUUID().toString(), title)
+        catalogs().check(value, null)
+        db.banks().insert(value.bank())
+        db.catalog().insert(value.event(null, Instant.now().toEpochMilli()))
     }
 
     suspend fun addCategory(name: String, kind: OperationKind, parentId: String? = null) = db.withTransaction {
         val title = name.trim()
         require(title.length in 1..80) { "Введите название категории" }
-        require(db.categories().all().none { it.kind == kind.wireName && it.name.equals(title, ignoreCase = true) }) {
-            "Категория с таким названием уже есть"
-        }
-        require(parentId == null || db.categories().find(parentId)?.kind == kind.wireName) {
-            "Выберите родительскую категорию того же вида"
-        }
-        db.categories().insert(Category(UUID.randomUUID().toString(), title, kind, parentId).toRow())
+        val value = CatalogValue(CatalogType.Category, UUID.randomUUID().toString(), title, parentId = parentId, kind = kind.wireName)
+        catalogs().check(value, null)
+        db.categories().insert(value.category().toRow())
+        db.catalog().insert(value.event(null, Instant.now().toEpochMilli()))
     }
 
     private suspend fun checkRefundSource(operation: Operation) {

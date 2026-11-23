@@ -36,10 +36,10 @@ internal interface BankDao {
     suspend fun insert(bank: Bank)
 }
 
-internal fun validateCatalogs(accounts: List<Account>, categories: List<Category>, banks: List<Bank>) {
+internal fun validateCatalogs(accounts: List<Account>, categories: List<Category>, banks: List<Bank>, checkNames: Boolean = true) {
     val bankIds = banks.map(Bank::id).toSet()
     require(bankIds.size == banks.size)
-    require(banks.map { it.name.lowercase() }.distinct().size == banks.size)
+    if (checkNames) require(banks.map { it.name.lowercase() }.distinct().size == banks.size)
     require(accounts.all { it.bankId == null || it.bankId in bankIds })
     val indexed = categories.associateBy(Category::id)
     require(indexed.size == categories.size)

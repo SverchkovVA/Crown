@@ -88,8 +88,8 @@ class PortableBackupTest {
     }
 
     @Test
-    fun stillReadsVersionsSixThroughEleven() {
-        for (version in 6..11) {
+    fun stillReadsVersionsSixThroughTwelve() {
+        for (version in 6..12) {
         val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
         val salt = ByteArray(16) { it.toByte() }
         val iv = ByteArray(12) { (it + 20).toByte() }

@@ -93,6 +93,7 @@ internal data class LedgerSnapshot(
     val bonuses: BonusState = BonusState(),
     val depositEvents: List<DepositEvent> = emptyList(),
     val planningEvents: List<PlanningEvent> = emptyList(),
+    val catalogHistory: List<CatalogVersion> = emptyList(),
 ) {
     val totalMinor: BigInteger = balances.fold(BigInteger.ZERO) { sum, balance -> sum + balance.minor }
 

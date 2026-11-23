@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 12
+private const val CURRENT_VERSION: Byte = 13
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -38,19 +38,20 @@ internal data class BackupLedger(
     val bonuses: BonusState = BonusState(),
     val depositEvents: List<DepositEvent> = emptyList(),
     val planningEvents: List<PlanningEvent> = emptyList(),
+    val catalogEvents: List<CatalogEvent> = emptyList(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
         require(accounts.size <= MAX_ROWS && operations.size <= MAX_ROWS && revisions.size <= MAX_ROWS)
         require(categories.size <= MAX_ROWS && banks.size <= MAX_ROWS)
-        validateCatalogs(accounts, categories, banks)
+        val catalog = CatalogState.from(accounts, categories, banks, catalogEvents)
         val kinds = categories.associate { it.id to it.kind }
         require(kinds.size == categories.size)
-        require(categories.map { it.kind to it.name.lowercase() }.distinct().size == categories.size)
+        require(catalog.categories.map { it.kind to it.id }.distinct().size == categories.size)
         val ids = accounts.map(Account::id).toSet()
         require(ids.size == accounts.size)
         require(accounts.all { it.id.length in 1..64 && it.name.isNotBlank() && it.name.length <= 100 })
-        require(accounts.map { it.name.lowercase() }.distinct().size == accounts.size)
+        require(catalog.accounts.map { it.id }.distinct().size == accounts.size)
         organization.validate(ids, kinds.keys, operations.map(Operation::id).toSet())
         validateRuleEvents(ruleEvents, ids, categories)
         bonuses.validate(categories, operations.map(Operation::id).toSet())
@@ -222,6 +223,7 @@ internal object PortableBackup {
                 out.bonuses(data.bonuses)
                 out.deposits(data.depositEvents)
                 out.planning(data.planningEvents)
+                out.catalogEvents(data.catalogEvents)
             }
             return content.toByteArray()
         } finally {
@@ -269,8 +271,9 @@ internal object PortableBackup {
         val bonuses = if (version >= 9) data.bonuses() else BonusState()
         val deposits = if (version >= 10) data.deposits() else emptyList()
         val planning = if (version >= 11) data.planning() else emptyList()
+        val catalogs = if (version >= 13) data.catalogEvents() else emptyList()
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks, organization, rules, bonuses, deposits, planning)
+        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks, organization, rules, bonuses, deposits, planning, catalogs)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {
