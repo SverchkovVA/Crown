@@ -2,6 +2,9 @@ package ru.crown.finance.ui
 
 import android.content.Context
 import android.os.Build
+import android.graphics.Bitmap
+import android.view.WindowManager
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -24,6 +27,14 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class BookRoundTripTest {
     @get:Rule val rule = createAndroidComposeRule<MainActivity>()
+
+    private fun saveScreen(name: String) {
+        rule.waitForIdle()
+        val bitmap = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+        val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }
+        try { File(directory, "$name.png").outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) } }
+        finally { bitmap.recycle() }
+    }
 
     @Test fun realBookRetainsOperationAfterPasswordChangeAndImmediateReopen() {
         assumeTrue(Build.HARDWARE in listOf("ranchu", "goldfish"))
@@ -48,6 +59,7 @@ class BookRoundTripTest {
             waitText("Записал код")
             created = true
             rule.onNodeWithText("Записал код").performScrollTo().performClick()
+            rule.activity.runOnUiThread { rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
             waitText("Добавить счёт")
             rule.onNodeWithText("Добавить счёт").performClick()
             field("Название счёта", "Учебный счёт")
@@ -117,6 +129,8 @@ class BookRoundTripTest {
             rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связать: Учебная E2E покупка"))
             rule.onNodeWithText("Связать: Учебная E2E покупка").performClick()
             waitText("Сопоставление сохранено")
+            rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связь сохранена в книге"))
+            saveScreen("main-calendar-linked")
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)
@@ -137,6 +151,7 @@ class BookRoundTripTest {
             rule.waitUntil(10000) { rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
             rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связь сохранена в книге"))
             rule.onNodeWithText("Связь сохранена в книге").assertIsDisplayed()
+            saveScreen("main-calendar-reopened")
             rule.onNodeWithText("Закрыть").performClick()
             waitText("Открыть книгу")
             runBlocking {
