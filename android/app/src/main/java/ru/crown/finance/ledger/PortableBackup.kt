@@ -14,7 +14,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 private val signature = "CROWN-ANDROID-BACKUP".toByteArray(Charsets.US_ASCII)
-private const val CURRENT_VERSION: Byte = 13
+private const val CURRENT_VERSION: Byte = 14
 private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val TAG_BYTES = 16
@@ -39,6 +39,7 @@ internal data class BackupLedger(
     val depositEvents: List<DepositEvent> = emptyList(),
     val planningEvents: List<PlanningEvent> = emptyList(),
     val catalogEvents: List<CatalogEvent> = emptyList(),
+    val calendarMatchEvents: List<CalendarMatchEvent> = emptyList(),
 ) {
     fun validate() {
         require(title.isNotBlank() && title.length <= 100)
@@ -79,6 +80,7 @@ internal data class BackupLedger(
         }
         val history = assembleHistory(operations, revisions)
         validateRefunds(history)
+        validateCalendarMatches(calendarMatchEvents, planningEvents, ids, history)
         require(statementReceipts.size <= MAX_ROWS)
         require(statementReceipts.map(StatementReceipt::sourceKey).distinct().size == statementReceipts.size)
         val versions = history.associate { it.id to it.revisions.map { revision -> revision.value.fingerprint() }.toSet() }
@@ -224,6 +226,7 @@ internal object PortableBackup {
                 out.deposits(data.depositEvents)
                 out.planning(data.planningEvents)
                 out.catalogEvents(data.catalogEvents)
+                out.calendarMatches(data.calendarMatchEvents)
             }
             return content.toByteArray()
         } finally {
@@ -272,8 +275,9 @@ internal object PortableBackup {
         val deposits = if (version >= 10) data.deposits() else emptyList()
         val planning = if (version >= 11) data.planning() else emptyList()
         val catalogs = if (version >= 13) data.catalogEvents() else emptyList()
+        val calendarMatches = if (version >= 14) data.calendarMatches() else emptyList()
         require(data.read() == -1)
-        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks, organization, rules, bonuses, deposits, planning, catalogs)
+        BackupLedger(title, accounts, operations, revisions, categories, periods, reconciliations, receipts, banks, organization, rules, bonuses, deposits, planning, catalogs, calendarMatches)
     }
 
     private fun readBounded(stream: InputStream, limit: Int): ByteArray {

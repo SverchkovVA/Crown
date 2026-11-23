@@ -179,7 +179,7 @@ class CatalogHistoryTest {
         val data = BackupLedger("Синтетика", f.accounts, listOf(purchase), emptyList(), f.categories,
             banks = f.banks, catalogEvents = f.events)
         val encrypted = PortableBackup.seal(data, "copy-only".toCharArray())
-        assertEquals(13, encrypted["CROWN-ANDROID-BACKUP".length].toInt())
+        assertEquals(14, encrypted["CROWN-ANDROID-BACKUP".length].toInt())
         val restored = PortableBackup.open(encrypted.inputStream(), "copy-only".toCharArray())
         assertEquals(data, restored)
         val state = CatalogState.from(restored.accounts, restored.categories, restored.banks, restored.catalogEvents)

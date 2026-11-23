@@ -40,9 +40,9 @@ internal interface BookIdentityDao {
     entities = [
         BookRow::class, AccountRow::class, OperationRow::class, RevisionRow::class, CategoryRow::class,
         PeriodEvent::class, Reconciliation::class, StatementReceipt::class, Bank::class,
-        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class, PlanningEvent::class, CatalogEvent::class,
+        TagEvent::class, TagAssignment::class, FilterEvent::class, CategoryRuleEvent::class, BonusProgramEvent::class, BonusEntryEvent::class, DepositEvent::class, PlanningEvent::class, CatalogEvent::class, CalendarMatchEvent::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 internal abstract class BookDatabase : RoomDatabase() {
@@ -59,9 +59,10 @@ internal abstract class BookDatabase : RoomDatabase() {
     abstract fun deposits(): DepositDao
     abstract fun planning(): PlanningDao
     abstract fun catalog(): CatalogHistoryDao
+    abstract fun calendarMatches(): CalendarMatchesDao
 }
 
-internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration, calendarMigration, catalogHistoryMigration)
+internal val bookMigrations = arrayOf(historyMigration, categoriesMigration, detailsMigration, controlMigration, statementMigration, catalogsMigration, organizationMigration, classificationMigration, bonusMigration, depositMigration, planningMigration, calendarMigration, catalogHistoryMigration, calendarMatchesMigration)
 
 internal class BookRepository(
     context: Context,
@@ -140,6 +141,7 @@ internal class BookRepository(
     private suspend fun restoreLedger(database: BookDatabase, backup: BackupLedger) {
         for (bank in backup.banks) database.banks().insert(bank)
         for (event in backup.catalogEvents) database.catalog().insert(event)
+        for (event in backup.calendarMatchEvents) database.calendarMatches().insert(event)
         for (event in backup.planningEvents) database.planning().insert(event)
         for (event in backup.depositEvents) database.deposits().insert(event)
         for (event in backup.bonuses.programEvents) database.bonuses().insert(event)
@@ -252,7 +254,7 @@ internal class BookSession(
         val active = history.mapNotNull { item -> item.current.value.takeUnless { item.current.cancelled } }
         val catalogs = catalogs()
         LedgerSnapshot.from(month, catalogs.accounts, active).copy(
-            history = history, categories = catalogs.categories, catalogHistory = catalogs.history.toList(),
+            history = history, categories = catalogs.categories, catalogHistory = catalogs.history.toList(), calendarMatchEvents = db.calendarMatches().events(),
             periods = db.control().periods(), reconciliations = db.control().reconciliations(),
             statementReceipts = db.statements().all(), banks = catalogs.banks, organization = organization(), ruleEvents = db.classification().events(), bonuses = bonuses(), depositEvents = db.deposits().events(), planningEvents = db.planning().events(),
         )
@@ -265,7 +267,7 @@ internal class BookSession(
                 dao.operations().map(OperationRow::toOperation),
                 db.revisions().all().map(RevisionRow::toRevision),
                 db.categories().all().map(CategoryRow::toCategory),
-                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(), db.planning().events(), db.catalog().events(),
+                db.control().periods(), db.control().reconciliations(), db.statements().all(), db.banks().all(), organization(), db.classification().events(), bonuses(), db.deposits().events(), db.planning().events(), db.catalog().events(), db.calendarMatches().events(),
             )
         }
         PortableBackup.seal(ledger, password)
@@ -395,6 +397,37 @@ internal class BookSession(
             UUID.randomUUID().toString(), preview.accountId, preview.date.toString(), actualMinor,
             preview.calculatedMinor.toString(), preview.fingerprint, Instant.now().toEpochMilli(),
         ))
+    }
+
+    suspend fun saveCalendarMatch(plan: PlanningEvent, key: CalendarPaymentKey, expected: CalendarMatchEvent?, operation: Operation?) = db.withTransaction {
+        val plans = db.planning().events()
+        require(plans.any { it == plan }) { "Версия календаря не найдена" }
+        val payment = calendarPayment(plan, key)
+        val events = db.calendarMatches().events()
+        val previous = currentCalendarMatches(events).firstOrNull { it.key == key }
+        require(previous == expected) { "Сопоставление изменилось. Откройте календарь заново" }
+        val history = history()
+        val sourceSequence: Long
+        val sourceId: String
+        val sourceVersion: String
+        if (operation == null) {
+            require(previous != null && !previous.cancelled) { "Сопоставление уже снято" }
+            sourceSequence = previous.calendarSequence
+            sourceId = previous.operationId
+            sourceVersion = previous.operationVersion
+        } else {
+            require(currentPlans(plans).firstOrNull { it.id == plan.id } == plan && !plan.archived) { "Календарь изменился. Откройте его заново" }
+            val current = history.firstOrNull { it.id == operation.id }?.current
+            require(current != null && !current.cancelled && current.value == operation) { "Операция изменилась. Выберите её заново" }
+            require(operation.matchesPayment(key.accountId, payment)) { "Дата и движение операции не совпадают с ожиданием" }
+            sourceSequence = plan.sequence
+            sourceId = operation.id
+            sourceVersion = operation.fingerprint()
+        }
+        val event = CalendarMatchEvent(key = key, calendarSequence = sourceSequence, operationId = sourceId, operationVersion = sourceVersion,
+            cancelled = operation == null, previousSequence = previous?.sequence, recordedAt = Instant.now().toEpochMilli())
+        validateCalendarMatches(events + event.copy(sequence = (events.lastOrNull()?.sequence ?: 0) + 1), plans, dao.accounts().map { it.id }.toSet(), history)
+        db.calendarMatches().insert(event)
     }
 
     suspend fun savePlan(id: String, name: String, value: PlanningConditions, expected: PlanningEvent?, archived: Boolean) = db.withTransaction {
