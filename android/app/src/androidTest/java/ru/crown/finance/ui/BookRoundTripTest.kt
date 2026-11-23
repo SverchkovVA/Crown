@@ -116,7 +116,7 @@ class BookRoundTripTest {
             rule.onNodeWithText("Сопоставить платёж 1").performClick()
             rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связать: Учебная E2E покупка"))
             rule.onNodeWithText("Связать: Учебная E2E покупка").performClick()
-            waitText("Связь сохранена в книге")
+            waitText("Сопоставление сохранено")
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)

@@ -38,6 +38,8 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
     var reserve by remember(selectedId) { mutableStateOf("0,00") }
     var result by remember(viewed?.sequence, start, end, accountId, reserve, snapshot.calendarMatchEvents, snapshot.history, snapshot.operations) { mutableStateOf<CalendarResult?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var notice by remember(selectedId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(viewed?.sequence, start, end, accountId) { notice = null }
     var matching by remember(viewed?.sequence, start, end, accountId, snapshot.history, snapshot.operations) { mutableStateOf<Int?>(null) }
     val goBack = { if (selectedId == null) back() else { selectedId = null; version = null; history = false; matching = null } }
     BackHandler(selectedId != null && edit == null) { goBack() }
@@ -118,7 +120,8 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
                                 Text("Устаревшее сопоставление", style = MaterialTheme.typography.titleSmall)
                                 Text(LocalDate.parse(event.key.date).format(datePattern))
                                 TextButton({
-                                    commands.saveCalendarMatch(viewed, event.key, event, null) { matching = null }
+                                    notice = null
+                                    commands.saveCalendarMatch(viewed, event.key, event, null) { matching = null; notice = "Устаревшая связь снята" }
                                 }, enabled = !commands.busy) { Text("Снять устаревшую связь") }
                                 snapshot.history.firstOrNull { it.id == event.operationId }?.current?.value?.let { source ->
                                     TextButton({ showOperation(source) }) { Text("Посмотреть источник связи") }
@@ -140,7 +143,8 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
                                     Text("Сопоставлен с проведённой операцией")
                                     Text("Связь сохранена в книге", style = MaterialTheme.typography.bodySmall)
                                     TextButton({
-                                        commands.saveCalendarMatch(viewed, requireNotNull(saved).key, saved, null) { matching = null }
+                                        notice = null
+                                        commands.saveCalendarMatch(viewed, requireNotNull(saved).key, saved, null) { matching = null; notice = "Сопоставление снято" }
                                     }, enabled = !commands.busy) { Text("Убрать сопоставление") }
                                 } else if (calculated.account != null && editable) TextButton({
                                     matching = if (matching == index) null else index
@@ -153,7 +157,8 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
                                     if (candidates.isEmpty()) Text("Нет свободных проведённых операций с той же датой и суммой")
                                     candidates.forEach { operation ->
                                         TextButton({
-                                            commands.saveCalendarMatch(viewed, viewed.paymentKey(requireNotNull(accountId), payment), saved, operation) { matching = null }
+                                            notice = null
+                                            commands.saveCalendarMatch(viewed, viewed.paymentKey(requireNotNull(accountId), payment), saved, operation) { matching = null; notice = "Сопоставление сохранено" }
                                         }, enabled = !commands.busy) { Text("Связать: " + operation.description) }
                                         TextButton({ showOperation(operation) }) { Text("Посмотреть операцию") }
                                     }
@@ -172,6 +177,8 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
             }
         }
         commands.error?.let { FormError(it) }
+        if (commands.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        notice?.let { Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) { StatusText(it) } }
         Button({ edit = CalendarEdit(null, null, ""); commands.clearError() }, Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), enabled = !commands.busy) { Text("Новый календарь") }
     }
     edit?.let { value -> CalendarEditor(value.expected, value.plan, value.name, commands, { edit = null }) { id -> edit = null; selectedId = id; version = null; history = false } }
