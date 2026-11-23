@@ -43,8 +43,8 @@ final class OperationCandidates {
     private static final Pattern CURRENCY=Pattern.compile("(?iu)(?<!\\p{L})(RUB|руб(?:лей|ля|ль)?\\.?|₽|USD|\\$|EUR|€)(?!\\p{L})");
     private static final Pattern BONUS=Pattern.compile("(?iu)\\b(?:бонус\\p{L}*|балл\\p{L}*|points?)\\b");
     private static final Pattern AMOUNT=Pattern.compile("^([+-])?((?:\\d{1,3}(?: \\d{3})+|\\d+)(?:[.,]\\d{1,2})?)$");
-    private static final Pattern DATE=Pattern.compile("(?<!\\d)(\\d{1,2})[./](\\d{1,2})[./](\\d{4})(?!\\d)");
-    private static final Pattern MONTH_DATE=Pattern.compile("(?iu)(?<!\\d)(\\d{1,2})\\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(?:[,\\s]+(\\d{4}))?(?!\\p{L})");
+    private static final Pattern DATE=Pattern.compile("(?<!\\d)(\\d+)[./](\\d+)[./](\\d+)(?!\\d)");
+    private static final Pattern MONTH_DATE=Pattern.compile("(?iu)(?<!\\d)(\\d+)\\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(?:[,\\s]+(\\d{4}))?(?!\\p{L})");
     private static final Pattern TIME=Pattern.compile("(?<!\\d)([01]?\\d|2[0-3]):([0-5]\\d)(?!\\d)");
     private static final String[] MONTHS={"января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"};
     private static String clean(String text) {
@@ -58,12 +58,22 @@ final class OperationCandidates {
     private static DateInfo date(String text, int year) {
         Matcher full=DATE.matcher(text);
         int month, day; boolean inferred;
-        if(full.find()) { day=Integer.parseInt(full.group(1));month=Integer.parseInt(full.group(2));year=Integer.parseInt(full.group(3));inferred=false; }
+        if(full.find()) {
+            if(full.group(1).length()>2||full.group(2).length()>2||full.group(3).length()!=4) return new DateInfo(null,false);
+            day=Integer.parseInt(full.group(1));month=Integer.parseInt(full.group(2));year=Integer.parseInt(full.group(3));inferred=false;
+        }
         else {
             Matcher named=MONTH_DATE.matcher(text);
             if(!named.find()) return text.trim().matches("(?iu)^(?:сегодня|вчера)\\b.*")?new DateInfo(null,true):null;
+            if(named.group(1).length()>2) return new DateInfo(null,false);
             day=Integer.parseInt(named.group(1)); month=Arrays.asList(MONTHS).indexOf(named.group(2).toLowerCase(Locale.ROOT))+1;
-            inferred=named.group(3)==null; if(!inferred) year=Integer.parseInt(named.group(3));
+            String tail=text.substring(named.end(2)).trim();
+            Matcher suppliedYear=Pattern.compile("^[,\\s]*(\\d+)").matcher(tail);
+            inferred=!suppliedYear.find()||TIME.matcher(tail).lookingAt();
+            if(!inferred) {
+                if(suppliedYear.group(1).length()!=4) return new DateInfo(null,false);
+                year=Integer.parseInt(suppliedYear.group(1));
+            }
         }
         try { return new DateInfo(year>=1900&&year<=9999?LocalDate.of(year,month,day):null,inferred); }
         catch(DateTimeException error) { return new DateInfo(null,inferred); }

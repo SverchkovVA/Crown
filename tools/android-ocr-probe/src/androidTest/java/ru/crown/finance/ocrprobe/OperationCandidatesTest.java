@@ -59,6 +59,12 @@ public class OperationCandidatesTest {
         OperationCandidates.Result relative=parse(Arrays.asList(word("24 октября",30,100,220,26),word("-10 RUB",400,200,250,30),
             word("Вчера",30,300,150,26),word("-20 RUB",400,400,250,30)),OperationCandidates.Mode.HISTORY);
         assertNull(relative.proposals.get(1).date);
+        for(String malformed:new String[]{"27.10.20260","27 октября 20260","27 октября 202","270.10.2026","27.100.2026","270 октября 2026"}) {
+            OperationCandidates.Result wrongYear=parse(Arrays.asList(word("24 октября",30,100,220,26),word("-10 RUB",400,200,250,30),
+                word(malformed,30,300,300,26),word("-20 RUB",400,400,250,30)),OperationCandidates.Mode.HISTORY);
+            assertEquals(2,wrongYear.proposals.size());assertNull(wrongYear.proposals.get(1).date);
+            assertFalse(wrongYear.proposals.get(1).hasAllFields());
+        }
         OperationCandidates.Proposal card=parse(Arrays.asList(word("05:10",30,20,70,24),
             word("27.10.2026 в 19:17",30,100,350,26),word("-10,00 RUB",300,300,280,50)),OperationCandidates.Mode.CARD).proposals.get(0);
         assertEquals("19:17",card.time);assertEquals(LocalDate.of(2026,10,27),card.date);assertFalse(card.defaultYear);
