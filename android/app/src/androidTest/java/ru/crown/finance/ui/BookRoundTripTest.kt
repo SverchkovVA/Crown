@@ -111,6 +111,12 @@ class BookRoundTripTest {
             }
             rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Прогноз остатка"))
             rule.onNodeWithText("Прогноз остатка").assertIsDisplayed()
+            rule.waitUntil(10000) { rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+            rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Сопоставить платёж 1"))
+            rule.onNodeWithText("Сопоставить платёж 1").performClick()
+            rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связать: Учебная E2E покупка"))
+            rule.onNodeWithText("Связать: Учебная E2E покупка").performClick()
+            waitText("Связь сохранена в книге")
             rule.onNodeWithContentDescription("Настройки").performClick()
             rule.onNodeWithText("Сменить парольную фразу").performScrollTo().performClick()
             field("Пароль или CA1", old)
@@ -125,6 +131,12 @@ class BookRoundTripTest {
             waitText("Добавить операцию")
             rule.onNodeWithTag("operations-list").performScrollToNode(hasText("Учебная E2E покупка"))
             rule.onNodeWithText("Учебная E2E покупка").assertIsDisplayed()
+            rule.onNodeWithContentDescription("Отчёты").performClick()
+            rule.onNodeWithText("Регулярные платежи").performScrollTo().performClick()
+            rule.onNodeWithText("E2E календарь").performClick()
+            rule.waitUntil(10000) { rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+            rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связь сохранена в книге"))
+            rule.onNodeWithText("Связь сохранена в книге").assertIsDisplayed()
             rule.onNodeWithText("Закрыть").performClick()
             waitText("Открыть книгу")
             runBlocking {
@@ -143,10 +155,15 @@ class BookRoundTripTest {
                     val goal = plans.single { it.kind == PlanningKind.Goal.wire }.conditions() as GoalPlan
                     assertEquals(0L, goal.current)
                     assertEquals(2.toBigInteger(), projectGoal(goal).contributions)
-                    val calendar = plans.single { it.kind == PlanningKind.Calendar.wire }.conditions() as CalendarPlan
+                    val calendarEvent = plans.single { it.kind == PlanningKind.Calendar.wire }
+                    val calendar = calendarEvent.conditions() as CalendarPlan
                     val day = java.time.LocalDate.now()
                     val report = forecastAccount(calendar, setOf(snapshot.balances.single().account.id), snapshot.currentOperations(), day, day)
                     assertEquals(11655.toBigInteger(), report.closing)
+                    val savedMatches = resolveCalendarMatches(calendarEvent, snapshot.balances.single().account.id, forecastPayments(calendar, day, day), snapshot.currentOperations(), snapshot.calendarMatchEvents)
+                    assertEquals(1, snapshot.calendarMatchEvents.size)
+                    assertEquals(1, savedMatches.matches.size)
+                    assertEquals(12000.toBigInteger(), forecastAccount(calendar, setOf(snapshot.balances.single().account.id), snapshot.currentOperations(), day, day, savedMatches.matches).closing)
                     val paid = snapshot.currentOperations().single { it.kind == OperationKind.Expense }
                     assertEquals(12000.toBigInteger(), forecastAccount(calendar, setOf(paid.accountId), snapshot.currentOperations(), day, day, listOf(PaymentMatch(0, paid.id, paid.fingerprint()))).closing)
                 }

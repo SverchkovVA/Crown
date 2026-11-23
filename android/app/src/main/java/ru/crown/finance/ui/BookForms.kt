@@ -86,6 +86,7 @@ internal data class BookCommands(
     val saveDeposit: (String, String, ru.crown.finance.ledger.DepositScenario, ru.crown.finance.ledger.DepositEvent?, Boolean, () -> Unit) -> Unit,
     val savePlan: (String, String, ru.crown.finance.ledger.PlanningConditions, ru.crown.finance.ledger.PlanningEvent?, Boolean, () -> Unit) -> Unit,
     val saveCatalog: (ru.crown.finance.ledger.CatalogVersion, ru.crown.finance.ledger.CatalogValue, () -> Unit) -> Unit,
+    val saveCalendarMatch: (ru.crown.finance.ledger.PlanningEvent, ru.crown.finance.ledger.CalendarPaymentKey, ru.crown.finance.ledger.CalendarMatchEvent?, Operation?, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)

@@ -446,6 +446,11 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
+    fun saveCalendarMatch(plan: ru.crown.finance.ledger.PlanningEvent, key: ru.crown.finance.ledger.CalendarPaymentKey, expected: ru.crown.finance.ledger.CalendarMatchEvent?, operation: Operation?, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { saveCalendarMatch(plan, key, expected, operation) } }
+    }
+
     fun saveCatalog(expected: ru.crown.finance.ledger.CatalogVersion, value: ru.crown.finance.ledger.CatalogValue, saved: () -> Unit) {
         val current = mutableState.value as? Workspace.Book ?: return
         change(saved) { update(current.snapshot.month) { saveCatalog(expected, value) } }
@@ -585,7 +590,7 @@ class MainActivity : ComponentActivity() {
                                     importStatement = model::importStatement,
                                     addBank = model::addBank,
                                     saveTag = model::saveTag, assignTags = model::assignTags, saveFilter = model::saveFilter, saveRule = model::saveRule,
-                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry, changePassword = model::changePassword, saveDeposit = model::saveDeposit, savePlan = model::savePlan, saveCatalog = model::saveCatalog,
+                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry, changePassword = model::changePassword, saveDeposit = model::saveDeposit, savePlan = model::savePlan, saveCatalog = model::saveCatalog, saveCalendarMatch = model::saveCalendarMatch,
                                 )
                             if (workspace.statement != null) {
                                 ru.crown.finance.ui.StatementReview(

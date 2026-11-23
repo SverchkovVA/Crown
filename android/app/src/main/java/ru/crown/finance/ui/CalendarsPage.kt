@@ -19,9 +19,10 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import ru.crown.finance.R
 import ru.crown.finance.ledger.*
+import java.time.LocalDate
 
 private data class CalendarEdit(val expected: PlanningEvent?, val plan: CalendarPlan?, val name: String)
-private data class CalendarResult(val expected: List<ExpectedPayment>, val account: AccountForecast?, val reserve: ReserveResult?)
+private data class CalendarResult(val expected: List<ExpectedPayment>, val account: AccountForecast?, val reserve: ReserveResult?, val links: ResolvedCalendarMatches)
 @Composable
 internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, back: () -> Unit, showOperation: (Operation) -> Unit) {
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -35,13 +36,12 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
     var end by remember(selectedId) { mutableStateOf(snapshot.month.atEndOfMonth().format(datePattern)) }
     var accountId by remember(selectedId) { mutableStateOf(snapshot.balances.firstOrNull()?.account?.id) }
     var reserve by remember(selectedId) { mutableStateOf("0,00") }
-    var matches by remember(viewed?.payload, start, end, accountId, snapshot.history, snapshot.operations) { mutableStateOf<List<PaymentMatch>>(emptyList()) }
-    var result by remember(viewed?.payload, start, end, accountId, reserve, matches, snapshot.history, snapshot.operations) { mutableStateOf<CalendarResult?>(null) }
+    var result by remember(viewed?.sequence, start, end, accountId, reserve, snapshot.calendarMatchEvents, snapshot.history, snapshot.operations) { mutableStateOf<CalendarResult?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var matching by remember(viewed?.payload, start, end, accountId, snapshot.history, snapshot.operations) { mutableStateOf<Int?>(null) }
+    var matching by remember(viewed?.sequence, start, end, accountId, snapshot.history, snapshot.operations) { mutableStateOf<Int?>(null) }
     val goBack = { if (selectedId == null) back() else { selectedId = null; version = null; history = false; matching = null } }
     BackHandler(selectedId != null && edit == null) { goBack() }
-    LaunchedEffect(viewed?.payload, start, end, accountId, reserve, matches, snapshot.history, snapshot.operations) {
+    LaunchedEffect(viewed?.sequence, start, end, accountId, reserve, snapshot.calendarMatchEvents, snapshot.history, snapshot.operations) {
         result = null; error = null
         if (viewed != null) try {
             val first = requireNotNull(dateValue(start)) { "Введите начало прогноза" }
@@ -51,9 +51,11 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
             result = withContext(Dispatchers.Default) {
                 val context = coroutineContext
                 val plan = viewed.conditions() as CalendarPlan
-                val forecast = selectedAccount?.let { forecastAccount(plan, setOf(it), snapshot.currentOperations(), first, last, matches) { context.ensureActive() } }
-                val expected = forecast?.expected ?: forecastPayments(plan, first, last) { context.ensureActive() }
-                CalendarResult(expected, forecast, forecast?.let { checkReserve(it, threshold) })
+                val expected = forecastPayments(plan, first, last) { context.ensureActive() }
+                val operations = snapshot.currentOperations()
+                val links = selectedAccount?.let { resolveCalendarMatches(viewed, it, expected, operations, snapshot.calendarMatchEvents) { context.ensureActive() } } ?: ResolvedCalendarMatches()
+                val forecast = selectedAccount?.let { forecastAccount(plan, setOf(it), operations, first, last, links.matches) { context.ensureActive() } }
+                CalendarResult(expected, forecast, forecast?.let { checkReserve(it, threshold) }, links)
             }
         } catch (cancel: CancellationException) { throw cancel }
         catch (failure: Exception) { error = failure.message ?: "Не удалось построить прогноз" }
@@ -107,26 +109,52 @@ internal fun CalendarsPage(snapshot: LedgerSnapshot, commands: BookCommands, bac
                             Text(day.date.format(datePattern) + " · Факт " + money(day.booked) + " · План " + money(day.planned) + " · Остаток " + money(day.closing))
                         }
                     }
+                    if (calculated.links.stale.isNotEmpty()) item {
+                        FormError("Есть устаревшие сопоставления: операция изменена или отменена. Они не исключают ожидания из прогноза.")
+                    }
+                    items(calculated.links.stale, key = { "stale-" + it.sequence }) { event ->
+                        OutlinedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("Устаревшее сопоставление", style = MaterialTheme.typography.titleSmall)
+                                Text(LocalDate.parse(event.key.date).format(datePattern))
+                                TextButton({
+                                    commands.saveCalendarMatch(viewed, event.key, event, null) { matching = null }
+                                }, enabled = !commands.busy) { Text("Снять устаревшую связь") }
+                                snapshot.history.firstOrNull { it.id == event.operationId }?.current?.value?.let { source ->
+                                    TextButton({ showOperation(source) }) { Text("Посмотреть источник связи") }
+                                }
+                            }
+                        }
+                    }
                     item { Text("Ожидаемые платежи · " + calculated.expected.size, style = MaterialTheme.typography.titleMedium) }
                     items(calculated.expected.indices.toList(), key = { "expected-" + it }) { index ->
                         val payment = calculated.expected[index]
-                        val match = matches.firstOrNull { it.expectedIndex == index }
+                        val match = calculated.links.matches.firstOrNull { it.expectedIndex == index }
+                        val saved = calculated.links.eventFor(payment)
+                        val editable = viewed == current && !viewed.archived
                         OutlinedCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(12.dp)) {
                                 Text(payment.schedule.name, style = MaterialTheme.typography.titleMedium)
                                 Text(payment.date.format(datePattern) + " · " + money(payment.signed))
                                 if (match != null) {
                                     Text("Сопоставлен с проведённой операцией")
-                                    TextButton({ matches = matches.filterNot { it.expectedIndex == index } }) { Text("Убрать сопоставление") }
-                                } else if (calculated.account != null) TextButton({ matching = if (matching == index) null else index }) { Text("Сопоставить платёж " + (index + 1)) }
-                                if (matching == index && match == null) {
+                                    Text("Связь сохранена в книге", style = MaterialTheme.typography.bodySmall)
+                                    TextButton({
+                                        commands.saveCalendarMatch(viewed, requireNotNull(saved).key, saved, null) { matching = null }
+                                    }, enabled = !commands.busy) { Text("Убрать сопоставление") }
+                                } else if (calculated.account != null && editable) TextButton({
+                                    matching = if (matching == index) null else index
+                                }, enabled = !commands.busy) { Text("Сопоставить платёж " + (index + 1)) }
+                                if (matching == index && match == null && editable) {
+                                    val used = calculated.links.active.filter { it.key != saved?.key }.map { it.operationId }.toSet()
                                     val candidates = calculated.account?.booked.orEmpty().filter {
-                                        it.id !in matches.map(PaymentMatch::operationId) && it.date == payment.date && (it.accountId == accountId || it.destinationId == accountId) &&
-                                            it.movementFor(requireNotNull(accountId)).toBigInteger() == payment.signed
+                                        it.id !in used && it.matchesPayment(requireNotNull(accountId), payment)
                                     }
-                                    if (candidates.isEmpty()) Text("Нет проведённых операций с той же датой и суммой")
+                                    if (candidates.isEmpty()) Text("Нет свободных проведённых операций с той же датой и суммой")
                                     candidates.forEach { operation ->
-                                        TextButton({ matches = matches + PaymentMatch(index, operation.id, operation.fingerprint()); matching = null }) { Text("Связать: " + operation.description) }
+                                        TextButton({
+                                            commands.saveCalendarMatch(viewed, viewed.paymentKey(requireNotNull(accountId), payment), saved, operation) { matching = null }
+                                        }, enabled = !commands.busy) { Text("Связать: " + operation.description) }
                                         TextButton({ showOperation(operation) }) { Text("Посмотреть операцию") }
                                     }
                                 }

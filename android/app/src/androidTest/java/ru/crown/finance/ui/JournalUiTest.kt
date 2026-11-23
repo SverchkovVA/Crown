@@ -5,6 +5,9 @@ import androidx.test.platform.app.InstrumentationRegistry
 import android.graphics.Bitmap
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.semantics.getOrNull
@@ -51,6 +54,7 @@ class JournalUiTest {
         bonusAction: (BonusEntryEvent, BonusEntryEvent?, () -> Unit) -> Unit = { _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
         catalogAction: (CatalogVersion, CatalogValue, () -> Unit) -> Unit = { _, _, _ -> },
+        matchAction: (PlanningEvent, CalendarPaymentKey, CalendarMatchEvent?, Operation?, () -> Unit) -> Unit = { _, _, _, _, _ -> },
         accept: (Operation) -> Unit = {},
     ) = BookCommands(
         busy = false, error = null, clearError = {}, changeMonth = {}, addAccount = accountAction,
@@ -59,7 +63,7 @@ class JournalUiTest {
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
         saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
-        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction, savePlan = planningAction, saveCatalog = catalogAction,
+        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction, savePlan = planningAction, saveCatalog = catalogAction, saveCalendarMatch = matchAction,
     )
 
     @Test
@@ -740,17 +744,25 @@ class JournalUiTest {
     }
 
     @Test
-    fun calendarMatchingRemovesDoubleCountWithoutSaving() {
+    fun calendarMatchingSurvivesPageReopenAndDoesNotWriteMoney() {
         val opening = Operation("opening", OperationKind.Opening, date.minusDays(1), "main", 10000, "Остаток")
         val operations = listOf(opening, purchase)
         val plan = CalendarPlan(listOf(PaymentSchedule("Учебный платёж", 1000, false, date)))
         val event = PlanningEvent(1, "calendar", PlanningKind.Calendar.wire, "Учебный календарь", encodePlan(plan), false, 1)
-        val source = LedgerSnapshot.from(snapshot.month, listOf(Account("main", "Основной")), operations).copy(
-            categories = snapshot.categories, history = operations.map { OperationHistory(listOf(Revision(it, null))) }, planningEvents = listOf(event))
+        var source by mutableStateOf(LedgerSnapshot.from(snapshot.month, listOf(Account("main", "Основной")), operations).copy(
+            categories = snapshot.categories, history = operations.map { OperationHistory(listOf(Revision(it, null))) }, planningEvents = listOf(event)))
         var saved = false
         rule.activity.runOnUiThread {
             rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            rule.activity.setContent { CrownTheme { CalendarsPage(source, commands(planningAction = { _, _, _, _, _, _ -> saved = true }), {}, {}) } }
+            rule.activity.setContent { CrownTheme { CalendarsPage(source, commands(
+                planningAction = { _, _, _, _, _, _ -> saved = true },
+                matchAction = { planSource, key, old, operation, done ->
+                    val next = CalendarMatchEvent(source.calendarMatchEvents.size + 1L, key, if (operation == null) requireNotNull(old).calendarSequence else planSource.sequence,
+                        operation?.id ?: requireNotNull(old).operationId, operation?.fingerprint() ?: requireNotNull(old).operationVersion,
+                        operation == null, old?.sequence, source.calendarMatchEvents.size + 1L)
+                    source = source.copy(calendarMatchEvents = source.calendarMatchEvents + next)
+                    done()
+                }), {}, {}) } }
         }
         rule.onNodeWithText("Учебный календарь").performClick()
         fun ready() = rule.waitUntil(10000) { rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
@@ -765,14 +777,50 @@ class JournalUiTest {
         rule.onNodeWithTag("calendars-list").performScrollToNode(hasText(money(9000)))
         rule.onNodeWithText(money(9000)).assertIsDisplayed()
         saveImage("calendar-matched", editor = false)
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Календари"))
+        rule.onNodeWithText("Календари").performClick()
+        rule.onNodeWithText("Учебный календарь").performClick()
+        ready()
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Связь сохранена в книге"))
+        rule.onNodeWithText("Связь сохранена в книге").assertIsDisplayed()
         rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Убрать сопоставление"))
         rule.onNodeWithText("Убрать сопоставление").performClick()
         ready()
         rule.onNodeWithTag("calendars-list").performScrollToNode(hasText(money(8000)))
         rule.onNodeWithText(money(8000)).assertIsDisplayed()
-        rule.runOnIdle { assertFalse(saved); assertEquals(plan, event.conditions()); assertEquals(9000.toBigInteger(), source.totalMinor) }
+        rule.runOnIdle { assertFalse(saved); assertEquals(plan, event.conditions()); assertEquals(9000.toBigInteger(), source.totalMinor); assertEquals(2, source.calendarMatchEvents.size); assertTrue(source.calendarMatchEvents.last().cancelled) }
     }
 
+
+
+    @Test fun staleCalendarLinkShowsWarningAndCanBeRemovedWithoutWritingMoney() {
+        val opening = Operation("opening", OperationKind.Opening, date.minusDays(1), "main", 10000, "Остаток")
+        val changed = purchase.copy(description = "Уточнённая покупка")
+        val plan = CalendarPlan(listOf(PaymentSchedule("Учебный платёж", 1000, false, date)))
+        val event = PlanningEvent(1, "calendar", PlanningKind.Calendar.wire, "Учебный календарь", encodePlan(plan), false, 1)
+        val key = event.paymentKey("main", forecastPayments(plan, date, date).single())
+        val saved = CalendarMatchEvent(1, key, event.sequence, purchase.id, purchase.fingerprint(), false, null, 1)
+        var source by mutableStateOf(LedgerSnapshot.from(snapshot.month, listOf(Account("main", "Основной")), listOf(opening, changed)).copy(
+            categories = snapshot.categories, planningEvents = listOf(event), calendarMatchEvents = listOf(saved),
+            history = listOf(OperationHistory(listOf(Revision(opening, null))), OperationHistory(listOf(Revision(purchase, null), Revision(changed, java.time.Instant.ofEpochMilli(2)))))))
+        var removed = false
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { CalendarsPage(source, commands(matchAction = { _, received, old, operation, done ->
+                assertEquals(key, received); assertEquals(saved, old); assertNull(operation)
+                source = source.copy(calendarMatchEvents = listOf(saved, saved.copy(sequence = 2, previousSequence = 1, cancelled = true, recordedAt = 2)))
+                removed = true; done()
+            }), {}, {}) } }
+        }
+        rule.onNodeWithText("Учебный календарь").performClick()
+        rule.waitUntil(10000) { rule.onNodeWithTag("calendars-list").fetchSemanticsNode().config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.StateDescription) == "Расчёт готов" }
+        rule.onNodeWithTag("calendars-list").performScrollToNode(hasText("Снять устаревшую связь"))
+        rule.onNodeWithText("Устаревшее сопоставление").assertIsDisplayed()
+        saveImage("calendar-stale-link", editor = false)
+        rule.onNodeWithText("Снять устаревшую связь").assertIsDisplayed().performClick()
+        rule.waitUntil(10000) { rule.onAllNodesWithText("Снять устаревшую связь").fetchSemanticsNodes().isEmpty() }
+        rule.runOnIdle { assertTrue(removed); assertEquals(9000.toBigInteger(), source.totalMinor); assertEquals(changed, source.operations.single { it.id == purchase.id }) }
+    }
 
     @Test fun catalogAccountEditRetainsExpectedVersionAndAnchoredSave() {
         val bank = Bank("bank", "Учебный банк")
