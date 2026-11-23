@@ -80,6 +80,13 @@ SIGSEGV в системном процессе system_server, стек ART/OomAd
 Архив14834973330 сверён по SHA-256:
 `42142e3ce3707aabb6004d2bb77ff896f6aae7f6be531d0a9a3356ee279a9a58`.
 
+[Дополнительный Android CI](https://github.com/SverchkovVA/Crown/actions/runs/45216767189)
+также завершён: bcf99db,103 JUnit-теста без ошибок/пропусков, lint0/12.
+Архив14838687698 сверён по SHA-256:
+`c3450a0c0432ef44a75b13c4202877cecac60e184336491291a492a57117bf02`.
+Локальные и CI JUnit совпали по103 логическим идентификаторам;
+три нативных платформы — по46 идентификаторам.
+
 APK: `artifacts/android-stage10-dev24-proof/Crown-Android-0.1.0-dev24.apk`.
 SHA-256:
 `e323480c836521d1d46e5688d5b1df9aabdffbf4b8352db624bd0c62ea9299e6`.
