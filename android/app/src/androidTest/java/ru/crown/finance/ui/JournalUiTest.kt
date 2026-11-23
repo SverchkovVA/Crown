@@ -792,6 +792,8 @@ class JournalUiTest {
         rule.onNodeWithContentDescription("В архиве").performScrollTo().performClick()
         rule.onNodeWithText("История записи").performScrollTo().performClick()
         rule.onNodeWithText("Версий: 1").performScrollTo().assertIsDisplayed()
+        fullyVisible("Изменить счёт")
+        fullyVisible("Сохранить изменения")
         saveImage("catalog-account-edit")
         rule.onNodeWithText("Сохранить изменения").assertIsDisplayed().performClick()
         rule.runOnIdle {
@@ -817,6 +819,8 @@ class JournalUiTest {
         rule.onNodeWithText("История записи").performScrollTo().performClick()
         rule.onNodeWithText("Версий: 2").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("Исходные данные · дата не сохранялась").performScrollTo().assertIsDisplayed()
+        fullyVisible("Изменить категорию")
+        fullyVisible("Сохранить изменения")
         saveImage("catalog-category-history")
         rule.onNodeWithText("Сохранить изменения").assertIsDisplayed()
     }
@@ -839,6 +843,8 @@ class JournalUiTest {
         rule.onNodeWithText("Зарплата", substring = false).assertDoesNotExist()
         rule.onNode(hasText("Название") and hasSetTextAction()).performTextReplacement("Питание")
         rule.onNode(hasText("Название") and hasSetTextAction()).performImeAction()
+        fullyVisible("Изменить категорию")
+        fullyVisible("Сохранить изменения")
         saveImage("catalog-category-edit")
         rule.onNodeWithText("Сохранить изменения").assertIsDisplayed().performClick()
         rule.runOnIdle { assertEquals(food.catalogValue().copy(name = "Питание"), changed) }
@@ -856,6 +862,24 @@ class JournalUiTest {
         rule.onNodeWithText("Сохранить операцию").assertDoesNotExist()
     }
 
+
+    private fun fullyVisible(text: String) {
+        rule.waitForIdle()
+        val node = rule.onNodeWithText(text, substring = false).fetchSemanticsNode()
+        var root = node
+        while (root.parent != null) root = requireNotNull(root.parent)
+        val bounds = node.boundsInRoot
+        val window = root.boundsInRoot
+        val display = rule.activity.resources.displayMetrics
+        val screenBounds = node.boundsInWindow
+        assertTrue(text + ": окно " + screenBounds + ", экран " + display.widthPixels + "x" + display.heightPixels,
+            screenBounds.left >= -1 && screenBounds.top >= -1 && screenBounds.right <= display.widthPixels + 1 && screenBounds.bottom <= display.heightPixels + 1)
+        assertTrue(text + ": элемент " + bounds + ", окно " + window + ", размер " + node.size,
+            bounds.left >= window.left - 1 && bounds.top >= window.top - 1 &&
+            bounds.right <= window.right + 1 && bounds.bottom <= window.bottom + 1 &&
+            bounds.width >= node.size.width - 1 && bounds.height >= node.size.height - 1)
+    }
+
     private fun saveImage(name: String, editor: Boolean = true) {
         rule.waitForIdle()
         val directory = File(rule.activity.noBackupFilesDir, "synthetic-ui-proof").apply { mkdirs() }
@@ -867,5 +891,8 @@ class JournalUiTest {
             node.captureToImage().asAndroidBitmap()
         }
         file.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        val screen = requireNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+        File(directory, "$name-screen.png").outputStream().use { assertTrue(screen.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        screen.recycle()
     }
 }
