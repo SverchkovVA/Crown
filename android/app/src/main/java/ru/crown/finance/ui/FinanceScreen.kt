@@ -63,6 +63,11 @@ import androidx.compose.ui.unit.dp
 import ru.crown.finance.DemoState
 import ru.crown.finance.R
 import ru.crown.finance.ledger.JournalQuery
+import ru.crown.finance.ledger.CatalogType
+import ru.crown.finance.ledger.catalogArchived
+import ru.crown.finance.ledger.selectableAccounts
+import ru.crown.finance.ledger.selectableCategories
+import ru.crown.finance.ledger.usableRules
 import ru.crown.finance.ledger.AccountBalance
 import ru.crown.finance.ledger.AccountKind
 import ru.crown.finance.ledger.LedgerSnapshot
@@ -101,7 +106,7 @@ private enum class Section(val title: String, val icon: Int) {
     Protection("Настройки", R.drawable.ic_protection),
 }
 
-private enum class EditorSection { Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags, Rules, Password }
+private enum class EditorSection { ManageAccounts, Account, Operation, Refund, Backup, Categories, Export, Reconciliation, Banks, Organization, OperationTags, Rules, Password }
 
 @Composable
 internal fun FinanceScreen(
@@ -165,7 +170,7 @@ internal fun FinanceScreen(
                 Surface(color = MaterialTheme.colorScheme.surface) {
                     Column {
                         if (commands != null && (section == Section.Accounts || section == Section.Operations)) {
-                            val createAccount = section == Section.Accounts || snapshot.balances.isEmpty()
+                            val createAccount = section == Section.Accounts || snapshot.selectableAccounts().isEmpty()
                             Button(
                                 onClick = {
                                     commands.clearError()
@@ -234,6 +239,7 @@ internal fun FinanceScreen(
                     Section.Accounts -> AccountsPage(
                         state.snapshot, accountsScroll,
                         reconcile = { tab = Section.Reconciliations.name }.takeIf { commands != null },
+                        manage = { editor = EditorSection.ManageAccounts }.takeIf { commands != null },
                     ) {
                         journalQuery = JournalQuery(accountId = it.account.id)
                         tab = Section.Operations.name
@@ -274,22 +280,23 @@ internal fun FinanceScreen(
 
     if (snapshot != null && commands != null) {
         when (editor) {
+            EditorSection.ManageAccounts -> CatalogManager(snapshot, CatalogType.Account, commands, closeEditor)
             EditorSection.Password -> PasswordForm(commands, closeEditor)
             EditorSection.Rules -> CategoryRulesEditor(snapshot, commands, closeEditor)
             EditorSection.Organization -> OrganizationEditor(snapshot, commands, closeEditor)
             EditorSection.OperationTags -> tagOperation?.let { OperationTagsEditor(it, snapshot, commands, closeEditor) }
-            EditorSection.Account -> AccountEditor(snapshot.month, snapshot.banks, commands, closeEditor)
+            EditorSection.Account -> AccountEditor(snapshot.month, snapshot.banks.filterNot { snapshot.catalogArchived(CatalogType.Bank, it.id) }, commands, closeEditor)
             EditorSection.Operation -> OperationEditor(
-                snapshot.balances, snapshot.categories, snapshot.month, journalQuery.accountId, commands, closeEditor, correction,
-                rules = ru.crown.finance.ledger.currentRules(snapshot.ruleEvents).map { it.rule() },
+                snapshot.selectableAccounts(correction), snapshot.selectableCategories(correction), snapshot.month, journalQuery.accountId, commands, closeEditor, correction,
+                rules = snapshot.usableRules(),
             )
             EditorSection.Refund -> refundPurchase?.let { purchase ->
                 RefundEditor(purchase, snapshot, commands, closeEditor, correction)
             }
             EditorSection.Reconciliation -> ReconciliationEditor(snapshot, commands, closeEditor)
-            EditorSection.Banks -> BankEditor(snapshot.banks, commands, closeEditor)
+            EditorSection.Banks -> CatalogManager(snapshot, CatalogType.Bank, commands, closeEditor)
             EditorSection.Backup -> BackupForm(commands, closeEditor)
-            EditorSection.Categories -> CategoryEditor(snapshot.categories, commands, closeEditor)
+            EditorSection.Categories -> CatalogManager(snapshot, CatalogType.Category, commands, closeEditor)
             EditorSection.Export -> JournalExportForm(snapshot, monthLabel(snapshot.month), commands, closeEditor)
             null -> Unit
         }
@@ -423,6 +430,7 @@ private fun AccountsPage(
     snapshot: LedgerSnapshot,
     scroll: LazyListState,
     reconcile: (() -> Unit)?,
+    manage: (() -> Unit)?,
     open: (AccountBalance) -> Unit,
 ) {
     LazyColumn(
@@ -435,6 +443,7 @@ private fun AccountsPage(
             Spacer(Modifier.height(16.dp))
             BalancePanel("Всего на счетах", snapshot.totalMinor)
             if (reconcile != null) OutlinedButton(reconcile, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Сверка остатков") }
+            if (manage != null) OutlinedButton(manage, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Управление счетами") }
             Spacer(Modifier.height(20.dp))
         }
         items(snapshot.balances, key = { it.account.id }) { balance ->
@@ -454,7 +463,7 @@ private fun AccountsPage(
                         Text(balance.account.name, style = MaterialTheme.typography.titleMedium)
                         val bank = snapshot.banks.firstOrNull { it.id == balance.account.bankId }?.name
                         val kind = balance.account.kind.takeUnless { it == AccountKind.Other }?.title
-                        val caption = listOfNotNull(bank, kind).joinToString(" · ")
+                        val caption = listOfNotNull(bank, kind, "В архиве".takeIf { snapshot.catalogArchived(CatalogType.Account, balance.account.id) }).joinToString(" · ")
                         if (caption.isNotEmpty()) Text(caption, style = MaterialTheme.typography.bodySmall)
                         Text(money(balance.minor), style = MaterialTheme.typography.bodyLarge)
                     }

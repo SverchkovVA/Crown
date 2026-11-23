@@ -49,11 +49,11 @@ internal fun CategoryRulesEditor(snapshot: LedgerSnapshot, commands: BookCommand
         Entry(name, { name = it.take(80) }, "Название правила", commands.busy)
         Entry(contains, { contains = it.take(200) }, "Описание содержит", commands.busy)
         Choice("Вид операции", kind, categoryKinds, OperationKind::label, !commands.busy) { kind = it; category = null }
-        val categories = snapshot.categories.filter { it.kind == kind }
+        val categories = snapshot.categories.filter { it.kind == kind && (!snapshot.catalogArchived(CatalogType.Category, it.id) || it.id == selected?.categoryId) }
         if (categories.isEmpty()) Text("Сначала создайте категорию этого вида в настройках")
         else Choice("Категория правила", category, categories.map(Category::id),
             { id -> categories.first { it.id == id }.name }, !commands.busy) { category = it }
-        val accounts = snapshot.balances.map { it.account }
+        val accounts = snapshot.balances.map { it.account }.filter { !snapshot.catalogArchived(CatalogType.Account, it.id) || it.id == selected?.accountId }
         Choice("Счёт правила", account, listOf(null) + accounts.map(Account::id),
             { id -> accounts.firstOrNull { it.id == id }?.name ?: "Все счета" }, !commands.busy) { account = it }
         Entry(priority, { priority = it.take(4) }, "Приоритет · 0–999", commands.busy, KeyboardType.Number)

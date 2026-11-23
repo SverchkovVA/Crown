@@ -446,6 +446,11 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
+    fun saveCatalog(expected: ru.crown.finance.ledger.CatalogVersion, value: ru.crown.finance.ledger.CatalogValue, saved: () -> Unit) {
+        val current = mutableState.value as? Workspace.Book ?: return
+        change(saved) { update(current.snapshot.month) { saveCatalog(expected, value) } }
+    }
+
     fun savePlan(id: String, name: String, value: ru.crown.finance.ledger.PlanningConditions, expected: ru.crown.finance.ledger.PlanningEvent?, archived: Boolean, saved: () -> Unit) {
         val current = mutableState.value as? Workspace.Book ?: return
         change(saved) { update(current.snapshot.month) { savePlan(id, name, value, expected, archived) } }
@@ -580,7 +585,7 @@ class MainActivity : ComponentActivity() {
                                     importStatement = model::importStatement,
                                     addBank = model::addBank,
                                     saveTag = model::saveTag, assignTags = model::assignTags, saveFilter = model::saveFilter, saveRule = model::saveRule,
-                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry, changePassword = model::changePassword, saveDeposit = model::saveDeposit, savePlan = model::savePlan,
+                                    saveBonusProgram = model::saveBonusProgram, saveBonusEntry = model::saveBonusEntry, changePassword = model::changePassword, saveDeposit = model::saveDeposit, savePlan = model::savePlan, saveCatalog = model::saveCatalog,
                                 )
                             if (workspace.statement != null) {
                                 ru.crown.finance.ui.StatementReview(

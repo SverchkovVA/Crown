@@ -40,19 +40,20 @@ internal fun StatementReview(
     commands: BookCommands,
     close: () -> Unit,
 ) {
-    var account by remember { mutableStateOf(snapshot.balances.firstOrNull()?.account?.id) }
+    var account by remember { mutableStateOf(snapshot.selectableAccounts().firstOrNull()?.account?.id) }
+    val activeAccount = account?.let { !snapshot.catalogArchived(CatalogType.Account, it) } == true
     val candidates = remember(document, snapshot, account) {
         account?.let { previewStatement(document, snapshot, it) }.orEmpty()
     }
     var choices by remember(document, account) {
-        mutableStateOf(candidates.filter { it.status == ImportStatus.New && !it.row.needsReview }.associate { candidate ->
+        mutableStateOf(candidates.filter { activeAccount && it.status == ImportStatus.New && !it.row.needsReview }.associate { candidate ->
             val target = requireNotNull(account)
             candidate.row.position to ImportChoice(candidate.row.position, candidate.row.proposal(target, document.key(target, candidate.row)))
         })
     }
     var categoryConflicts by remember(document, account) { mutableStateOf<Set<Int>>(emptySet()) }
     var classificationNotice by remember(document, account) { mutableStateOf<String?>(null) }
-    val rules = currentRules(snapshot.ruleEvents).map { it.rule() }
+    val rules = snapshot.usableRules()
     var reviewedChoices by remember(document, account) { mutableStateOf<Map<Int, ImportChoice>>(emptyMap()) }
     var editing by remember(document, account) { mutableStateOf<StatementCandidate?>(null) }
     var confirm by remember { mutableStateOf(false) }
@@ -61,7 +62,7 @@ internal fun StatementReview(
     BackHandler(editing == null && refundCandidate == null && !commands.busy) { close() }
     val ready = choices.isNotEmpty() && choices.values.all { choice ->
         val row = candidates.first { it.row.position == choice.position }
-        (choice.operation.accountId == account || choice.operation.destinationId == account) &&
+        (choice.linkExisting || activeAccount) && (choice.operation.accountId == account || choice.operation.destinationId == account) &&
             (choice.linkExisting || choice.reviewed || (row.status == ImportStatus.New && !row.row.needsReview)) &&
             (choice.position !in categoryConflicts || choice.reviewed)
     }
@@ -111,6 +112,7 @@ internal fun StatementReview(
                     confirm = false
                 }, enabled = !commands.busy && choices.isNotEmpty()) { Text("Предложить категории") }
                 classificationNotice?.let { StatusText(it) }
+                if (!activeAccount) Text("Для новых операций нужен действующий счёт. Архивный счёт можно связать с уже записанными операциями.")
                 if (account == null) Text("Сначала создайте счёт в книге")
                 else Choice(
                     "Счёт выписки", account, snapshot.balances.map { it.account.id },
@@ -136,7 +138,7 @@ internal fun StatementReview(
                                 confirm = false
                                 commands.clearError()
                             },
-                            enabled = valid && !commands.busy,
+                            enabled = valid && (activeAccount || choices[row.position]?.linkExisting == true) && !commands.busy,
                         )
                         Column(Modifier.weight(1f)) {
                             Text("${row.position}. ${row.description}", style = MaterialTheme.typography.titleSmall)
@@ -176,13 +178,13 @@ internal fun StatementReview(
                                 editing = candidate
                             }
                             commands.clearError()
-                        }, enabled = !commands.busy) { Text("Настроить строку ${row.position}") }
+                        }, enabled = activeAccount && !commands.busy) { Text("Настроить строку ${row.position}") }
                         if (row.signedMinor > 0) {
                             TextButton({
                                 refundCandidate = candidate
                                 refundSource = null
                                 commands.clearError()
-                            }, enabled = !commands.busy) { Text("Оформить возврат строки ${row.position}") }
+                            }, enabled = activeAccount && !commands.busy) { Text("Оформить возврат строки ${row.position}") }
                         }
                         if (candidate.matching.isNotEmpty()) {
                             Choice(
@@ -249,7 +251,7 @@ internal fun StatementReview(
             reviseOperation = { _, operation, _ -> if (operation != null) capture(operation) },
         )
         OperationEditor(
-            snapshot.balances, snapshot.categories, snapshot.month, target, local, { editing = null }, existing, rules = rules,
+            snapshot.selectableAccounts(), snapshot.selectableCategories(), snapshot.month, target, local, { editing = null }, existing, rules = rules,
         )
     }
 }

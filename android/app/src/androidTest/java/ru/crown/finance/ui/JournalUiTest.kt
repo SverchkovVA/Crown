@@ -50,6 +50,7 @@ class JournalUiTest {
         passwordAction: (CharArray, CharArray, () -> Unit) -> Unit = { first, second, _ -> first.fill(' '); second.fill(' ') },
         bonusAction: (BonusEntryEvent, BonusEntryEvent?, () -> Unit) -> Unit = { _, _, _ -> },
         closeAction: (YearMonth, Boolean, String) -> Unit = { _, _, _ -> },
+        catalogAction: (CatalogVersion, CatalogValue, () -> Unit) -> Unit = { _, _, _ -> },
         accept: (Operation) -> Unit = {},
     ) = BookCommands(
         busy = false, error = null, clearError = {}, changeMonth = {}, addAccount = accountAction,
@@ -58,7 +59,7 @@ class JournalUiTest {
         setPeriodClosed = closeAction, reconcile = reconcileAction,
         chooseStatement = {}, importStatement = importAction, addBank = bankAction,
         saveTag = tagAction, assignTags = assignAction, saveFilter = filterAction, saveRule = ruleAction,
-        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction, savePlan = planningAction,
+        saveBonusProgram = { _, _, _, _ -> }, saveBonusEntry = bonusAction, changePassword = passwordAction, saveDeposit = depositAction, savePlan = planningAction, saveCatalog = catalogAction,
     )
 
     @Test
@@ -770,6 +771,89 @@ class JournalUiTest {
         rule.onNodeWithTag("calendars-list").performScrollToNode(hasText(money(8000)))
         rule.onNodeWithText(money(8000)).assertIsDisplayed()
         rule.runOnIdle { assertFalse(saved); assertEquals(plan, event.conditions()); assertEquals(9000.toBigInteger(), source.totalMinor) }
+    }
+
+
+    @Test fun catalogAccountEditRetainsExpectedVersionAndAnchoredSave() {
+        val bank = Bank("bank", "Учебный банк")
+        val account = snapshot.balances.single().account.copy(bankId = bank.id, kind = AccountKind.DebitCard)
+        val expected = CatalogVersion(account.catalogValue(), 7, 1)
+        val source = snapshot.copy(balances = listOf(snapshot.balances.single().copy(account = account)),
+            banks = listOf(bank), catalogHistory = listOf(expected))
+        var received: Pair<CatalogVersion, CatalogValue>? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                CatalogEditForm(source, expected, commands(catalogAction = { old, value, _ -> received = old to value }), {})
+            } }
+        }
+        rule.onNode(hasText("Название") and hasSetTextAction()).performTextReplacement("Переименованный счёт")
+        rule.onNode(hasText("Название") and hasSetTextAction()).performImeAction()
+        rule.onNodeWithContentDescription("В архиве").performScrollTo().performClick()
+        rule.onNodeWithText("История записи").performScrollTo().performClick()
+        rule.onNodeWithText("Версий: 1").performScrollTo().assertIsDisplayed()
+        saveImage("catalog-account-edit")
+        rule.onNodeWithText("Сохранить изменения").assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(expected, received?.first)
+            assertEquals(expected.value.copy(name = "Переименованный счёт", archived = true), received?.second)
+            assertEquals((-1000).toBigInteger(), source.totalMinor)
+            assertEquals(purchase, source.operations.single())
+        }
+    }
+
+    @Test fun catalogManagerHidesArchiveUntilRequestedAndOpensHistory() {
+        val old = CatalogVersion(food.catalogValue(), 0, 0)
+        val archived = CatalogVersion(food.catalogValue().copy(archived = true), 5, 10)
+        val source = snapshot.copy(catalogHistory = listOf(old, archived))
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { CatalogManager(source, CatalogType.Category, commands(), {}) } }
+        }
+        rule.onNodeWithContentDescription("Изменить: Продукты").assertDoesNotExist()
+        rule.onNodeWithText("Новая категория").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Показывать архив").performClick()
+        rule.onNodeWithContentDescription("Изменить: Продукты").assertIsDisplayed().performClick()
+        rule.onNodeWithText("История записи").performScrollTo().performClick()
+        rule.onNodeWithText("Версий: 2").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Исходные данные · дата не сохранялась").performScrollTo().assertIsDisplayed()
+        saveImage("catalog-category-history")
+        rule.onNodeWithText("Сохранить изменения").assertIsDisplayed()
+    }
+
+    @Test fun categoryParentChooserExcludesDescendantsAndOtherKinds() {
+        val child = home.copy(parentId = food.id)
+        val income = Category("income", "Зарплата", OperationKind.Income)
+        val source = snapshot.copy(categories = listOf(food, child, income))
+        var changed: CatalogValue? = null
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme {
+                CatalogEditForm(source, CatalogVersion(food.catalogValue()), commands(catalogAction = { _, value, _ -> changed = value }), {})
+            } }
+        }
+        rule.onNodeWithText("Вид: Расход").assertIsDisplayed()
+        rule.onNodeWithText("Выбрать: родительская категория").performScrollTo().performClick()
+        rule.onNodeWithText("Без родительской категории", substring = false).assertIsDisplayed().performClick()
+        rule.onNodeWithText("Дом", substring = false).assertDoesNotExist()
+        rule.onNodeWithText("Зарплата", substring = false).assertDoesNotExist()
+        rule.onNode(hasText("Название") and hasSetTextAction()).performTextReplacement("Питание")
+        rule.onNode(hasText("Название") and hasSetTextAction()).performImeAction()
+        saveImage("catalog-category-edit")
+        rule.onNodeWithText("Сохранить изменения").assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(food.catalogValue().copy(name = "Питание"), changed) }
+    }
+
+    @Test fun allArchivedAccountsOfferNewAccountInsteadOfEmptyOperationForm() {
+        val source = snapshot.copy(catalogHistory = listOf(CatalogVersion(snapshot.balances.single().account.catalogValue().copy(archived = true), 1, 1)))
+        rule.activity.runOnUiThread {
+            rule.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            rule.activity.setContent { CrownTheme { FinanceScreen(DemoState.Ready(source), {}, "Учебная", {}, commands()) } }
+        }
+        rule.onNodeWithText("Добавить счёт").assertIsDisplayed().performClick()
+        rule.onNodeWithText("Новый счёт").assertIsDisplayed()
+        rule.onNodeWithText("Сохранить счёт").assertIsDisplayed()
+        rule.onNodeWithText("Сохранить операцию").assertDoesNotExist()
     }
 
     private fun saveImage(name: String, editor: Boolean = true) {

@@ -85,6 +85,7 @@ internal data class BookCommands(
     val changePassword: (CharArray, CharArray, () -> Unit) -> Unit,
     val saveDeposit: (String, String, ru.crown.finance.ledger.DepositScenario, ru.crown.finance.ledger.DepositEvent?, Boolean, () -> Unit) -> Unit,
     val savePlan: (String, String, ru.crown.finance.ledger.PlanningConditions, ru.crown.finance.ledger.PlanningEvent?, Boolean, () -> Unit) -> Unit,
+    val saveCatalog: (ru.crown.finance.ledger.CatalogVersion, ru.crown.finance.ledger.CatalogValue, () -> Unit) -> Unit,
 )
 
 internal val datePattern = DateTimeFormatter.ofPattern("dd.MM.uuuu").withResolverStyle(ResolverStyle.STRICT)
@@ -148,7 +149,7 @@ internal fun OperationEditor(
         else listOf(OperationKind.Expense, OperationKind.Income)
     }
     var kind by remember { mutableStateOf(existing?.kind ?: OperationKind.Expense) }
-    var origin by remember { mutableStateOf(existing?.accountId ?: preferredAccount ?: accounts.first().account.id) }
+    var origin by remember { mutableStateOf(existing?.accountId ?: preferredAccount?.takeIf { id -> accounts.any { it.account.id == id } } ?: accounts.first().account.id) }
     var destination by remember { mutableStateOf(existing?.destinationId) }
     var amount by remember { mutableStateOf(existing?.let { amountText(it.amountMinor) }.orEmpty()) }
     var fee by remember { mutableStateOf(existing?.feeMinor?.takeIf { it > 0 }?.let(::amountText).orEmpty()) }
@@ -253,7 +254,7 @@ internal fun OperationEditor(
 }
 
 @Composable
-internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, close: () -> Unit) {
+internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, close: () -> Unit, selectable: (String) -> Boolean = { true }, showExisting: Boolean = true) {
     var name by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf(OperationKind.Expense) }
     var parent by remember { mutableStateOf<String?>(null) }
@@ -274,13 +275,13 @@ internal fun CategoryEditor(categories: List<Category>, commands: BookCommands, 
             if (kind != it) parent = null
             kind = it
         }
-        val parents = categories.filter { it.kind == kind }
+        val parents = categories.filter { it.kind == kind && selectable(it.id) }
         if (parents.isNotEmpty()) {
             Choice("Родительская категория", parent, listOf(null) + parents.map(Category::id), { id ->
                 parents.firstOrNull { it.id == id }?.name ?: "Без родительской категории"
             }, !commands.busy) { parent = it }
         }
-        if (categories.isNotEmpty()) {
+        if (showExisting && categories.isNotEmpty()) {
             for (type in categoryKinds) {
                 val names = categories.filter { it.kind == type }
                 if (names.isNotEmpty()) {

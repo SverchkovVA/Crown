@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import ru.crown.finance.ledger.CatalogType
+import ru.crown.finance.ledger.catalogArchived
 import ru.crown.finance.ledger.Allocation
 import ru.crown.finance.ledger.Category
 import ru.crown.finance.ledger.LedgerSnapshot
@@ -132,7 +134,7 @@ internal fun RefundEditor(
     }) {
         Text(purchase.description, style = MaterialTheme.typography.titleMedium)
         Text("Возврат уменьшает расходы на дату получения.")
-        Choice("Счёт зачисления", account, snapshot.balances.map { it.account.id }, { id ->
+        Choice("Счёт зачисления", account, snapshot.balances.filter { !snapshot.catalogArchived(CatalogType.Account, it.account.id) || it.account.id == purchase.accountId || it.account.id == existing?.accountId }.map { it.account.id }, { id ->
             snapshot.balances.first { it.account.id == id }.account.name
         }, !commands.busy) { account = it }
         for ((index, part) in rows.withIndex()) {
