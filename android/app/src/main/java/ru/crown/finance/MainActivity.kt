@@ -22,6 +22,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import ru.crown.finance.ledger.BookLocations
 import ru.crown.finance.ledger.BookRepository
 import ru.crown.finance.ledger.BookSession
 import ru.crown.finance.ledger.CredentialKind
@@ -52,15 +53,20 @@ internal sealed interface DemoState {
 
 internal sealed interface Workspace {
     data class Access(
-        val exists: Boolean,
+        val numbers: List<Int>,
+        val selected: Int? = numbers.singleOrNull(),
+        val creating: Boolean = false,
         val busy: Boolean = false,
         val error: String? = null,
         val message: String? = null,
         val restoreFile: Uri? = null,
         val inspectFile: Uri? = null,
-    ) : Workspace
+    ) : Workspace {
+        val creationForm get() = creating || numbers.isEmpty()
+    }
     data class Demo(val content: DemoState) : Workspace
     data class Book(
+        val number: Int,
         val name: String,
         val snapshot: LedgerSnapshot,
         val recoveryCode: String? = null,
@@ -83,16 +89,19 @@ internal enum class OutputFile(
 }
 
 private data class PendingFile(val kind: OutputFile, val bytes: ByteArray)
+private data class PendingStatement(val book: Int, val document: StatementDocument)
 
 internal class CrownViewModel(application: Application) : AndroidViewModel(application) {
     private val documents = application.contentResolver
-    private val repository = BookRepository(application)
+    private val locations = BookLocations(application.noBackupFilesDir)
+    private fun repository(number: Int) = BookRepository(getApplication(), locations.path(number))
     private val demo = DemoRepository(application)
     private var session: BookSession? = null
     private var lockRequested = false
     private var pendingFile: PendingFile? = null
-    private var pendingStatement: StatementDocument? = null
-    private val mutableState = MutableStateFlow<Workspace>(Workspace.Access(repository.exists))
+    private var statementPickerBook: Int? = null
+    private var pendingStatement: PendingStatement? = null
+    private val mutableState = MutableStateFlow<Workspace>(Workspace.Access(locations.numbers()))
     val state = mutableState.asStateFlow()
 
     fun showDemo() {
@@ -115,17 +124,44 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         }
     }
 
-    fun create(name: String, password: CharArray) = access(password, "Не удалось создать книгу") {
-        repository.create(name, password)
+    fun chooseBook(number: Int?) {
+        val current = mutableState.value as? Workspace.Access ?: return
+        if (current.busy || (number != null && number !in current.numbers)) return
+        pendingStatement = null
+        mutableState.value = Workspace.Access(current.numbers, selected = number)
     }
 
-    fun open(password: CharArray, recovery: Boolean) =
-        access(password, "Не удалось открыть книгу. Проверьте данные доступа и повторите попытку.") {
-            val kind = if (recovery) CredentialKind.Recovery else CredentialKind.Password
-            repository.open(password, kind) to null
+    fun showCreateBook() {
+        val current = mutableState.value as? Workspace.Access ?: return
+        if (current.busy) return
+        pendingStatement = null
+        mutableState.value = Workspace.Access(current.numbers, selected = null, creating = true)
+    }
+
+    fun create(name: String, password: CharArray) {
+        val current = mutableState.value as? Workspace.Access
+        if (current == null || current.busy || !current.creationForm) {
+            password.fill(' ')
+            return
         }
+        val number = locations.nextNumber()
+        access(number, password, "Не удалось создать книгу") { repository(number).create(name, password) }
+    }
+
+    fun open(password: CharArray, recovery: Boolean) {
+        val number = (mutableState.value as? Workspace.Access)?.selected
+        if (number == null) {
+            password.fill(' ')
+            return
+        }
+        access(number, password, "Не удалось открыть книгу. Проверьте данные доступа и повторите попытку.") {
+            val kind = if (recovery) CredentialKind.Recovery else CredentialKind.Password
+            repository(number).open(password, kind) to null
+        }
+    }
 
     private fun access(
+        number: Int,
         credential: CharArray,
         failure: String,
         unlock: suspend () -> Pair<BookSession, String?>,
@@ -144,23 +180,28 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 candidate = book
                 val snapshot = book.snapshot(YearMonth.now())
                 if (lockRequested && recoveryCode == null) {
-                    mutableState.value = Workspace.Access(repository.exists)
+                    mutableState.value = Workspace.Access(locations.numbers(), selected = number)
                 } else {
                     session = book
                     candidate = null
-                    mutableState.value = Workspace.Book(book.identity.name, snapshot, recoveryCode, statement = pendingStatement)
-                    pendingStatement = null
+                    val statement = pendingStatement?.takeIf { it.book == number }
+                    mutableState.value = Workspace.Book(number, book.identity.name, snapshot, recoveryCode, statement = statement?.document)
+                    if (statement != null) pendingStatement = null
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
-                val bookExists = repository.exists
-                mutableState.value = access.copy(
-                    exists = bookExists, busy = false, error = failure,
-                    restoreFile = access.restoreFile.takeUnless { bookExists },
-                )
+                val numbers = locations.numbers()
+                val published = number !in access.numbers && number in numbers
+                mutableState.value = if (published) {
+                    Workspace.Access(numbers, selected = number, error = failure)
+                } else {
+                    access.copy(numbers = numbers, busy = false, error = failure)
+                }
             } catch (_: LinkageError) {
-                mutableState.value = Workspace.Access(repository.exists, error = "Недоступно шифрованное хранилище")
+                val numbers = locations.numbers()
+                mutableState.value = Workspace.Access(numbers, selected = number.takeIf { it in numbers },
+                    error = "Недоступно шифрованное хранилище")
             } finally {
                 candidate?.close()
                 credential.fill(' ')
@@ -178,39 +219,50 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
 
     fun setRestoreFile(file: Uri?) {
         val state = mutableState.value as? Workspace.Access ?: return
-        if (state.busy || state.exists || (file != null && file.scheme != "content")) return
+        if (state.busy || (file != null && file.scheme != "content")) return
         mutableState.value = state.copy(restoreFile = file, error = null, message = null)
     }
 
     fun restore(backupPassword: CharArray, newPassword: CharArray) {
         val current = mutableState.value as? Workspace.Access
         val file = current?.restoreFile
-        if (file == null || current.exists || current.busy) {
+        if (file == null || current.busy) {
             backupPassword.fill(' ')
             newPassword.fill(' ')
             return
         }
-        access(newPassword, "Не удалось восстановить книгу. Проверьте файл и пароль копии.") {
+        val number = locations.nextNumber()
+        access(number, newPassword, "Не удалось восстановить книгу. Проверьте файл и пароль копии.") {
             try {
-                repository.restore(newPassword, backupPassword) { checkNotNull(documents.openInputStream(file)) }
+                repository(number).restore(newPassword, backupPassword) { checkNotNull(documents.openInputStream(file)) }
             } finally {
                 backupPassword.fill(' ')
             }
         }
     }
 
+    fun beginStatementPicker(): Boolean {
+        val book = mutableState.value as? Workspace.Book ?: return false
+        if (book.busy || statementPickerBook != null) return false
+        statementPickerBook = book.number
+        return true
+    }
+
     fun setStatementFile(file: Uri?) {
+        val number = statementPickerBook ?: return
+        statementPickerBook = null
         if (file == null || file.scheme != "content") return
-        closeBook()
+        if ((mutableState.value as? Workspace.Book)?.number == number) closeBook(background = true)
         val current = mutableState.value as? Workspace.Access ?: return
-        if (current.busy) return
+        if (current.busy || current.selected != number) return
         pendingStatement = null
         mutableState.value = current.copy(busy = true, message = null, error = null)
         viewModelScope.launch {
             try {
-                pendingStatement = withContext(Dispatchers.IO) {
+                val statement = withContext(Dispatchers.IO) {
                     checkNotNull(documents.openInputStream(file)).use(::readStatement)
                 }
+                pendingStatement = PendingStatement(number, statement)
                 mutableState.value = current.copy(message = "Выписка загружена. Откройте книгу для проверки строк.", error = null)
             } catch (error: CancellationException) {
                 throw error
@@ -239,7 +291,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
 
     fun setInspectFile(file: Uri?) {
         if (file != null && file.scheme != "content") return
-        if (file != null && mutableState.value is Workspace.Book) closeBook()
+        if (file != null && mutableState.value is Workspace.Book) closeBook(background = true)
         val current = mutableState.value as? Workspace.Access ?: return
         if (current.busy) return
         mutableState.value = current.copy(inspectFile = file, error = null, message = null)
@@ -255,7 +307,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         mutableState.value = current.copy(busy = true, error = null, message = null)
         viewModelScope.launch {
             try {
-                val copy = repository.inspectBackup(password) { checkNotNull(documents.openInputStream(file)) }
+                val copy = repository(1).inspectBackup(password) { checkNotNull(documents.openInputStream(file)) }
                 val totals = "Счета — ${copy.accounts.size}, операции — ${copy.operations.size}, " +
                     "версии изменений — ${copy.revisions.size}, категории — ${copy.categories.size}, " +
                     "теги — ${copy.organization.tags.size}, фильтры — ${copy.organization.filters.size}, " +
@@ -323,7 +375,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 mutableState.value = current.copy(error = output.preparationFailure)
             } finally {
                 clear()
-                if (lockRequested) closeBook()
+                if (lockRequested) closeBook(background = true)
             }
         }
     }
@@ -379,7 +431,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
     fun closeBook(background: Boolean = false) {
         when (val current = mutableState.value) {
             is Workspace.Access -> if (current.busy && background) lockRequested = true
-            is Workspace.Demo -> if (!background) mutableState.value = Workspace.Access(repository.exists)
+            is Workspace.Demo -> if (!background) mutableState.value = Workspace.Access(locations.numbers())
             is Workspace.Book -> {
                 if (current.recoveryCode != null && background) return
                 if (current.busy) {
@@ -388,7 +440,9 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
                 }
                 val previous = session
                 session = null
-                mutableState.value = Workspace.Access(repository.exists)
+                val numbers = locations.numbers()
+                val selected = if (background) current.number else numbers.singleOrNull()
+                mutableState.value = Workspace.Access(numbers, selected)
                 previous?.close()
             }
         }
@@ -440,7 +494,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
         }) {
             try {
                 val recovery = Regex("CA1-[A-Za-z0-9_-]{43}").matches(credential.concatToString().trim())
-                repository.changePassword(identity.id, credential, if (recovery) CredentialKind.Recovery else CredentialKind.Password, next)
+                repository(current.number).changePassword(identity.id, credential, if (recovery) CredentialKind.Recovery else CredentialKind.Password, next)
                 snapshot(current.snapshot.month)
             } finally { credential.fill(' '); next.fill(' ') }
         }
@@ -522,7 +576,7 @@ internal class CrownViewModel(application: Application) : AndroidViewModel(appli
             } catch (_: Exception) {
                 mutableState.value = current.copy(error = "Не удалось выполнить действие. Повторите попытку.")
             } finally {
-                if (lockRequested) closeBook()
+                if (lockRequested) closeBook(background = true)
             }
         }
     }
@@ -549,7 +603,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val readStatement = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) model.setStatementFile(result.data?.data)
+        model.setStatementFile(result.data?.data.takeIf { result.resultCode == RESULT_OK })
     }
     private val verifyCopy = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == RESULT_OK) model.setInspectFile(result.data?.data)
@@ -565,6 +619,7 @@ class MainActivity : ComponentActivity() {
                 when (workspace) {
                     is Workspace.Access -> AccessScreen(
                         workspace, model::create, model::open, model::showDemo,
+                        chooseBook = model::chooseBook, showCreate = model::showCreateBook,
                         chooseBackup = ::chooseCopy,
                         cancelRestore = { model.setRestoreFile(null) },
                         restore = model::restore,
@@ -624,11 +679,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openStatement() {
+        if (!model.beginStatementPicker()) return
         try {
             readStatement.launch(localDocument(Intent.ACTION_OPEN_DOCUMENT).setType("*/*"))
         } catch (_: ActivityNotFoundException) {
+            model.setStatementFile(null)
             model.fileManagerError("Не удалось открыть файловый менеджер")
         } catch (_: SecurityException) {
+            model.setStatementFile(null)
             model.fileManagerError("Не удалось открыть файловый менеджер")
         }
     }

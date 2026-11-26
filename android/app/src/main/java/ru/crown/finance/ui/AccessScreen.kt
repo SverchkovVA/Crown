@@ -1,5 +1,6 @@
 package ru.crown.finance.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,6 +45,8 @@ internal fun AccessScreen(
     create: (String, CharArray) -> Unit,
     open: (CharArray, Boolean) -> Unit,
     demo: () -> Unit,
+    chooseBook: (Int?) -> Unit,
+    showCreate: () -> Unit,
     chooseBackup: () -> Unit,
     cancelRestore: () -> Unit,
     restore: (CharArray, CharArray) -> Unit,
@@ -50,23 +54,59 @@ internal fun AccessScreen(
     inspect: (CharArray) -> Unit,
 ) {
     if (state.inspectFile != null) {
+        BackHandler(enabled = !state.busy, onBack = cancelInspect)
         InspectCopyForm(state, cancelInspect, inspect)
         return
     }
     if (state.restoreFile != null) {
+        BackHandler(enabled = !state.busy, onBack = cancelRestore)
         RestoreForm(state, cancelRestore, restore)
         return
     }
+    val number = state.selected
+    if (number == null && !state.creationForm) {
+        WorkspaceSurface {
+            WorkspaceTitle("Ваши книги")
+            state.error?.let { FormError(it) }
+            state.message?.let { StatusText(it) }
+            state.numbers.forEach { book ->
+                OutlinedButton({ chooseBook(book) }, Modifier.fillMaxWidth(), enabled = !state.busy) {
+                    Text("Книга $book")
+                }
+            }
+            Button(showCreate, Modifier.fillMaxWidth(), enabled = !state.busy) { Text("Новая книга") }
+            TextButton(chooseBackup, enabled = !state.busy) { Text("Восстановить книгу из копии") }
+            TextButton(demo, enabled = !state.busy) { Text("Учебная книга") }
+        }
+        return
+    }
+    key(number) {
+        BookAccessForm(state, number, create, open, demo, chooseBackup) { chooseBook(null) }
+    }
+}
+
+@Composable
+private fun BookAccessForm(
+    state: Workspace.Access,
+    number: Int?,
+    create: (String, CharArray) -> Unit,
+    open: (CharArray, Boolean) -> Unit,
+    demo: () -> Unit,
+    chooseBackup: () -> Unit,
+    listBooks: () -> Unit,
+) {
     var title by remember { mutableStateOf("") }
     var secret by remember { mutableStateOf("") }
     var confirmation by remember { mutableStateOf("") }
     var recovery by remember { mutableStateOf(false) }
     var mismatch by remember { mutableStateOf(false) }
+    val opening = number != null
+    BackHandler(enabled = !state.busy && state.numbers.size > 1, onBack = listBooks)
     WorkspaceSurface {
         Text("Crown", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge)
-        val action = if (state.exists) "Открыть книгу" else "Создать книгу"
-        WorkspaceTitle(if (state.exists) "Финансовая книга" else "Новая книга")
-        if (!state.exists) {
+        val action = if (opening) "Открыть книгу" else "Создать книгу"
+        WorkspaceTitle(if (opening) "Книга $number" else "Новая книга")
+        if (!opening) {
             Entry(title, { title = it.take(100) }, "Название книги", state.busy)
         }
         SecretField(
@@ -76,7 +116,7 @@ internal fun AccessScreen(
             },
             if (recovery) "Код восстановления CA1" else "Парольная фраза", state.busy,
         )
-        if (!state.exists) {
+        if (!opening) {
             SecretField(
                 confirmation, {
                     confirmation = it
@@ -90,20 +130,20 @@ internal fun AccessScreen(
         state.message?.let { StatusText(it) }
         Button(
             onClick = {
-                if (!state.exists && secret != confirmation) {
+                if (!opening && secret != confirmation) {
                     mismatch = true
                 } else {
                     val credential = secret.toCharArray()
                     secret = ""
                     confirmation = ""
-                    if (state.exists) open(credential, recovery) else create(title, credential)
+                    if (opening) open(credential, recovery) else create(title, credential)
                 }
             },
-            enabled = !state.busy && secret.isNotEmpty() && (state.exists || title.isNotBlank()),
+            enabled = !state.busy && secret.isNotEmpty() && (opening || title.isNotBlank()),
             modifier = Modifier.fillMaxWidth(),
         ) { Text(action) }
         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (state.exists) {
+        if (opening) {
             TextButton(
                 onClick = {
                     recovery = !recovery
@@ -114,10 +154,12 @@ internal fun AccessScreen(
                 Text(if (recovery) "Ввести парольную фразу" else "Войти по коду восстановления")
             }
         }
-        if (!state.exists) {
+        if (state.numbers.isEmpty()) {
             TextButton(chooseBackup, enabled = !state.busy) { Text("Восстановить книгу из копии") }
+            OutlinedButton(demo, Modifier.fillMaxWidth(), enabled = !state.busy) { Text("Учебная книга") }
+        } else {
+            OutlinedButton(listBooks, Modifier.fillMaxWidth(), enabled = !state.busy) { Text("Все книги") }
         }
-        OutlinedButton(demo, Modifier.fillMaxWidth(), enabled = !state.busy) { Text("Учебная книга") }
     }
 }
 
@@ -159,6 +201,7 @@ private fun RestoreForm(
     var mismatch by remember { mutableStateOf(false) }
     WorkspaceSurface {
         WorkspaceTitle("Восстановление книги")
+        Text("Из копии будет создана отдельная книга.")
         SecretField(backup, { backup = it }, "Пароль копии", state.busy)
         SecretField(password, { password = it }, "Новая парольная фраза", state.busy)
         SecretField(confirmation, { confirmation = it }, "Повторите новую фразу", state.busy)
